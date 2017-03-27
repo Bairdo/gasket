@@ -110,21 +110,6 @@ acls:
             actions:
                 allow: 1
         - rule:
-            dl_type: 2048
-            name: host110user
-            nw_dst: "8.8.8.8"
-            dl_src: "08:00:27:00:0a:02"
-            actions:
-                allow: 0
-            mac: 08:00:27:00:0a:02
-        - rule:
-            dl_type: 2048
-            mac: 08:00:27:00:0a:02
-            name: host110user
-            actions:
-                allow: 1
-            dl_src: "08:00:27:00:0a:02"
-        - rule:
             name: cp_arp_gateway
             dl_src: 08:00:27:00:0a:02
             dl_type: 2054
