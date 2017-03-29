@@ -12,6 +12,7 @@ from ruamel.yaml.util import load_yaml_guess_indent
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 import lockfile
+
 CAPFLOW = "/v1.1/authenticate/auth"
 AUTH_PATH = "/authenticate/auth"
 IDLE_PATH = "/idle"
@@ -143,8 +144,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
         return switch, port
 
     def _get_cp_arp_acls(self, mac):
-        """Creates two rules for allowing ARP requests from/to MAC
+        """Creates two rules for allowing ARP requests from/to MAC.
+        Note: the yaml keys 'name' and 'mac' are used to identify the rule to a user,
+             so that when they log off, if there is already a rule that is the same, that one will not be removed.
+            If we were to just use 'dl_src', there is the potential for the rule to already exist, although possibly unlikley.
         :param mac MAC address of the client
+        :return list of rules (ruamel.CommentedMap, which is like a normal dict)
         """
         # allow arp
         arpReq = CommentedMap()
@@ -216,7 +221,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def _get_cp_tcp_acls(self, mac):
         """
         :param mac client's MAC address
-        :return Rule to redirect mac to a NFV portal by changing the dst MAC to the portal.
+        :return List of Rules to redirect mac to a NFV portal by changing the dst MAC to the portal.
         """
         # TODO could possibly do a form of load balancing here,
         #  by selecting a different portal dst mac address.
