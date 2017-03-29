@@ -50,7 +50,7 @@ class AuthConfig():
         data, ind, bsi = load_yaml_guess_indent(open(filename, 'r'))
         self.version = data["version"]
 
-        self.contr_pid = data["files"]["controller_pid"]
+        self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
 
         self.captive_portal_auth_path = data["urls"]["capflow"]
@@ -96,25 +96,15 @@ class HTTPHandler(BaseHTTPRequestHandler):
     modifying configuration files as well as sending a signal to it.
     '''
 
-#    _contr_pid = -1  #the process ID of the controller
+    _contr_pid = -1  #the process ID of the controller
     dot1x_active_file = os.getenv('DOT1X_ACTIVE_HOSTS',
                                   '/etc/ryu/1x_active_users.txt')
     dot1x_idle_file = os.getenv('DOT1X_IDLE_HOSTS',
                                 '/etc/ryu/1x_idle_users.txt')
     capflow_file = os.getenv('CAPFLOW_CONFIG', '/etc/ryu/capflow_config.txt')
-#    controller_pid_file = os.getenv('CONTR_PID', '/etc/ryu/contr_pid')
 
-#    faucet_config_file = os.getenv('FAUCET_CONFIG', '/home/ubuntu/faucet-dev/faucet.yaml') #'/etc/ryu/faucet/faucet.yaml')
+    config = None
 
-#    gateway_ip = "10.0.5.2"
-#    gateway_mac = "52:54:00:12:35:02"
-#    portal_mac = "08:00:27:00:03:02"
-
-    def __init__(self, filename):
-        """
-        :param filename config filename (auth.yaml)
-        """
-        self.config = AuthConfig(filename)
 
     def _set_headers(self, code, ctype):
         self.send_response(code)
@@ -201,6 +191,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param mac MAC address of the client
         :return list of rules (ruamel.CommentedMap, which is like a normal dict)
         """
+
+        print(self.config.gateways)
+        print(self.config.gateways[0]["gateway"])
         # allow arp to gateway to proceed.
         # might need to break this out into dhcp, dns, gateway router, etc... for real world.
         arpReq = CommentedMap()
@@ -208,10 +201,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         arpReq["mac"] = mac
         arpReq["dl_src"] = DoubleQuotedScalarString(mac)
         arpReq["dl_type"] = Proto.ETHER_ARP
-        arpReq["arp_tpa"] = self.config.gateways[0]["ip"]
+        arpReq["arp_tpa"] = self.config.gateways[0]["gateway"]["ip"]
         arpReq["actions"] = CommentedMap()
         arpReq["actions"]["allow"] = 1
-        arpReq["actions"]["dl_dst"] = self.config.gateways[0]["mac"]
+        arpReq["actions"]["dl_dst"] = self.config.gateways[0]["gateway"]["mac"]
 
         areq = CommentedMap()
         areq["rule"] = arpReq
@@ -224,7 +217,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         arpReply["dl_type"] = Proto.ETHER_ARP
         arpReply["actions"] = CommentedMap()
         arpReply["actions"]["allow"] = 1
-        arpReply["actions"]["dl_dst"] = self.config.captive_portals[0]["mac"]
+        arpReply["actions"]["dl_dst"] = self.config.captive_portals[0]["captive-portal"]["mac"]
 
         arep = CommentedMap()
         arep["rule"] = arpReply
@@ -285,7 +278,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         tcpFwd["tcp_dst"] = Proto.HTTP_PORT
         tcpFwd["actions"] = CommentedMap()
         tcpFwd["actions"]["allow"] = 1
-        tcpFwd["actions"]["dl_dst"] = self.config.captive_portal[0]["mac"]
+        tcpFwd["actions"]["dl_dst"] = self.config.captive_portals[0]["captive-portal"]["mac"]
 
         ret = CommentedMap()
         ret["rule"] = tcpFwd 
@@ -311,13 +304,15 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         rules = self._get_captive_portal_acls(mac)
         self.add_acls(mac, None, rules)
-        
+       
+    def remove_acls_startswith(self, mac, name):
+        self.remove_acls(mac, name, startswith=True)
 
-    def remove_acls(self, mac, user):
+    def remove_acls(self, mac, name, startswith=False):
         """
-        Removes the ACLS for the mac and/or user from the config file.
+        Removes the ACLS for the mac and name from the config file.
         :param mac mac address of authenticated user
-        :param user username of authenticated user
+        :param name the 'name' field of the acl rule in faucet.yaml, generally username or captiveportal_*
         """
          # get switchport
         switchname, switchport = self._get_switch_and_port(mac)
@@ -333,9 +328,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
             for rule in port_acl[1]:
                 print(rule)
                 try:
-                    if rule["rule"]["mac"] is not None:
-                        if rule["rule"]["mac"] == mac:
-                            print("deleted")
+                    if rule["rule"]["mac"] is not None and rule["rule"]["name"] is not None:
+                        if startswith and rule["rule"]["mac"] == mac and rule["rule"]["name"].startswith(name):
+                            print("deleted - startswith=true")
+                            continue
+                        if rule["rule"]["mac"] == mac and rule["rule"]["name"] == name:
+                            print("deleted - startswith=false")
                             continue
                         else:
                             updated_port_acl.insert(i, rule)
@@ -435,6 +433,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
 
     def do_POST(self):
+        print("do_post config")
+        print(vars(self.config))
         json_data = self.check_if_json()
         if json_data == None:
             return
@@ -456,16 +456,14 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if not ("mac" in json_data and "user" in json_data):
                 self.send_error('Invalid form\n')
                 return
-            self.deauthenticate(self.dot1x_active_file, json_data["mac"],
-                                signal.SIGUSR1)
+            self.deauthenticate(json_data["mac"], json_data["user"])
         elif self.path == CAPFLOW:
             #check json has the right information
-            if "ip" not in json_data:
+            if not ("mac" in json_data and "user" in json_data):
                 self.send_error('Invalid form\n')
                 return
             print("deauth capflow")
-            self.deauthenticate(self.capflow_file, json_data["mac"],
-                                signal.SIGUSR2)
+            self.deauthenticate(json_data["mac"], json_data["user"])
         else:
             self.send_error('Path not found\n')
 
@@ -494,12 +492,23 @@ class HTTPHandler(BaseHTTPRequestHandler):
         nr["mac"] = mac
         nr["dl_type"] = 0x800
         nr["dl_src"] = DoubleQuotedScalarString(mac)
-        nr["actions"] = OrederedDict()
+        nr["actions"] = CommentedMap()
         nr["actions"]["allow"] = 1
         nrd = CommentedMap()
         nrd["rule"] = nr
 
-        rules = [nrd1, nrd]
+        arp = CommentedMap()
+        arp["name"] = user
+        arp["mac"] = mac
+        arp["dl_src"] = DoubleQuotedScalarString(mac)
+        arp["dl_type"] = 0x0806
+        arp["actions"] = CommentedMap()
+        arp["actions"]["allow"] = 1
+        arpd = CommentedMap()
+        arpd["rule"] = arp
+        
+
+        rules = [nrd1, nrd, arpd]
         return rules
        
 
@@ -524,12 +533,15 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 return
 
             #valid request format so new user has authenticated
-#            self.write_to_file(self.capflow_file, json_data["ip"],
-#                               json_data["user"])
 
             mac = json_data["mac"]
             user = json_data["user"]
             ip = json_data["ip"]
+
+            # remove the redirect to captive portal acl rules for the mac that just authed.
+            # TODO does removal happen to early, and that we loose the end of one of the TCP connections to the cp?
+            self.remove_acls_startswith(mac, "captiveportal_")
+
             rules = self.get_users_rules(mac, user)
             message = "authenticated new client({}) at MAC: {} and ip: {}\n".format(
                 user, mac, ip)
@@ -539,7 +551,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         #write response
         self._set_headers(200, 'text/html')
-        self.wfile.write(message)
+        self.wfile.write(message.encode(encoding="utf-8"))
         self.log_message("%s", message)
 
     def idle(self, json_data):
@@ -562,19 +574,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.log_message("%s", message)
         self.wfile.write(message.encode(encoding='utf-8'))
 
-    def deauthenticate(self, filename, unique_identifier, signal_type):
-        fd = lockfile.lock(filename, os.O_APPEND | os.O_WRONLY)
-        changed, to_write = self.read_file(filename, unique_identifier)
-
-        if changed:  #user has been deleted, update the file
-            os.ftruncate(fd, 0)  #clear the file
-            os.write(fd, to_write)
-        lockfile.unlock(fd)
+    def deauthenticate(self, mac, username):
        
-        self.remove_acls(unique_identifier, None)
+        self.remove_acls(mac, username)
         self.send_signal(signal.SIGHUP)
+
         self._set_headers(200, 'text/html')
-        message = "deauthenticated client at {} \n".format(unique_identifier)
+        message = "deauthenticated client {} at {} \n".format(username, mac)
         self.wfile.write(message.encode(encoding='utf-8'))
         self.log_message("%s", message)
 
@@ -617,9 +623,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         :param signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
         '''
-#        with open(self.controller_pid_file, "r") as f:
-#            self._contr_pid = int(f.read())
-        os.kill(self.config.contr_pid, signal_type)
+        with open(self.config.contr_pid_file, "r") as f:
+            self._contr_pid = int(f.read())
+        os.kill(self._contr_pid, signal_type)
 
     def check_if_json(self):
         try:
@@ -658,7 +664,11 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--config", help="location of yaml configuration file")
 
     args = parser.parse_args()
-    config = args.config
-    server = ThreadedHTTPServer(('', 8080), HTTPHandler(config))
+    config_filename = args.config
+    config = AuthConfig(config_filename)
+    
+    HTTPHandler.config = config
+
+    server = ThreadedHTTPServer(('', 8080), HTTPHandler)
     print("starting server")
     server.serve_forever()
