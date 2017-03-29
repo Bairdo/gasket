@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
+import argparse
 import cgi
 import json
 import os
@@ -42,6 +43,50 @@ class HashableDict(dict):
     def __eq__(self, other):
         return self.__key() == other.__key()
 
+class AuthConfig():
+    """Structure to hold configuration settings
+    """
+    def __init__(self, filename):
+        data, ind, bsi = load_yaml_guess_indent(open(filename, 'r'))
+        self.version = data["version"]
+
+        self.contr_pid = data["files"]["controller_pid"]
+        self.faucet_config_file = data["files"]["faucet_config"]
+
+        self.captive_portal_auth_path = data["urls"]["capflow"]
+        self.dot1x_auth_path = data["urls"]["dot1x"]
+        self.idle_path = data["urls"]["idle"]
+
+        servers = data["servers"]
+
+        self.gateways = []
+        for g in servers["gateways"]:
+            self.gateways.append(g)
+
+        self.captive_portals = []
+        for cp in servers["captive-portals"]:
+            self.captive_portals.append(cp)
+
+        # these servers are not currently used by this app.
+        self.dot1x_auth_servers = []
+        for d in servers["dot1x-servers"]:
+            self.dot1x_auth_servers.append(d)
+
+        self.dns_servers = []
+        for d in servers["dns-servers"]:
+            self.dns_servers.append(d)
+
+        self.dhcp_servers = []
+        for d in servers["dhcp-servers"]:
+            self.dhcp_servers.append(d)
+
+        self.wins_servers = []
+        for w in servers["wins-servers"]:
+            self.wins_servers.append(w)
+
+        self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"])
+        print(vars(self))
+
 class HTTPHandler(BaseHTTPRequestHandler):
     '''
     This class receives HTTP messages from the portal about
@@ -51,21 +96,26 @@ class HTTPHandler(BaseHTTPRequestHandler):
     modifying configuration files as well as sending a signal to it.
     '''
 
-    _contr_pid = -1  #the process ID of the controller
+#    _contr_pid = -1  #the process ID of the controller
     dot1x_active_file = os.getenv('DOT1X_ACTIVE_HOSTS',
                                   '/etc/ryu/1x_active_users.txt')
     dot1x_idle_file = os.getenv('DOT1X_IDLE_HOSTS',
                                 '/etc/ryu/1x_idle_users.txt')
     capflow_file = os.getenv('CAPFLOW_CONFIG', '/etc/ryu/capflow_config.txt')
-    controller_pid_file = os.getenv('CONTR_PID', '/etc/ryu/contr_pid')
+#    controller_pid_file = os.getenv('CONTR_PID', '/etc/ryu/contr_pid')
 
-    faucet_config_file = os.getenv('FAUCET_CONFIG', '/home/ubuntu/faucet-dev/faucet.yaml') #'/etc/ryu/faucet/faucet.yaml')
+#    faucet_config_file = os.getenv('FAUCET_CONFIG', '/home/ubuntu/faucet-dev/faucet.yaml') #'/etc/ryu/faucet/faucet.yaml')
 
-    gateway_ip = "10.0.5.2"
-    gateway_mac = "52:54:00:12:35:02"
-    portal_mac = "08:00:27:00:03:02"
-    retransmission_attempts = 3
-    
+#    gateway_ip = "10.0.5.2"
+#    gateway_mac = "52:54:00:12:35:02"
+#    portal_mac = "08:00:27:00:03:02"
+
+    def __init__(self, filename):
+        """
+        :param filename config filename (auth.yaml)
+        """
+        self.config = AuthConfig(filename)
+
     def _set_headers(self, code, ctype):
         self.send_response(code)
         self.send_header('Content-type', ctype)
@@ -74,7 +124,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def _is_access_port(self, dpid, port):
         # load faucet.yaml.
         # check field 'mode' to be access
-        config, ind, bsi = load_yaml_guess_indent(open(self.faucet_config_file, 'r'))
+        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
         switchname = "" 
         for dp in config["dps"].items():
             if dp[1]["dp_id"] == dpid:
@@ -124,7 +174,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         switch = ""
         switchport = -1
 
-        config, ind, bsi = load_yaml_guess_indent(open(self.faucet_config_file, 'r'))
+        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
 
         # read mac learning file for dp_id and portname.
         
@@ -151,21 +201,22 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param mac MAC address of the client
         :return list of rules (ruamel.CommentedMap, which is like a normal dict)
         """
-        # allow arp
+        # allow arp to gateway to proceed.
+        # might need to break this out into dhcp, dns, gateway router, etc... for real world.
         arpReq = CommentedMap()
         arpReq["name"] = "captiveportal_arp"
         arpReq["mac"] = mac
         arpReq["dl_src"] = DoubleQuotedScalarString(mac)
         arpReq["dl_type"] = Proto.ETHER_ARP
-        arpReq["arp_tpa"] = self.gateway_ip
+        arpReq["arp_tpa"] = self.config.gateways[0]["ip"]
         arpReq["actions"] = CommentedMap()
         arpReq["actions"]["allow"] = 1
-        arpReq["actions"]["dl_dst"] = self.gateway_mac
+        arpReq["actions"]["dl_dst"] = self.config.gateways[0]["mac"]
 
         areq = CommentedMap()
         areq["rule"] = arpReq
 
-
+        # redirect the rest of arp to a captive portal.
         arpReply = CommentedMap()
         arpReply["name"] = "captiveportal_arp"
         arpReply["mac"] = mac
@@ -173,7 +224,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         arpReply["dl_type"] = Proto.ETHER_ARP
         arpReply["actions"] = CommentedMap()
         arpReply["actions"]["allow"] = 1
-        arpReply["actions"]["dl_dst"] = self.portal_mac
+        arpReply["actions"]["dl_dst"] = self.config.captive_portals[0]["mac"]
 
         arep = CommentedMap()
         arep["rule"] = arpReply
@@ -234,7 +285,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         tcpFwd["tcp_dst"] = Proto.HTTP_PORT
         tcpFwd["actions"] = CommentedMap()
         tcpFwd["actions"]["allow"] = 1
-        tcpFwd["actions"]["dl_dst"] = self.portal_mac
+        tcpFwd["actions"]["dl_dst"] = self.config.captive_portal[0]["mac"]
 
         ret = CommentedMap()
         ret["rule"] = tcpFwd 
@@ -271,7 +322,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
          # get switchport
         switchname, switchport = self._get_switch_and_port(mac)
 	    # load faucet.yaml
-        config, ind, bsi = load_yaml_guess_indent(open(self.faucet_config_file, 'r'))
+        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
 
 
         #aclname = config["dps"][switchname]["interfaces"][switchport]["acl_in"]
@@ -294,7 +345,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     updated_port_acl.insert(i, rule)
                     i = i + 1
             config["acls"][aclname] = updated_port_acl
-        ruamel.yaml.round_trip_dump(config, open(self.faucet_config_file, 'w'), indent=4, block_seq_indent=4)
+        ruamel.yaml.round_trip_dump(config, open(self.config.faucet_config_file, 'w'), indent=4, block_seq_indent=4)
 
     def _is_rule_in(self, rule, list_):
         """Searches a list of HashableDicts for an item equal to rule.
@@ -331,7 +382,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         switchname, switchport = self._get_switch_and_port(mac)
         # load faucet.yaml
         # TODO what if the the config is split up accross multiple files?
-        config, ind, bsi = load_yaml_guess_indent(open(self.faucet_config_file, 'r'))
+        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
         print("adding acls")
         print("switchname {0}, port {1}".format(switchname, switchport))
         aclname = config["dps"][switchname]["interfaces"][switchport]["acl_in"]
@@ -380,7 +431,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 i = i + 1
         print("npa" + str(new_port_acl))
         config["acls"][aclname] = new_port_acl
-        ruamel.yaml.round_trip_dump(config, open(self.faucet_config_file, 'w'), indent=4, block_seq_indent=4)
+        ruamel.yaml.round_trip_dump(config, open(self.config.faucet_config_file, 'w'), indent=4, block_seq_indent=4)
 
 
     def do_POST(self):
@@ -499,13 +550,15 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.write_to_file(self.dot1x_idle_file, json_data["mac"],
                            json_data["retrans"])
 #        self.send_signal(signal.SIGUSR1) retransmission_attempts
-        if json_data["retrans"] > self.retransmission_attempts:
+        message = "Idle user on {} has had {} retransmissions".format(
+                    json_data["mac"], json_data["retrans"])
+        if json_data["retrans"] > self.config.retransmission_attempts:
             self._add_cp_acls(json_data["mac"])
             self.send_signal(signal.SIGHUP)
+            message = "Idle user on {} has been made to use captive portal after {} retransmissions\n".format(
+            json_data["mac"], json_data["retrans"])
 
         self._set_headers(200, 'text/html')
-        message = "Idle user on {} has been made to use captive portal after {} retransmissions\n".format(
-            json_data["mac"], json_data["retrans"])
         self.log_message("%s", message)
         self.wfile.write(message.encode(encoding='utf-8'))
 
@@ -564,9 +617,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         :param signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
         '''
-        with open(self.controller_pid_file, "r") as f:
-            self._contr_pid = int(f.read())
-        os.kill(self._contr_pid, signal_type)
+#        with open(self.controller_pid_file, "r") as f:
+#            self._contr_pid = int(f.read())
+        os.kill(self.config.contr_pid, signal_type)
 
     def check_if_json(self):
         try:
@@ -601,6 +654,11 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     pass
 
 if __name__ == "__main__":
-    server = ThreadedHTTPServer(('', 8080), HTTPHandler)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config", help="location of yaml configuration file")
+
+    args = parser.parse_args()
+    config = args.config
+    server = ThreadedHTTPServer(('', 8080), HTTPHandler(config))
     print("starting server")
     server.serve_forever()
