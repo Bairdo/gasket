@@ -13,6 +13,7 @@ from ruamel.yaml.util import load_yaml_guess_indent
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 import lockfile
+import auth_config_parser as ACP
 
 CAPFLOW = "/v1.1/authenticate/auth"
 AUTH_PATH = "/authenticate/auth"
@@ -52,7 +53,7 @@ class AuthConfig():
 
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
-
+ 
         self.captive_portal_auth_path = data["urls"]["capflow"]
         self.dot1x_auth_path = data["urls"]["dot1x"]
         self.idle_path = data["urls"]["idle"]
@@ -84,8 +85,8 @@ class AuthConfig():
         for w in servers["wins-servers"]:
             self.wins_servers.append(w)
 
-        self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"])
-        print(vars(self))
+        self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"]) 
+
 
 class HTTPHandler(BaseHTTPRequestHandler):
     '''
@@ -114,14 +115,14 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def _is_access_port(self, dpid, port):
         # load faucet.yaml.
         # check field 'mode' to be access
-        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
+        conf, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
         switchname = "" 
-        for dp in config["dps"].items():
+        for dp in conf["dps"].items():
             if dp[1]["dp_id"] == dpid:
                 switchname = dp[0]
                 break
 
-        mode = config["dps"][switchname]["interfaces"][port]["mode"]
+        mode = conf["dps"][switchname]["interfaces"][port]["mode"]
 
         if mode == "access":
             return True
@@ -164,20 +165,20 @@ class HTTPHandler(BaseHTTPRequestHandler):
         switch = ""
         switchport = -1
 
-        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
+        conf, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
 
         # read mac learning file for dp_id and portname.
         
         dp_id, port = self._get_dpid_and_port(mac)
 
-        for dp in config["dps"].items():
+        for dp in conf["dps"].items():
             print(dp_id)
             print(dp[1]["dp_id"])
             if dp[1]["dp_id"] == dp_id:
                 switch = dp[0]
                 break
-        print(config["dps"][switch]["interfaces"])
-        print(type(port))
+        print(conf["dps"][switch]["interfaces"])
+#        print(type(port))
 #        switchport = config["dps"][switch]["interfaces"][port][0]
 
 
@@ -194,8 +195,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         print(self.config.gateways)
         print(self.config.gateways[0]["gateway"])
-        # allow arp to gateway to proceed.
-        # might need to break this out into dhcp, dns, gateway router, etc... for real world.
+        # TODO might need to break this out into dhcp, dns, gateway router, etc... for real world.       
+        # TODO support multiple gateways and captive-portals somehow.
+
+        # Allow ARP to gateway to proceed.
+        # The point of changing the dst mac is so that other hosts do not learn about the 
+        #  unauthenticated host, (and vice versa as no arp replies should be sent,
+        #  from anyone but the gateway or captive portal)
         arpReq = CommentedMap()
         arpReq["name"] = "captiveportal_arp"
         arpReq["mac"] = mac
@@ -210,6 +216,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
         areq["rule"] = arpReq
 
         # redirect the rest of arp to a captive portal.
+
+        # The idea of this was to get the portal to reply to all arp requests,
+        #  so that any tcp connections (which need arp to happen first) that are not
+        #  destined to/past the gateway will be sent to the portal, which can then reply to the
+        #  arp. However this will result in poisoning the clients arp cache, which may
+        #  cause more trouble than it is worth.
+        # The portal currently does not do anything with these packets.
         arpReply = CommentedMap()
         arpReply["name"] = "captiveportal_arp"
         arpReply["mac"] = mac
@@ -230,6 +243,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         dhcpReply["name"] = "captiveportal_dhcp"
         dhcpReply["mac"] = mac
         dhcpReply["dl_src"] = DoubleQuotedScalarString(mac)
+        # TODO should we match on all these fields (dl_dst, ip.src/dst. udp.src)? pretty sure at some point
+        #  I saw a DHCP REQUEST with the servers IP address as the destination,
+        #  which would mean this rule would not be hit.
 #        dhcpReply["dl_dst"] = "ff:ff:ff:ff:ff:ff" # ignore for mean time.
 #   could also add ip.src 0.0.0.0 and dst 255.255.255.255 to resp and repl
         dhcpReply["dl_type"] = Proto.ETHER_IPv4
@@ -238,7 +254,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         dhcpReply["udp_dst"] = Proto.DHCP_SERVER_PORT
         dhcpReply["actions"] = CommentedMap()
         dhcpReply["actions"]["allow"] = 1
-        # TODO could possibly rewrite MAC to DHCP server.
+        # TODO could possibly rewrite MAC to DHCP server. and maybe IP
 
         dhrep = CommentedMap()
         dhrep["rule"] = dhcpReply
@@ -246,6 +262,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         return [dhrep]
 
     def _get_cp_dns_acls(self, mac):
+        # TODO currently allows dns to any server, as long as it uses the DNS port.
+        #  Change so either DNS only allowed to ones specified in config, 
+        #  OR redirect to ones in config.
+        #  - Either way allow multiple DNS servers to be used.
+
         # allow dns
         dnsReply = CommentedMap()
         dnsReply["name"] = "captiveportal_dns"
@@ -304,6 +325,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         rules = self._get_captive_portal_acls(mac)
         self.add_acls(mac, None, rules)
+
+
+
        
     def remove_acls_startswith(self, mac, name):
         self.remove_acls(mac, name, startswith=True)
@@ -313,15 +337,15 @@ class HTTPHandler(BaseHTTPRequestHandler):
         Removes the ACLS for the mac and name from the config file.
         :param mac mac address of authenticated user
         :param name the 'name' field of the acl rule in faucet.yaml, generally username or captiveportal_*
-        """
+        """ 
          # get switchport
         switchname, switchport = self._get_switch_and_port(mac)
-	    # load faucet.yaml
-        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
+	    # load faucet.yaml and its included yamls
+        acl, dp, vlan = ACP.load_config_file(self.config.faucet_config_file)
 
 
         #aclname = config["dps"][switchname]["interfaces"][switchport]["acl_in"]
-        for port_acl in config["acls"].items():
+        for port_acl in acl[0].items():
             aclname = port_acl[0]
             i = 0
             updated_port_acl = []
@@ -342,8 +366,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 except KeyError:
                     updated_port_acl.insert(i, rule)
                     i = i + 1
-            config["acls"][aclname] = updated_port_acl
-        ruamel.yaml.round_trip_dump(config, open(self.config.faucet_config_file, 'w'), indent=4, block_seq_indent=4)
+            acl[0][aclname] = updated_port_acl
+
+        ACP.write_config_file("acls", acl)
+
 
     def _is_rule_in(self, rule, list_):
         """Searches a list of HashableDicts for an item equal to rule.
@@ -377,15 +403,15 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param rules List of ACL rules to be applied to port that mac is associated with.
         """
         # get switchport
-        switchname, switchport = self._get_switch_and_port(mac)
+        switchname, switchport = self._get_switch_and_port(mac) 
         # load faucet.yaml
-        # TODO what if the the config is split up accross multiple files?
-        config, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
+        acl, dp, vlan = ACP.load_config_file(self.config.faucet_config_file)
+        
         print("adding acls")
         print("switchname {0}, port {1}".format(switchname, switchport))
-        aclname = config["dps"][switchname]["interfaces"][switchport]["acl_in"]
+        aclname = dp[0][switchname]["interfaces"][switchport]["acl_in"]
 
-        port_acl = config["acls"][str(aclname)]
+        port_acl = acl[0][str(aclname)]
         i = 0
         # apply ACL for user to the switchport ACL
         new_port_acl = []
@@ -428,13 +454,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 new_port_acl.insert(i, rule)
                 i = i + 1
         print("npa" + str(new_port_acl))
-        config["acls"][aclname] = new_port_acl
-        ruamel.yaml.round_trip_dump(config, open(self.config.faucet_config_file, 'w'), indent=4, block_seq_indent=4)
+        acl[0][aclname] = new_port_acl
 
+        ACP.write_config_file("acls", acl)
 
     def do_POST(self):
-        print("do_post config")
-        print(vars(self.config))
+        print("do_post config") 
         json_data = self.check_if_json()
         if json_data == None:
             return
@@ -665,9 +690,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     config_filename = args.config
-    config = AuthConfig(config_filename)
+    conf = AuthConfig(config_filename)
     
-    HTTPHandler.config = config
+    HTTPHandler.config = conf
 
     server = ThreadedHTTPServer(('', 8080), HTTPHandler)
     print("starting server")
