@@ -6,6 +6,9 @@ import cgi
 import json
 import os
 import signal
+import threading
+
+import time
 
 import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap
@@ -30,6 +33,8 @@ class Proto():
     DHCP_SERVER_PORT = 67
     DNS_PORT = 53
     HTTP_PORT = 80
+
+thread_lock = threading.Lock()
 
 class HashableDict(dict):
     '''
@@ -420,10 +425,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         hashable_port_acl = self._get_hashable_list(port_acl)
         for rule in port_acl:
-            print(rule)
+#            print(rule)
             #rule = rule["rule"]
             if "name" in rule["rule"] and rule["rule"]["name"] == "d1x":
-                print("d1x: " + str(rule))
+#                print("d1x: " + str(rule))
                 new_port_acl.insert(i, rule)
                 i = i + 1
             elif "name" in rule["rule"] and rule["rule"]["name"] == "redir41x":
@@ -433,10 +438,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
                         if not self._is_rule_in(new_rule, hashable_port_acl):
                             # only insert the new rule if it is not already in the port_acl (config file)
                             #if rule is in rules
-                            print("new rule: " + str(new_rule))
+#                            print("new rule: " + str(new_rule))
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
-                print("redir41x: " + str(rule))
+#                print("redir41x: " + str(rule))
                 new_port_acl.insert(i, rule)
                 i = i + 1
             else:
@@ -447,13 +452,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     for new_rule in rules:
                         print("insert loop")
                         if not self._is_rule_in(new_rule, hashable_port_acl):
-                            print("new rule: " + str(rule))
+#                            print("new rule: " + str(rule))
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
-                print("un reck: " + str(rule))
+#                print("un reck: " + str(rule))
                 new_port_acl.insert(i, rule)
                 i = i + 1
-        print("npa" + str(new_port_acl))
+#        print("npa" + str(new_port_acl))
         acl[0][aclname] = new_port_acl
 
         ACP.write_config_file("acls", acl)
@@ -538,6 +543,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
        
 
     def authenticate(self, json_data):
+        conf_fd = None
         if self.path == AUTH_PATH:  #request is for dot1xforwarder
             if not ("mac" in json_data and "user" in json_data):
                 self.send_error('Invalid form\n')
@@ -551,7 +557,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
             rules = self.get_users_rules(mac, user)
             message = "authenticated new client({}) at MAC: {}\n".format(
                 user, mac)
-
+            # TODO lock
+            thread_lock.acquire()
+            print("auth locking faucet config")
+            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
+            print("auth locked faucet config")
         else:  #request is for CapFlow
             if not ("ip" in json_data and "user" in json_data and "mac" in json_data):
                 self.send_error('Invalid form\n')
@@ -563,15 +573,25 @@ class HTTPHandler(BaseHTTPRequestHandler):
             user = json_data["user"]
             ip = json_data["ip"]
 
-            # remove the redirect to captive portal acl rules for the mac that just authed.
-            # TODO does removal happen to early, and that we loose the end of one of the TCP connections to the cp?
-            self.remove_acls_startswith(mac, "captiveportal_")
-
             rules = self.get_users_rules(mac, user)
             message = "authenticated new client({}) at MAC: {} and ip: {}\n".format(
                 user, mac, ip)
+            # remove the redirect to captive portal acl rules for the mac that just authed.
+            # TODO does removal happen to early, and that we loose the end of one of the TCP connections to the cp?
+            # TODO lock
+            thread_lock.acquire()
+            print("auth-cp locking faucet config")
+            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
+            print("auth-cp locked faucet config")
+            self.remove_acls_startswith(mac, "captiveportal_")
 
+#        time.sleep(300)
         self.add_acls(mac, user, rules)
+        # TODO unlock
+        lockfile.unlock(conf_fd)
+        print("auth unlocked faucet config")
+        thread_lock.release()
+
         self.send_signal(signal.SIGHUP)
 
         #write response
@@ -589,19 +609,39 @@ class HTTPHandler(BaseHTTPRequestHandler):
 #        self.send_signal(signal.SIGUSR1) retransmission_attempts
         message = "Idle user on {} has had {} retransmissions".format(
                     json_data["mac"], json_data["retrans"])
+        self._set_headers(200, 'text/html')
+        self.log_message("%s", message)
+        self.wfile.write(message.encode(encoding='utf-8'))
         if json_data["retrans"] > self.config.retransmission_attempts:
+            # TODO lock
+            thread_lock.acquire()
+            print("idle - locking faucet config ")
+            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
+            print("idle - locked faucet config")
             self._add_cp_acls(json_data["mac"])
+#            time.sleep(300)
+            # TODO unlock
+            lockfile.unlock(conf_fd)
+            thread_lock.release()
+
+            print("idle - unlocking faucet config")
             self.send_signal(signal.SIGHUP)
             message = "Idle user on {} has been made to use captive portal after {} retransmissions\n".format(
             json_data["mac"], json_data["retrans"])
 
-        self._set_headers(200, 'text/html')
-        self.log_message("%s", message)
-        self.wfile.write(message.encode(encoding='utf-8'))
+
 
     def deauthenticate(self, mac, username):
-       
+        # TODO lock
+        thread_lock.acquire()
+        print("deauth locking faucet config")
+        conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
+        print("deauth locked faucet config")
         self.remove_acls(mac, username)
+        # TODO unlock
+        lockfile.unlock(conf_fd)
+        thread_lock.release()
+        print("deauth unlocked faucet config")
         self.send_signal(signal.SIGHUP)
 
         self._set_headers(200, 'text/html')
