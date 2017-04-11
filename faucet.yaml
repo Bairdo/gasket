@@ -1,158 +1,67 @@
 version: 2
 vlans:
-    100:
-        name: vlan100
+      100:
+            name: vlan100
 
-    2:
-        name: cpVlan2
+      2:
+            name: cpVlan2
         #acl_in: vlan2
-    3:
-        name: vlan3
+      3:
+            name: vlan3
 
-    8:
-        name: vlan8
-        acl_in: vlan8_acl
+      8:
+            name: vlan8
+            acl_in: vlan8_acl
 
 dps:
-    ovs-switch:
-        dp_id: 8796747333891
-        hardware: Open vSwitch
-        interfaces:
-            1:
-                name: portal
-                native_vlan: 100
-                acl_in: port1_1
-            2:
-                name: gateway
-                native_vlan: 100
-                acl_in: port1_2
-#            3:
-#                name: port
-#                native_vlan: 100
-#                acl_in: port1_3
-            4:
-                name: hosts
-                native_vlan: 100
-                acl_in: port1_4
+      ovs-switch:
+            dp_id: 8796747333891
+            hardware: Open vSwitch
+            interfaces:
+                  1:
+                        name: portal
+                        native_vlan: 100
+                        acl_in: port1_1
+#                        permanent_learn: True
+                  2:
+                        name: gateway
+                        native_vlan: 100
+                        acl_in: port1_2
+#                        permanent_learn: True
+                  3:
+                        name: port
+                        native_vlan: 100
+                        acl_in: port1_3
+                  4:
+                        name: hosts
+                        native_vlan: 100
+                        acl_in: port1_4
 #            10:
 #                name: dummyport
 #                native_vlan: 2
 
-    ovs-hosts-switch:
-        dp_id: 8796747333894
-        hardware: Open vSwitch
-        interfaces:
-            1:
-                name: h1
-                native_vlan: 100
-                acl_in: port1_1
-                mode: access
-            2:
-                name: h2
-                native_vlan: 100
+      ovs-hosts-switch:
+            dp_id: 8796747333894
+            hardware: Open vSwitch
+            interfaces:
+                  1:
+                        name: h1
+                        native_vlan: 100
+                        acl_in: port2_1
+                        mode: access
+                  2:
+                        name: h2
+                        native_vlan: 100
 #                tagged_vlans: [2]
-                acl_in: port2_2
-                mode: access
-            3:
-                name: port2_3
-                native_vlan: 100
+                        acl_in: port2_2
+                        mode: access
+                  3:
+                        name: port2_3
+                        native_vlan: 100
 #                tagged_vlan: [2] 
-                acl_in: port1_4
+                        acl_in: port1_4
 #            10:
 #                name: dummyport
 #                native_vlan: 2
-acls:
-    port1_1:
-        - rule:
-            actions:
-                allow: 1
-    port1_2:
-        - rule:
-            actions:
-                allow: 1
-
-    port1_4:
-        - rule:
-            actions:
-                allow: 1
-    vlan8_acl:
-        - rule:
-            name: untag
-            dl_type: 33024
-            actions:
-                allow: 1
-                pop_vlan: 1
-
-
-
-    port2_1:
-        - rule:
-            name: d1x
-            dl_type: 34958
-            actions:
-                allow: 1
-        - rule:
-            name: cp
-            dl_src: 08:00:27:00:0a:02
-            actions:
-                allow: 1
-                vlan_vid: 2
-
-        - rule:
-            name: redir41x
-            actions:
-                allow: 1
-                dl_dst: 00:00:00:00:00:00
-    port2_2:
-        - rule:
-            name: d1x
-            dl_type: 34958
-            actions:
-                allow: 1
-        - rule:
-            name: cp_arp_gateway
-            dl_src: 08:00:27:00:0a:02
-            dl_type: 2054
-            arp_tpa: 10.0.5.2
-            actions:
-                allow: 1
-                dl_dst: 52:54:00:12:35:02
-        - rule:
-            # redirect the rest of arp to the portal.
-            name: cp_arp_portal
-            dl_src: 08:00:27:00:0a:02
-            dl_type: 2054
-            actions:
-                allow: 1
-                dl_dst: 08:00:27:00:03:02
-        - rule:
-            name: cp_dhcp
-#            dl_type: 0x8100
-            dl_src: 08:00:27:00:0a:02
-            dl_type: 2048
-            ip_proto: 17
-            udp_dst: 67
-            actions:
-                allow: 1
-        - rule:
-            name: cp_dns
-            dl_src: 08:00:27:00:0a:02
-            dl_type: 2048
-            ip_proto: 17
-            udp_dst: 53
-            actions:
-                allow: 1
-                ip_dst: 10.0.6.2
-        - rule:
-            name: cp_tcp
-            dl_src: 08:00:27:00:0a:02
-            dl_type: 2048
-            ip_proto: 6
-            tcp_dst: 80
-            actions:
-                allow: 1
-                dl_dst: 08:00:27:00:03:02
-    port2_3:
-        - rule:
-            actions:
-                allow: 1
+include:
+    - acls.yaml

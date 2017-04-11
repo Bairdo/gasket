@@ -8,8 +8,6 @@ import os
 import signal
 import threading
 
-import time
-
 import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.util import load_yaml_guess_indent
@@ -117,37 +115,19 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', ctype)
         self.end_headers()
 
-    def _is_access_port(self, dpid, port):
-        # load faucet.yaml.
-        # check field 'mode' to be access
-        conf, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
-        switchname = "" 
-        for dp in conf["dps"].items():
-            if dp[1]["dp_id"] == dpid:
-                switchname = dp[0]
-                break
-
-        mode = conf["dps"][switchname]["interfaces"][port]["mode"]
-
-        if mode == "access":
-            return True
-
-        return False
-
     def _get_dpid_and_port(self, mac):
         """
         Reads the mac learning file, and returns the 'access port' that the mac address is connected on.
         """
         dpid = ""
         port = ""
-        print("about to lock file")
+
         fd = lockfile.lock("/home/ubuntu/faucet_mac_learning.txt", os.O_RDWR)
 
         flag = False
         with open("/home/ubuntu/faucet_mac_learning.txt", "r") as mac_learn:
             for l in mac_learn:
                 if l.startswith(mac):
-                    print(l)
                     tokens = l.split(",")
                     dpid = tokens[1]
                     port = tokens[2]
@@ -155,9 +135,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     if mode == "access":
                         flag = True
                         break
-#                    if self._is_access_port(dpid, port):
-#                        flag = True
-#                        break
+
         lockfile.unlock(fd)
         if flag:
             return int(dpid), int(port)
@@ -170,24 +148,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
         switch = ""
         switchport = -1
 
-        conf, ind, bsi = load_yaml_guess_indent(open(self.config.faucet_config_file, 'r'))
-
         # read mac learning file for dp_id and portname.
-        
         dp_id, port = self._get_dpid_and_port(mac)
-
-        for dp in conf["dps"].items():
-            print(dp_id)
-            print(dp[1]["dp_id"])
-            if dp[1]["dp_id"] == dp_id:
-                switch = dp[0]
-                break
-        print(conf["dps"][switch]["interfaces"])
-#        print(type(port))
-#        switchport = config["dps"][switch]["interfaces"][port][0]
-
-
-        return switch, port
+        
+        dp = ACP.load_dp(self.config.faucet_config_file, dp_id=dp_id)
+        
+        return dp[0], port
 
     def _get_cp_arp_acls(self, mac):
         """Creates two rules for allowing ARP requests from/to MAC.
@@ -198,8 +164,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :return list of rules (ruamel.CommentedMap, which is like a normal dict)
         """
 
-        print(self.config.gateways)
-        print(self.config.gateways[0]["gateway"])
         # TODO might need to break this out into dhcp, dns, gateway router, etc... for real world.       
         # TODO support multiple gateways and captive-portals somehow.
 
@@ -340,40 +304,37 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def remove_acls(self, mac, name, startswith=False):
         """
         Removes the ACLS for the mac and name from the config file.
+        NOTE: only from the port that the mac address is authenticated on, currently.
         :param mac mac address of authenticated user
         :param name the 'name' field of the acl rule in faucet.yaml, generally username or captiveportal_*
+        :param startswith Boolean value should name field be compared using string.startswith().
         """ 
          # get switchport
         switchname, switchport = self._get_switch_and_port(mac)
-	    # load faucet.yaml and its included yamls
-        acl, dp, vlan = ACP.load_config_file(self.config.faucet_config_file)
+        # TODO load all acls
+        # load faucet.yaml and its included yamls
+        acl = ACP.load_acl(self.config.faucet_config_file, switchname, switchport)
 
+        aclname = acl[0]
+        port_acl = acl[1]
+        i = 0
+        updated_port_acl = []
+        for rule in port_acl:
+            try:
+                if rule["rule"]["mac"] is not None and rule["rule"]["name"] is not None:
+                    if startswith and rule["rule"]["mac"] == mac and rule["rule"]["name"].startswith(name):
+                        continue
+                    if rule["rule"]["mac"] == mac and rule["rule"]["name"] == name:
+                        continue
+                    else:
+                        updated_port_acl.insert(i, rule)
+                        i = i + 1
+               
+            except KeyError:
+                updated_port_acl.insert(i, rule)
+                i = i + 1
 
-        #aclname = config["dps"][switchname]["interfaces"][switchport]["acl_in"]
-        for port_acl in acl[0].items():
-            aclname = port_acl[0]
-            i = 0
-            updated_port_acl = []
-            for rule in port_acl[1]:
-                print(rule)
-                try:
-                    if rule["rule"]["mac"] is not None and rule["rule"]["name"] is not None:
-                        if startswith and rule["rule"]["mac"] == mac and rule["rule"]["name"].startswith(name):
-                            print("deleted - startswith=true")
-                            continue
-                        if rule["rule"]["mac"] == mac and rule["rule"]["name"] == name:
-                            print("deleted - startswith=false")
-                            continue
-                        else:
-                            updated_port_acl.insert(i, rule)
-                            i = i + 1
-                   
-                except KeyError:
-                    updated_port_acl.insert(i, rule)
-                    i = i + 1
-            acl[0][aclname] = updated_port_acl
-
-        ACP.write_config_file("acls", acl)
+        ACP.write_config_file(acl[0], updated_port_acl)
 
 
     def _is_rule_in(self, rule, list_):
@@ -409,26 +370,21 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         # get switchport
         switchname, switchport = self._get_switch_and_port(mac) 
+        # TODO might want to make it so that acls can be added to any port_acl,
         # load faucet.yaml
-        acl, dp, vlan = ACP.load_config_file(self.config.faucet_config_file)
-        
-        print("adding acls")
-        print("switchname {0}, port {1}".format(switchname, switchport))
-        aclname = dp[0][switchname]["interfaces"][switchport]["acl_in"]
+        acl = ACP.load_acl(self.config.faucet_config_file, switchname, switchport)
 
-        port_acl = acl[0][str(aclname)]
+        port_acl = acl[1]
+
         i = 0
         # apply ACL for user to the switchport ACL
         new_port_acl = []
         inserted = False
-        #new_rules = set(rules).difference(port_acl)
 
         hashable_port_acl = self._get_hashable_list(port_acl)
         for rule in port_acl:
-#            print(rule)
-            #rule = rule["rule"]
+
             if "name" in rule["rule"] and rule["rule"]["name"] == "d1x":
-#                print("d1x: " + str(rule))
                 new_port_acl.insert(i, rule)
                 i = i + 1
             elif "name" in rule["rule"] and rule["rule"]["name"] == "redir41x":
@@ -438,41 +394,39 @@ class HTTPHandler(BaseHTTPRequestHandler):
                         if not self._is_rule_in(new_rule, hashable_port_acl):
                             # only insert the new rule if it is not already in the port_acl (config file)
                             #if rule is in rules
-#                            print("new rule: " + str(new_rule))
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
-#                print("redir41x: " + str(rule))
+
                 new_port_acl.insert(i, rule)
                 i = i + 1
             else:
                 # insert new rule if not already.
                 if not inserted:
-                    print("inserting rule")
                     inserted = True
                     for new_rule in rules:
-                        print("insert loop")
                         if not self._is_rule_in(new_rule, hashable_port_acl):
-#                            print("new rule: " + str(rule))
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
-#                print("un reck: " + str(rule))
                 new_port_acl.insert(i, rule)
                 i = i + 1
-#        print("npa" + str(new_port_acl))
-        acl[0][aclname] = new_port_acl
-
-        ACP.write_config_file("acls", acl)
+        if not inserted:
+           inserted = True
+           for new_rule in rules:
+               if not self._is_rule_in(new_rule, hashable_port_acl):
+                   new_port_acl.insert(i, new_rule)
+                   i = i + 1
+        
+        ACP.write_config_file(acl[0], new_port_acl)
 
     def do_POST(self):
-        print("do_post config") 
         json_data = self.check_if_json()
         if json_data == None:
             return
 
-        if self.path == AUTH_PATH or self.path == CAPFLOW:
+        if self.path == AUTH_PATH: # or self.path == CAPFLOW:
             self.authenticate(json_data)
-        elif self.path == IDLE_PATH:
-            self.idle(json_data)
+#        elif self.path == IDLE_PATH:
+#            self.idle(json_data)
         else:
             self.send_error('Path not found\n')
 
@@ -487,13 +441,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 self.send_error('Invalid form\n')
                 return
             self.deauthenticate(json_data["mac"], json_data["user"])
-        elif self.path == CAPFLOW:
-            #check json has the right information
-            if not ("mac" in json_data and "user" in json_data):
-                self.send_error('Invalid form\n')
-                return
-            print("deauth capflow")
-            self.deauthenticate(json_data["mac"], json_data["user"])
+#        elif self.path == CAPFLOW:
+#            #check json has the right information
+#            if not ("mac" in json_data and "user" in json_data):
+#                self.send_error('Invalid form\n')
+#                return
+#            print("deauth capflow")
+#            self.deauthenticate(json_data["mac"], json_data["user"])
         else:
             self.send_error('Path not found\n')
 
@@ -543,6 +497,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
        
 
     def authenticate(self, json_data):
+        print("authenticated: {}".format(json_data))
         conf_fd = None
         if self.path == AUTH_PATH:  #request is for dot1xforwarder
             if not ("mac" in json_data and "user" in json_data):
@@ -550,8 +505,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 return
 
             #valid request format so new user has authenticated
-#            self.write_to_file(self.dot1x_active_file, json_data["mac"],
-#                              json_data["user"])
             mac = json_data["mac"]
             user = json_data["user"]
             rules = self.get_users_rules(mac, user)
@@ -559,9 +512,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 user, mac)
             # TODO lock
             thread_lock.acquire()
-            print("auth locking faucet config")
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-            print("auth locked faucet config")
         else:  #request is for CapFlow
             if not ("ip" in json_data and "user" in json_data and "mac" in json_data):
                 self.send_error('Invalid form\n')
@@ -580,16 +531,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
             # TODO does removal happen to early, and that we loose the end of one of the TCP connections to the cp?
             # TODO lock
             thread_lock.acquire()
-            print("auth-cp locking faucet config")
-            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-            print("auth-cp locked faucet config")
+            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)            
             self.remove_acls_startswith(mac, "captiveportal_")
 
-#        time.sleep(300)
         self.add_acls(mac, user, rules)
         # TODO unlock
         lockfile.unlock(conf_fd)
-        print("auth unlocked faucet config")
         thread_lock.release()
 
         self.send_signal(signal.SIGHUP)
@@ -604,9 +551,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error("Invalid form\n")
             return
 
-        self.write_to_file(self.dot1x_idle_file, json_data["mac"],
-                           json_data["retrans"])
-#        self.send_signal(signal.SIGUSR1) retransmission_attempts
+#        self.write_to_file(self.dot1x_idle_file, json_data["mac"],
+#                           json_data["retrans"])
+
         message = "Idle user on {} has had {} retransmissions".format(
                     json_data["mac"], json_data["retrans"])
         self._set_headers(200, 'text/html')
@@ -615,33 +562,28 @@ class HTTPHandler(BaseHTTPRequestHandler):
         if json_data["retrans"] > self.config.retransmission_attempts:
             # TODO lock
             thread_lock.acquire()
-            print("idle - locking faucet config ")
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-            print("idle - locked faucet config")
+
             self._add_cp_acls(json_data["mac"])
-#            time.sleep(300)
+
             # TODO unlock
             lockfile.unlock(conf_fd)
             thread_lock.release()
 
-            print("idle - unlocking faucet config")
             self.send_signal(signal.SIGHUP)
             message = "Idle user on {} has been made to use captive portal after {} retransmissions\n".format(
             json_data["mac"], json_data["retrans"])
 
-
-
     def deauthenticate(self, mac, username):
         # TODO lock
         thread_lock.acquire()
-        print("deauth locking faucet config")
         conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-        print("deauth locked faucet config")
+
         self.remove_acls(mac, username)
         # TODO unlock
         lockfile.unlock(conf_fd)
         thread_lock.release()
-        print("deauth unlocked faucet config")
+
         self.send_signal(signal.SIGHUP)
 
         self._set_headers(200, 'text/html')
@@ -661,27 +603,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         string = str(str1) + "," + str(str2) + "\n"
         os.write(fd, bytearray(string, 'utf-8'))
         lockfile.unlock(fd)
-
-    def read_file(self, filename, unique_identifier):
-        ''' Read a file and delete entries which contain the unique identifier
-
-        :param filename: the name of the file
-        :param unique_identifier: the entry which will be deleted
-        :return: A tuple which contains a boolean of whether or not the unique 
-        identifier was found, and the contents of the file without the unique
-        identifier
-        '''
-        to_write = ""
-        file_changed = False
-        with open(filename) as file_:
-            for line in file_:
-                unique_identifier1, user1 = line.split(",")
-                if unique_identifier != unique_identifier1:
-                    to_write += line
-                else:
-                    file_changed = True
-
-        return file_changed, to_write
 
     def send_signal(self, signal_type):
         ''' Send a signal to the controller to indicate a change in config file
