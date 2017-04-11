@@ -6,14 +6,14 @@ import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.util import load_yaml_guess_indent
 
-import config_parser_util as CPU
+import config_parser_util
 import auth_yaml
 
 def read_config(config_file, logname):
     logger = get_logger(logname)
     try:
         with open(config_file, 'r') as stream: 
-            conf, ind, bsi = auth_yaml.my_load_yaml_guess_indent(stream, config_file)
+            conf, ind, bsi = auth_yaml.locus_load_yaml_guess_indent(stream, config_file)
     except ruamel.yaml.YAMLError as ex:
         logger.error('Error in file %s (%s)', config_file, str(ex))
         return None
@@ -28,7 +28,7 @@ def write_config_file(header, data):
     conf, ind, bsi = read_config(data[0].conf_file, "writelog")
     # replace c[header] with data   
     for name, c in conf.items():
-        if isinstance(c, auth_yaml.MyCommentedMap):
+        if isinstance(c, auth_yaml.LocusCommentedMap):
             if header in c.keys():
                 conf[name][header] = data
                 break
@@ -56,7 +56,7 @@ def dp_include(config_hashes, config_file, logname, top_confs):
     # whether or not this configuration file should be reloaded upon receiving
     # a HUP signal.
     new_config_hashes = config_hashes.copy()
-    new_config_hashes[config_file] = CPU.config_file_hash(config_file)
+    new_config_hashes[config_file] = config_parser_util.config_file_hash(config_file)
 
     # Save the updated configuration state in separate dicts,
     # so if an error is found, the changes can simply be thrown away.
@@ -69,7 +69,7 @@ def dp_include(config_hashes, config_file, logname, top_confs):
             ('include', True),
             ('include-optional', False)):
         for include_file in conf.pop(include_directive, []):
-            include_path = CPU.dp_config_path(include_file, parent_file=config_file)
+            include_path = config_parser_util.dp_config_path(include_file, parent_file=config_file)
             if include_path in config_hashes:
                 logger.error(
                     'include file %s already loaded, include loop found in file: %s',

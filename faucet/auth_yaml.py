@@ -1,4 +1,10 @@
-
+'''This file contains various overrides of ruamel.yaml to essentially mark which file
+    a structure (ruamel.yaml.CommentedMap) came from.i
+   The code is pretty much copied from the ruamel.yaml source, with 1-2 lines changed per function.
+   This is then used at write time to write the structure back to the file it came from.
+   auth_config_parser.py conatins a copy of faucet/config_parser.py#dp_include() which uses the 
+    ruamel.yaml library instead of pyyaml.
+'''
 
 from ruamel.yaml.reader import Reader
 from ruamel.yaml.scanner import Scanner, RoundTripScanner
@@ -7,11 +13,10 @@ from ruamel.yaml.composer import Composer
 from ruamel.yaml.resolver import VersionedResolver
 from ruamel.yaml.constructor import RoundTripConstructor
 from ruamel.yaml.comments import CommentedMap
-
 from ruamel.yaml.representer import RoundTripRepresenter
 from ruamel.yaml.compat import text_type, binary_type
 
-class MyRoundTripConstructor(RoundTripConstructor):
+class LocusRoundTripConstructor(RoundTripConstructor):
     """stores the config file with each CommentedMap.
     """
     def __init__(self, preserve_quotes, loader, conf_file, *args, **kwargs):
@@ -20,7 +25,7 @@ class MyRoundTripConstructor(RoundTripConstructor):
 
     def construct_yaml_map(self, node):
         # type: (Any) -> Any
-        data = MyCommentedMap(self.conf_file)
+        data = LocusCommentedMap(self.conf_file)
         data._yaml_set_line_col(node.start_mark.line, node.start_mark.column)
         if node.flow_style is True:
             data.fa.set_flow_style()
@@ -32,7 +37,7 @@ class MyRoundTripConstructor(RoundTripConstructor):
     def construct_undefined(self, node):
         # type: (Any) -> Any
         try:
-            data = MyCommentedMap(self.conf_file)
+            data = LocusCommentedMap(self.conf_file)
             data._yaml_set_line_col(node.start_mark.line, node.start_mark.column)
             if node.flow_style is True:
                 data.fa.set_flow_style()
@@ -49,8 +54,8 @@ class MyRoundTripConstructor(RoundTripConstructor):
                 node.start_mark)
 
 
-class MyRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer,
-                              MyRoundTripConstructor, VersionedResolver):
+class LocusRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer,
+                              LocusRoundTripConstructor, VersionedResolver):
     def __init__(self, stream, version=None, preserve_quotes=None, conf_file=None):
         # type: (StreamTextType, VersionType, bool) -> None
         # self.reader = Reader.__init__(self, stream)
@@ -58,11 +63,11 @@ class MyRoundTripLoader(Reader, RoundTripScanner, RoundTripParser, Composer,
         RoundTripScanner.__init__(self, loader=self)
         RoundTripParser.__init__(self, loader=self)
         Composer.__init__(self, loader=self)
-        MyRoundTripConstructor.__init__(self, preserve_quotes=preserve_quotes, loader=self, conf_file=conf_file)
+        LocusRoundTripConstructor.__init__(self, preserve_quotes=preserve_quotes, loader=self, conf_file=conf_file)
         VersionedResolver.__init__(self, version, loader=self)
       
 
-class MyCommentedMap(CommentedMap):
+class LocusCommentedMap(CommentedMap):
 
     def __init__(self, conf_file, *args, **kwargs):
         super().__init__()
@@ -76,14 +81,14 @@ def load(stream, version=None, preserve_quotes=None, conf_file=None):
     Parse the first YAML document in a stream
     and produce the corresponding Python object.
     """
-    loader = MyRoundTripLoader(stream, version, preserve_quotes=preserve_quotes, conf_file=conf_file)
+    loader = LocusRoundTripLoader(stream, version, preserve_quotes=preserve_quotes, conf_file=conf_file)
     try:
         return loader._constructor.get_single_data()
     finally:
         loader._parser.dispose()
 
 
-def my_round_trip_load(stream, version=None, preserve_quotes=None, conf_file=None):
+def locus_round_trip_load(stream, version=None, preserve_quotes=None, conf_file=None):
     # type: (StreamTextType, VersionType, bool) -> Any
     """
     Parse the first YAML document in a stream
@@ -93,7 +98,7 @@ def my_round_trip_load(stream, version=None, preserve_quotes=None, conf_file=Non
     return load(stream, version, preserve_quotes=preserve_quotes, conf_file=conf_file)
     
 
-def my_load_yaml_guess_indent(stream, config_file, **kw):
+def locus_load_yaml_guess_indent(stream, config_file, **kw):
     # type: (StreamTextType, Any) -> Any
     """guess the indent and block sequence indent of yaml stream/string
 
@@ -151,13 +156,13 @@ def my_load_yaml_guess_indent(stream, config_file, **kw):
         prev_line_key_only = None
     if indent is None and map_indent is not None:
         indent = map_indent
-    return my_round_trip_load(yaml_str, conf_file=config_file, **kw), indent, block_seq_indent
+    return locus_round_trip_load(yaml_str, conf_file=config_file, **kw), indent, block_seq_indent
 
 
-MyRoundTripConstructor.add_constructor(
+LocusRoundTripConstructor.add_constructor(
     u'tag:yaml.org,2002:map',
-    MyRoundTripConstructor.construct_yaml_map)
+    LocusRoundTripConstructor.construct_yaml_map)
 
-
-RoundTripRepresenter.add_representer(MyCommentedMap,
+# allows our LocusCommentedMap to be written back as a dict.
+RoundTripRepresenter.add_representer(LocusCommentedMap,
                                              RoundTripRepresenter.represent_dict)

@@ -14,7 +14,7 @@ from ruamel.yaml.util import load_yaml_guess_indent
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 import lockfile
-import auth_config_parser as ACP
+import auth_config_parser
 
 CAPFLOW = "/v1.1/authenticate/auth"
 AUTH_PATH = "/authenticate/auth"
@@ -151,7 +151,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # read mac learning file for dp_id and portname.
         dp_id, port = self._get_dpid_and_port(mac)
         
-        dp = ACP.load_dp(self.config.faucet_config_file, dp_id=dp_id)
+        dp = auth_config_parser.load_dp(self.config.faucet_config_file, dp_id=dp_id)
         
         return dp[0], port
 
@@ -313,7 +313,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         switchname, switchport = self._get_switch_and_port(mac)
         # TODO load all acls
         # load faucet.yaml and its included yamls
-        acl = ACP.load_acl(self.config.faucet_config_file, switchname, switchport)
+        acl = auth_config_parser.load_acl(self.config.faucet_config_file, switchname, switchport)
 
         aclname = acl[0]
         port_acl = acl[1]
@@ -334,7 +334,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 updated_port_acl.insert(i, rule)
                 i = i + 1
 
-        ACP.write_config_file(acl[0], updated_port_acl)
+        auth_config_parser.write_config_file(acl[0], updated_port_acl)
 
 
     def _is_rule_in(self, rule, list_):
@@ -372,7 +372,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         switchname, switchport = self._get_switch_and_port(mac) 
         # TODO might want to make it so that acls can be added to any port_acl,
         # load faucet.yaml
-        acl = ACP.load_acl(self.config.faucet_config_file, switchname, switchport)
+        acl = auth_config_parser.load_acl(self.config.faucet_config_file, switchname, switchport)
 
         port_acl = acl[1]
 
@@ -416,7 +416,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                    new_port_acl.insert(i, new_rule)
                    i = i + 1
         
-        ACP.write_config_file(acl[0], new_port_acl)
+        auth_config_parser.write_config_file(acl[0], new_port_acl)
 
     def do_POST(self):
         json_data = self.check_if_json()
