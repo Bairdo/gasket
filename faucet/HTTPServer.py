@@ -7,7 +7,7 @@ import json
 import os
 import signal
 import threading
-
+from collections import OrderedDict
 import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.util import load_yaml_guess_indent
@@ -15,6 +15,7 @@ from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
 import lockfile
 import auth_config_parser
+from auth_yaml import LocusCommentedMap
 
 CAPFLOW = "/v1.1/authenticate/auth"
 AUTH_PATH = "/authenticate/auth"
@@ -56,7 +57,8 @@ class AuthConfig():
 
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
- 
+        self.mac_learning_file = data["files"]["mac_learning"]
+
         self.captive_portal_auth_path = data["urls"]["capflow"]
         self.dot1x_auth_path = data["urls"]["dot1x"]
         self.idle_path = data["urls"]["idle"]
@@ -100,15 +102,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     modifying configuration files as well as sending a signal to it.
     '''
 
-    _contr_pid = -1  #the process ID of the controller
-    dot1x_active_file = os.getenv('DOT1X_ACTIVE_HOSTS',
-                                  '/etc/ryu/1x_active_users.txt')
-    dot1x_idle_file = os.getenv('DOT1X_IDLE_HOSTS',
-                                '/etc/ryu/1x_idle_users.txt')
-    capflow_file = os.getenv('CAPFLOW_CONFIG', '/etc/ryu/capflow_config.txt')
-
     config = None
-
 
     def _set_headers(self, code, ctype):
         self.send_response(code)
@@ -122,10 +116,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         dpid = ""
         port = ""
 
-        fd = lockfile.lock("/home/ubuntu/faucet_mac_learning.txt", os.O_RDWR)
+        fd = lockfile.lock(self.config.mac_learning_file, os.O_RDWR)
 
         flag = False
-        with open("/home/ubuntu/faucet_mac_learning.txt", "r") as mac_learn:
+        with open(self.config.mac_learning_file, "r") as mac_learn:
             for l in mac_learn:
                 if l.startswith(mac):
                     tokens = l.split(",")
@@ -333,9 +327,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
             except KeyError:
                 updated_port_acl.insert(i, rule)
                 i = i + 1
+    
+        data = []
+        data.append(LocusCommentedMap(acl[1][0].conf_file))
+        data[0][acl[0]] = updated_port_acl
 
-        auth_config_parser.write_config_file(acl[0], updated_port_acl)
-
+        auth_config_parser.write_config_file("acls", data)
 
     def _is_rule_in(self, rule, list_):
         """Searches a list of HashableDicts for an item equal to rule.
@@ -415,8 +412,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
                if not self._is_rule_in(new_rule, hashable_port_acl):
                    new_port_acl.insert(i, new_rule)
                    i = i + 1
-        
-        auth_config_parser.write_config_file(acl[0], new_port_acl)
+
+        data = []
+        data.append(LocusCommentedMap(acl[1][0].conf_file))
+        data[0][acl[0]] = new_port_acl
+
+        auth_config_parser.write_config_file("acls", data)
 
     def do_POST(self):
         json_data = self.check_if_json()
@@ -551,9 +552,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error("Invalid form\n")
             return
 
-#        self.write_to_file(self.dot1x_idle_file, json_data["mac"],
-#                           json_data["retrans"])
-
         message = "Idle user on {} has had {} retransmissions".format(
                     json_data["mac"], json_data["retrans"])
         self._set_headers(200, 'text/html')
@@ -610,8 +608,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
         '''
         with open(self.config.contr_pid_file, "r") as f:
-            self._contr_pid = int(f.read())
-        os.kill(self._contr_pid, signal_type)
+            contr_pid = int(f.read())
+            os.kill(contr_pid, signal_type)
 
     def check_if_json(self):
         try:

@@ -19,22 +19,26 @@ def read_config(config_file, logname):
         return None
     return conf, ind, bsi
 
-def write_config_file(header, data):
+def write_config_file(top_level, data):
+    """Overwrites the specified (in data) configurations.
+    :param top_level the name of the top level dict e.g. 'acls', 'dps', ...
+    :param data list of LocusCommentedMap object to overwrite part of the current config.
+        The top map object specifies the config_file.
+    """
 
     # TODO this assumes that the top level structure wont be changed and only a sub structure.
-    # might want to add so all acls can be written, etc.
+    # might want to add so all acls can be written, etc. and that the 2nd level structures do not
+    # share the same name with another 2nd level, even if different parent.
 
-    # read conf_file into c
-    conf, ind, bsi = read_config(data[0].conf_file, "writelog")
-    # replace c[header] with data   
-    for name, c in conf.items():
-        if isinstance(c, auth_yaml.LocusCommentedMap):
-            if header in c.keys():
-                conf[name][header] = data
-                break
-    # dump yaml
-    ruamel.yaml.round_trip_dump(conf, open(data[0].conf_file, 'w'), indent=ind, block_seq_indent=bsi)
 
+    # 'i' will be a LocusCommentMap with the acl or dp. i.conf_file is the file for all its children. 
+    # for each second level structure
+    for i in data:
+        conf, ind, bsi = read_config(i.conf_file, "writelog")
+        for header, config in i.items():
+            conf[top_level][header] = config
+        # dump yaml
+        ruamel.yaml.round_trip_dump(conf, open(i.conf_file, 'w'), indent=ind, block_seq_indent=bsi)
     return
 
 
@@ -42,6 +46,10 @@ def get_logger(logname):
     return logging.getLogger(logname + '.config')
 
 def dp_include(config_hashes, config_file, logname, top_confs):
+    """Pretty much copied from faucet/config_parser.py
+    Changed 1 line so uses different read_config, which also returns the indent and block sequence indent.
+    TODO make this change in original, and remove this if tests all good.
+    """
     logger = get_logger(logname)
     if not os.path.isfile(config_file):
         logger.warning('not a regular file or does not exist: %s', config_file)
@@ -93,36 +101,50 @@ def dp_include(config_hashes, config_file, logname, top_confs):
 
 
 def load_acl(config_path, switchname, switchport):
+    """Loads the acl as specified by the acl_in field on switchname switchport.
+    Both of switchname and switch must be specified.
+    :param config_path path to yaml configuration file to load.
+    :param switchname name of switch/datapath.
+    :param switchport the port of switchname.
+    :return tuple of dp name and dict-like config object.
+    """
+ 
     top_conf = load_top_conf(config_path)
     
     acls = top_conf["acls"]
     dps = top_conf["dps"]
 
-    acl_in = ""
+    acl_in = dps[switchname]["interfaces"][switchport]["acl_in"]
 
-    for name, dp_map in dps.items():
+    acl_map = acls[acl_in]
+    if acl_map is not None:
+        print("acl_in {}, acl_map {}".format(acl_in, acl_map))
+        return acl_in, acl_map
 
-        if switchname == name:
-            acl_in = dp_map["interfaces"][switchport]["acl_in"]
-            break
-
-    for name, acl_map in acls.items():
-        if name == acl_in:
-            return name, acl_map
     raise NotInYAMLError("Cannot find acl with dp named: {}, and port: {} in config file {}".format(switchname, switchport, config_path))
 
 
 def load_acls(config_path):
+    """Loads all acls across all files in config_path (include/include-optional)
+    :param config_path path to yaml configuration file to load.
+    :return dict of <name, LocusCommentedMap>
+    """
     return load_top_conf(config_path)["acls"]
     
 
 def load_dp(config_path, switchname=None, dp_id=None):
-
+    """Loads a single datapath.
+    One of switchname or dp_id must be specified.
+    :param config_path path to yaml configuration file to load.
+    :param switchname name of switch/datapath to search for.
+    :param dp_id id of switch/datapath to search for.
+    :return tuple of dp name and dict-like config object.
+    """
     dps = load_dps(config_path)
+    if switchname is not None:
+        return switchname, dps[switchname]
 
     for name, com_map in dps.items():
-        if switchname is not None and switchname == name:
-            return name, com_map
         if dp_id is not None and com_map["dp_id"] == dp_id:
             return name, com_map
 
@@ -130,12 +152,19 @@ def load_dp(config_path, switchname=None, dp_id=None):
 
 
 def load_dps(config_path):
+    """Loads all datapaths across all files in config_path (include/include-optional)
+    :param config_path path to yaml configuration file to load.
+    :return dict of <name, LocusCommentedMap> e.g. s1 : LCM (dpid:10000, ...)
+    """
     top = load_top_conf(config_path)
     return top["dps"]
 
 
 def load_top_conf(config_path):
-
+    """Loads the top level configuraions.
+    :param config_path path to yaml configuration file.
+    :return dict of 4 main top level config LocusCommentedMap
+    """
     config_hashes = {} 
     top_confs = {
             "acls": {},
@@ -143,10 +172,12 @@ def load_top_conf(config_path):
             "routers": {},
             "vlans": {}
             }
-    dp_include(config_hashes, config_path, "blah", top_confs)
+    dp_include(config_hashes, config_path, "loadtop", top_confs)
 
     return top_confs
 
 
 class NotInYAMLError(LookupError):
+    """Exception for if object cannot be found in the loaded yaml file object.
+    """
     pass
