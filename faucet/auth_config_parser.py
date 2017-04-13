@@ -9,15 +9,19 @@ from ruamel.yaml.util import load_yaml_guess_indent
 import config_parser_util
 import auth_yaml
 
-def read_config(config_file, logname):
+def read_config(config_file, logname, guess_indent=False):
     logger = get_logger(logname)
     try:
-        with open(config_file, 'r') as stream: 
-            conf, ind, bsi = auth_yaml.locus_load_yaml_guess_indent(stream, config_file)
+        with open(config_file, 'r') as stream:
+            if guess_indent:
+                conf, ind, bsi = auth_yaml.locus_load_yaml_guess_indent(stream, config_file)
+                return conf, ind, bsi
+            else:
+                return auth_yaml.locus_round_trip_load(stream, conf_file=config_file)
     except ruamel.yaml.YAMLError as ex:
         logger.error('Error in file %s (%s)', config_file, str(ex))
         return None
-    return conf, ind, bsi
+#    return conf, ind, bsi
 
 def write_config_file(top_level, data):
     """Overwrites the specified (in data) configurations.
@@ -34,7 +38,7 @@ def write_config_file(top_level, data):
     # 'i' will be a LocusCommentMap with the acl or dp. i.conf_file is the file for all its children. 
     # for each second level structure
     for i in data:
-        conf, ind, bsi = read_config(i.conf_file, "writelog")
+        conf, ind, bsi = read_config(i.conf_file, "writelog", guess_indent=True)
         for header, config in i.items():
             conf[top_level][header] = config
         # dump yaml
@@ -54,7 +58,7 @@ def dp_include(config_hashes, config_file, logname, top_confs):
     if not os.path.isfile(config_file):
         logger.warning('not a regular file or does not exist: %s', config_file)
         return False
-    conf, ind, bsi = read_config(config_file, logname)
+    conf = read_config(config_file, logname, guess_indent=False)
 
     if not conf:
         logger.warning('error loading config from file: %s', config_file)

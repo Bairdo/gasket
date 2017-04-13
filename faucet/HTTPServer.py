@@ -17,6 +17,7 @@ import lockfile
 import auth_config_parser
 from auth_yaml import LocusCommentedMap
 
+
 CAPFLOW = "/v1.1/authenticate/auth"
 AUTH_PATH = "/authenticate/auth"
 IDLE_PATH = "/idle"
@@ -109,11 +110,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', ctype)
         self.end_headers()
 
-    def _get_dpid_and_port(self, mac):
+    def _get_dp_name_and_port(self, mac):
         """
         Reads the mac learning file, and returns the 'access port' that the mac address is connected on.
         """
-        dpid = ""
+        dp_name = ""
         port = ""
 
         fd = lockfile.lock(self.config.mac_learning_file, os.O_RDWR)
@@ -123,7 +124,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             for l in mac_learn:
                 if l.startswith(mac):
                     tokens = l.split(",")
-                    dpid = tokens[1]
+                    dp_name = tokens[1]
                     port = tokens[2]
                     mode = tokens[3].split("\n")[0]
                     if mode == "access":
@@ -132,22 +133,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         lockfile.unlock(fd)
         if flag:
-            return int(dpid), int(port)
-        return 0, ""
-
-    def _get_switch_and_port(self, mac):
-        """
-        Returns the 'switch name' and the port, which are used in the yaml. and can be used by the access operator.
-        """
-        switch = ""
-        switchport = -1
-
-        # read mac learning file for dp_id and portname.
-        dp_id, port = self._get_dpid_and_port(mac)
-        
-        dp = auth_config_parser.load_dp(self.config.faucet_config_file, dp_id=dp_id)
-        
-        return dp[0], port
+            return dp_name, int(port)
+        return dp_name, -1
 
     def _get_cp_arp_acls(self, mac):
         """Creates two rules for allowing ARP requests from/to MAC.
@@ -301,10 +288,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         NOTE: only from the port that the mac address is authenticated on, currently.
         :param mac mac address of authenticated user
         :param name the 'name' field of the acl rule in faucet.yaml, generally username or captiveportal_*
-        :param startswith Boolean value should name field be compared using string.startswith().
+        :param startswith Boolean value should name field be compared using string.startswith(), or == equality
         """ 
          # get switchport
-        switchname, switchport = self._get_switch_and_port(mac)
+        switchname, switchport = self._get_dp_name_and_port(mac)
+
         # TODO load all acls
         # load faucet.yaml and its included yamls
         acl = auth_config_parser.load_acl(self.config.faucet_config_file, switchname, switchport)
@@ -366,10 +354,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param rules List of ACL rules to be applied to port that mac is associated with.
         """
         # get switchport
-        switchname, switchport = self._get_switch_and_port(mac) 
+        dp_name, switchport = self._get_dp_name_and_port(mac)
+
         # TODO might want to make it so that acls can be added to any port_acl,
         # load faucet.yaml
-        acl = auth_config_parser.load_acl(self.config.faucet_config_file, switchname, switchport)
+        acl = auth_config_parser.load_acl(self.config.faucet_config_file, dp_name, switchport)
 
         port_acl = acl[1]
 
