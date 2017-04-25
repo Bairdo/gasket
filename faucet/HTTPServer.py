@@ -16,7 +16,7 @@ from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 import lockfile
 import auth_config_parser
 from auth_yaml import LocusCommentedMap
-
+import rule_generator
 
 CAPFLOW = "/v1.1/authenticate/auth"
 AUTH_PATH = "/authenticate/auth"
@@ -93,6 +93,8 @@ class AuthConfig():
 
         self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"]) 
 
+        self.rules = data["auth-rules"]["file"]
+
 
 class HTTPHandler(BaseHTTPRequestHandler):
     '''
@@ -104,6 +106,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     '''
 
     config = None
+    rule_gen = None
 
     def _set_headers(self, code, ctype):
         self.send_response(code)
@@ -279,10 +282,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
 
        
-    def remove_acls_startswith(self, mac, name):
-        self.remove_acls(mac, name, startswith=True)
+    def remove_acls_startswith(self, mac, name, switchname, switchport):
+        self.remove_acls(mac, name, switchname, switchport, startswith=True)
 
-    def remove_acls(self, mac, name, startswith=False):
+    def remove_acls(self, mac, name, switchname, switchport, startswith=False):
         """
         Removes the ACLS for the mac and name from the config file.
         NOTE: only from the port that the mac address is authenticated on, currently.
@@ -290,8 +293,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param name the 'name' field of the acl rule in faucet.yaml, generally username or captiveportal_*
         :param startswith Boolean value should name field be compared using string.startswith(), or == equality
         """ 
-         # get switchport
-        switchname, switchport = self._get_dp_name_and_port(mac)
 
         # TODO load all acls
         # load faucet.yaml and its included yamls
@@ -346,15 +347,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         return hash_list
 
-    def add_acls(self, mac, user, rules):
+    def add_acls(self, mac, user, rules, dp_name, switchport):
         """
         Adds the acls to a port acl that the mac address is associated with, in the faucet configuration file.
         :param mac MAC address of authenticated user
         :param user username of authenticated user
         :param rules List of ACL rules to be applied to port that mac is associated with.
         """
-        # get switchport
-        dp_name, switchport = self._get_dp_name_and_port(mac)
 
         # TODO might want to make it so that acls can be added to any port_acl,
         # load faucet.yaml
@@ -389,7 +388,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 # insert new rule if not already.
                 if not inserted:
                     inserted = True
-                    for new_rule in rules:
+                    print("\n\nrules:\n{}".format(rules))
+                    for new_rule in rules["port_"+dp_name+"_"+str(switchport)]:
+                        print("\n\nnewrule:\n{}".format(new_rule))
                         if not self._is_rule_in(new_rule, hashable_port_acl):
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
@@ -441,51 +442,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         else:
             self.send_error('Path not found\n')
 
-    def get_users_rules(self, mac, user):
-        """
-        gets the ACL rules for an authenticated user.
-        TODO: in future make this get the rules from somewhere else, might also want to provide
-            other parameters (e.g. groups) for generating the ACL.
-        :param mac mac address of authenticated user
-        :param user username of the authenticated user
-            encode the user in the rule (somehow) for easy removal.
-        """
-        nr1 = CommentedMap()
-        nr1["name"] = user
-        nr1["mac"] = mac
-        nr1["dl_src"] = DoubleQuotedScalarString(mac)
-        nr1["dl_type"] = 0x800
-        nr1["nw_dst"] = DoubleQuotedScalarString('8.8.8.8')
-        nr1["actions"] = CommentedMap()
-        nr1["actions"]["allow"] = 0
-        nrd1 = CommentedMap()
-        nrd1["rule"] = nr1
-
-        nr = CommentedMap()
-        nr["name"] = user
-        nr["mac"] = mac
-        nr["dl_type"] = 0x800
-        nr["dl_src"] = DoubleQuotedScalarString(mac)
-        nr["actions"] = CommentedMap()
-        nr["actions"]["allow"] = 1
-        nrd = CommentedMap()
-        nrd["rule"] = nr
-
-        arp = CommentedMap()
-        arp["name"] = user
-        arp["mac"] = mac
-        arp["dl_src"] = DoubleQuotedScalarString(mac)
-        arp["dl_type"] = 0x0806
-        arp["actions"] = CommentedMap()
-        arp["actions"]["allow"] = 1
-        arpd = CommentedMap()
-        arpd["rule"] = arp
-        
-
-        rules = [nrd1, nrd, arpd]
-        return rules
-       
-
     def authenticate(self, json_data):
         print("authenticated: {}".format(json_data))
         conf_fd = None
@@ -497,7 +453,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
             #valid request format so new user has authenticated
             mac = json_data["mac"]
             user = json_data["user"]
-            rules = self.get_users_rules(mac, user)
+
+            switchname, switchport = self._get_dp_name_and_port(mac)
+
+            rules = self.rule_gen.get_rules(user, "port_" + switchname + "_" + str(switchport), mac)
             message = "authenticated new client({}) at MAC: {}\n".format(
                 user, mac)
             # TODO lock
@@ -517,14 +476,17 @@ class HTTPHandler(BaseHTTPRequestHandler):
             rules = self.get_users_rules(mac, user)
             message = "authenticated new client({}) at MAC: {} and ip: {}\n".format(
                 user, mac, ip)
+             # get switchport
+            switchname, switchport = self._get_dp_name_and_port(mac)
+        
             # remove the redirect to captive portal acl rules for the mac that just authed.
             # TODO does removal happen to early, and that we loose the end of one of the TCP connections to the cp?
             # TODO lock
             thread_lock.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)            
-            self.remove_acls_startswith(mac, "captiveportal_")
+            self.remove_acls_startswith(mac, "captiveportal_", switchname, switchport)
 
-        self.add_acls(mac, user, rules)
+        self.add_acls(mac, user, rules, switchname, switchport)
         # TODO unlock
         lockfile.unlock(conf_fd)
         thread_lock.release()
@@ -562,11 +524,14 @@ class HTTPHandler(BaseHTTPRequestHandler):
             json_data["mac"], json_data["retrans"])
 
     def deauthenticate(self, mac, username):
+        switchname, switchport = self._get_dp_name_and_port(mac)
         # TODO lock
         thread_lock.acquire()
         conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-
-        self.remove_acls(mac, username)
+       
+        switchname, switchport = self._get_dp_name_and_port(mac)
+        
+        self.remove_acls(mac, username, switchname, switchport)
         # TODO unlock
         lockfile.unlock(conf_fd)
         thread_lock.release()
@@ -632,6 +597,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     pass
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", help="location of yaml configuration file")
@@ -641,7 +607,9 @@ if __name__ == "__main__":
     conf = AuthConfig(config_filename)
     
     HTTPHandler.config = conf
+    HTTPHandler.rule_gen = rule_generator.RuleGenerator(conf.rules)
 
     server = ThreadedHTTPServer(('', 8080), HTTPHandler)
     print("starting server")
     server.serve_forever()
+
