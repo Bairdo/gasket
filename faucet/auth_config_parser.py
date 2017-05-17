@@ -75,11 +75,13 @@ def dp_include(config_hashes, config_file, logname, top_confs):
     new_top_confs = {}
     for conf_name, curr_conf in top_confs.items():
         new_top_confs[conf_name] = curr_conf.copy()
+        #pylint: disable=no-member
         new_top_confs[conf_name].update(conf.pop(conf_name, {}))
 
     for include_directive, file_required in (
             ('include', True),
             ('include-optional', False)):
+        #pylint: disable=no-member
         for include_file in conf.pop(include_directive, []):
             include_path = config_parser_util.dp_config_path(include_file, parent_file=config_file)
             if include_path in config_hashes:

@@ -271,16 +271,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         rules.extend(self._get_cp_tcp_acls(mac))
 
         return rules
-
-    def _add_cp_acls(self, mac):
-        """
-        Adds the acls for captive portal redirection, to the port that mac is associated with.
-        """
-        rules = self._get_captive_portal_acls(mac)
-        self.add_acls(mac, None, rules)
-
-
-
        
     def remove_acls_startswith(self, mac, name, switchname, switchport):
         self.remove_acls(mac, name, switchname, switchport, startswith=True)
