@@ -1,0 +1,70 @@
+---
+version: 2
+
+vlans:
+    100:
+        name: vlan100
+
+dps:
+    switch1:
+        dp_id: 0x0000080027000106
+        hardware: Open vSwitch
+            1:
+                name: gateway
+                native_vlan: 100
+                acl_in: 100
+            2:
+                name: portal
+                native_vlan: 100
+                acl_in: 100
+            3:
+                name: port
+                native_vlan: 100
+                acl_in: 100
+            4:
+                name: hosts
+                native_vlan: 100
+                acl_in: 100
+
+
+
+
+    switch2:
+        dp_id: 0x0000080027000103
+        hardware: Open vSwitch
+
+        interfaces:
+            1:
+                name: h1
+                native_vlan: 100
+                acl_in: 100
+            2:
+                name: h2
+                native_vlan: 100
+                acl_in: 100
+
+            3:
+                name: h3
+                native_vlan: 100
+                acl_in: 100
+            4:
+                name: h4
+                native_vlan: 100
+                acl_in: 100
+
+acls:
+    100:
+        - rule:
+            dl_type: 2048
+            actions:
+                allow: 1
+        - rule:
+            dl_type: 2054
+            actions:
+                allow: 1
+        - rule:
+            dl_type: 0x888e
+            actions:
+                allow: 1
+
+
