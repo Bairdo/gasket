@@ -1,0 +1,67 @@
+version: 2
+vlans:
+      100:
+            name: vlan100
+
+      2:
+            name: cpVlan2
+        #acl_in: vlan2
+      3:
+            name: vlan3
+
+      8:
+            name: vlan8
+            acl_in: vlan8_acl
+
+dps:
+      ovs-switch:
+            dp_id: 8796747333891
+            hardware: Open vSwitch
+            interfaces:
+                  1:
+                        name: portal
+                        native_vlan: 100
+                        acl_in: port1_1
+#                        permanent_learn: True
+                  2:
+                        name: gateway
+                        native_vlan: 100
+                        acl_in: port1_2
+#                        permanent_learn: True
+                  3:
+                        name: port
+                        native_vlan: 100
+                        acl_in: port1_3
+                  4:
+                        name: hosts
+                        native_vlan: 100
+                        acl_in: port1_4
+#            10:
+#                name: dummyport
+#                native_vlan: 2
+
+      ovs-hosts-switch:
+            dp_id: 8796747333894
+            hardware: Open vSwitch
+            interfaces:
+                  1:
+                        name: h1
+                        native_vlan: 100
+                        acl_in: port2_1
+                        mode: access
+                  2:
+                        name: h2
+                        native_vlan: 100
+#                tagged_vlans: [2]
+                        acl_in: port2_2
+                        mode: access
+                  3:
+                        name: port2_3
+                        native_vlan: 100
+#                tagged_vlan: [2] 
+                        acl_in: port1_4
+#            10:
+#                name: dummyport
+#                native_vlan: 2
+include:
+    - acls.yaml
