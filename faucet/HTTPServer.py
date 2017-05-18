@@ -56,9 +56,14 @@ class AuthConfig():
         data, ind, bsi = load_yaml_guess_indent(open(filename, 'r'))
         self.version = data["version"]
 
+        self.prom_port = int(data['faucet']['prometheus_port'])
+        self.faucet_ip = data['faucet']['ip']
+        self.prom_url = 'http://{}:{}'.format(self.faucet_ip, self.prom_port)
+
+
+
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
-        self.mac_learning_file = data["files"]["mac_learning"]
 
         self.captive_portal_auth_path = data["urls"]["capflow"]
         self.dot1x_auth_path = data["urls"]["dot1x"]
@@ -113,31 +118,85 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', ctype)
         self.end_headers()
 
+    def scape_prometheus(self): 
+        prom_url = self.config.prom_url
+        prom_vars = []
+        for prom_line in requests.get(prom_url).text.split('\n'):
+            if not prom_line.startswith('#'):
+                prom_vars.append(prom_line)
+        return '\n'.join(prom_vars)
+
+
+    def _int_to_mac(self, mac_as_int_str):
+        h = '%012x' % int(mac_as_int_str)
+        macstr = h[:2] + ':' + h[2:4] + \
+                     ':' + h[4:6] + ':' + h[6:8] + \
+                     ':' + h[8:10] + ':' +  h[10:12]
+        return macstri
+
+
+    def _dpid_name_to_map(self, lines):
+        '''Converts a list of lines containing the faucet_config_dp_name,
+           (from prometheus client (faucet)) to a dictionary.
+        :param lines list
+        :returns dictionary
+        '''
+        d = {}
+        for l in lines:
+            # TODO maybe dont use regex?
+            _, _, dpid, _, name = re.split('\W+', l)
+            d[dpid] = name
+        return d
+
+    def _dp_port_mode_to_map(self, lines):
+        '''Converts a list of lines containing dp_port_mode,
+           (from prometheus client (faucet)) to a dictionary dictionary.
+        :param lines list
+        :returns dictionary
+        '''
+        d = {}
+        for l in lines:
+            _, _, dpid, _, mode, _, port = re.split('\W+', l)
+            d[dpid] = {port, mode}
+        return d
+
     def _get_dp_name_and_port(self, mac):
         """
         Reads the mac learning file, and returns the 'access port' that the mac address is connected on.
         """
-        dp_name = ""
-        port = ""
+        # query faucets promethues.
+        prom_txt = self.scrape_prometheus()
 
-        fd = lockfile.lock(self.config.mac_learning_file, os.O_RDWR)
+        prom_mac_table = []
+        prom_name_dpid = []
+        prom_dpid_port_mode = []
+        for l in prom_txt:
+            if l.starts_with('learned_macs{'):
+                prom_mac_table.append(l)
+            if l.starts_with('faucet_config_dp_name'):
+                prom_name_dpid.append(l)
+            if l.starts_with('dp_port_mode'):
+                # TODO this is not implemented on the faucet side yet.
+                prom_dpid_port_mode.append(l)
 
-        flag = False
-        with open(self.config.mac_learning_file, "r") as mac_learn:
-            for l in mac_learn:
-                if l.startswith(mac):
-                    tokens = l.split(",")
-                    dp_name = tokens[1]
-                    port = tokens[2]
-                    mode = tokens[3].split("\n")[0]
-                    if mode == "access":
-                        flag = True
-                        break
+        dpid_name = self._dpid_name_to_map(prom_name_dpid)
+        dp_port_mode = self._dp_port_mode_to_map(prom_dpid_port_mode)
 
-        lockfile.unlock(fd)
-        if flag:
-            return dp_name, int(port)
-        return dp_name, -1
+        ret_port = -1
+        ret_dp_name = -1
+        for l in prom_mac_table:
+            labels, int_as_mac = l.split(' ')
+            if mac == self._int_to_mac(int_as_mac):
+                # if this is also an access port, we have found the dpid and the port
+                _, _, dpid, _, n, _, port, _, vlan = re.split('\W+', labels)
+                if dpid in dp_port_mode and
+                        port in dp_port_mode[dpid] and
+                        dp_port_mode[dpid][port] == 'access':
+                    ret_port = int(port)
+                    ret_dp_name = dpid_name[dpid]
+                    break
+        
+        return ret_dp_name, ret_port
 
     def _get_cp_arp_acls(self, mac):
         """Creates two rules for allowing ARP requests from/to MAC.
