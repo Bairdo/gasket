@@ -6,7 +6,7 @@ import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.util import load_yaml_guess_indent
 
-import config_parser_util
+import config_parser_util_cpy
 import auth_yaml
 
 def read_config(config_file, logname, guess_indent=False):
@@ -68,7 +68,7 @@ def dp_include(config_hashes, config_file, logname, top_confs):
     # whether or not this configuration file should be reloaded upon receiving
     # a HUP signal.
     new_config_hashes = config_hashes.copy()
-    new_config_hashes[config_file] = config_parser_util.config_file_hash(config_file)
+    new_config_hashes[config_file] = config_parser_util_cpy.config_file_hash(config_file)
 
     # Save the updated configuration state in separate dicts,
     # so if an error is found, the changes can simply be thrown away.
@@ -83,7 +83,7 @@ def dp_include(config_hashes, config_file, logname, top_confs):
             ('include-optional', False)):
         #pylint: disable=no-member
         for include_file in conf.pop(include_directive, []):
-            include_path = config_parser_util.dp_config_path(include_file, parent_file=config_file)
+            include_path = config_parser_util_cpy.dp_config_path(include_file, parent_file=config_file)
             if include_path in config_hashes:
                 logger.error(
                     'include file %s already loaded, include loop found in file: %s',
