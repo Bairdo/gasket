@@ -25,7 +25,7 @@ acls:
 
 
 
-      port2_1:
+      port_ovs-hosts-switch_1:
           - rule:
                   name: d1x
                   dl_type: 34958
@@ -39,7 +39,7 @@ acls:
                         allow: 1
                         output:
                             dl_dst: 08:00:27:00:03:02
-      port2_2:
+      port_ovs-hosts-switch_2:
           - rule:
                   name: d1x
                   dl_type: 34958

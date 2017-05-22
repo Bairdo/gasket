@@ -1,6 +1,9 @@
 ---
 version: 0
 
+faucet:
+    prometheus_port: 9244
+    ip: 127.0.0.1
 files:
     # the location files, pid should contain the process id (pid) of the main faucet process (ryu-manager)
     #  should be obtainable with "ps aux |grep faucet.faucet |head -n1 | awk '{print $2}' > /etc/ryu/contr_pid"

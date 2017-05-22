@@ -47,13 +47,13 @@ dps:
                   1:
                         name: h1
                         native_vlan: 100
-                        acl_in: port2_1
+                        acl_in: port_ovs-hosts-switch_1
                         mode: access
                   2:
                         name: h2
                         native_vlan: 100
 #                tagged_vlans: [2]
-                        acl_in: port2_2
+                        acl_in: port_ovs-hosts-switch_2
                         mode: access
                   3:
                         name: port2_3
