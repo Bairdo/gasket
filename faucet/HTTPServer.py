@@ -5,6 +5,7 @@ import argparse
 import cgi
 import json
 import os
+import re
 import signal
 import threading
 from collections import OrderedDict
@@ -12,6 +13,9 @@ import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.util import load_yaml_guess_indent
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
+
+
+import requests
 
 import lockfile
 import auth_config_parser
@@ -118,7 +122,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', ctype)
         self.end_headers()
 
-    def scape_prometheus(self): 
+    def scrape_prometheus(self): 
         prom_url = self.config.prom_url
         prom_vars = []
         for prom_line in requests.get(prom_url).text.split('\n'):
@@ -127,12 +131,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
         return '\n'.join(prom_vars)
 
 
-    def _int_to_mac(self, mac_as_int_str):
-        h = '%012x' % int(mac_as_int_str)
+    def _float_to_mac(self, mac_as_float_str):
+        h = '%012x' % int(mac_as_float_str.split('.')[0])
         macstr = h[:2] + ':' + h[2:4] + \
                      ':' + h[4:6] + ':' + h[6:8] + \
                      ':' + h[8:10] + ':' +  h[10:12]
-        return macstri
+        return macstr
 
 
     def _dpid_name_to_map(self, lines):
@@ -142,9 +146,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :returns dictionary
         '''
         d = {}
+        print("dpid name to map")
         for l in lines:
             # TODO maybe dont use regex?
-            _, _, dpid, _, name = re.split('\W+', l)
+            print(l)
+            _, _, dpid, _, name, _ = re.split('[{=",]+', l)
             d[dpid] = name
         return d
 
@@ -156,13 +162,23 @@ class HTTPHandler(BaseHTTPRequestHandler):
         '''
         d = {}
         for l in lines:
-            _, _, dpid, _, mode, _, port = re.split('\W+', l)
-            d[dpid] = {port, mode}
+            _, _, dpid, _, port, mode_int, _ = re.split('\W+', l)
+            if int(mode_int) == 1:
+                mode = "access"
+            else:
+                mode = None
+            if dpid not in d:
+                d[dpid] = {}
+            
+            d[dpid][port] = mode
+        print("dp_port_mode_to_map returns: {}".format(d))
         return d
 
     def _get_dp_name_and_port(self, mac):
         """
-        Reads the mac learning file, and returns the 'access port' that the mac address is connected on.
+        Queries the prometheus faucet client, and returns the 'access port' that the mac address is connected on.
+        :param mac MAC address to find port for.
+        :returns dp name & port number.
         """
         # query faucets promethues.
         prom_txt = self.scrape_prometheus()
@@ -170,12 +186,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
         prom_mac_table = []
         prom_name_dpid = []
         prom_dpid_port_mode = []
-        for l in prom_txt:
-            if l.starts_with('learned_macs{'):
+        for l in prom_txt.splitlines():
+            print(l)
+            if l.startswith('learned_macs{'):
                 prom_mac_table.append(l)
-            if l.starts_with('faucet_config_dp_name'):
+            if l.startswith('faucet_config_dp_name'):
                 prom_name_dpid.append(l)
-            if l.starts_with('dp_port_mode'):
+            if l.startswith('dp_port_mode'):
                 # TODO this is not implemented on the faucet side yet.
                 prom_dpid_port_mode.append(l)
 
@@ -183,19 +200,20 @@ class HTTPHandler(BaseHTTPRequestHandler):
         dp_port_mode = self._dp_port_mode_to_map(prom_dpid_port_mode)
 
         ret_port = -1
-        ret_dp_name = -1
+        ret_dp_name = ""
         for l in prom_mac_table:
-            labels, int_as_mac = l.split(' ')
-            if mac == self._int_to_mac(int_as_mac):
+            labels, float_as_mac = l.split(' ')
+            print("int as mac{}".format(self._float_to_mac(float_as_mac)))
+            if mac == self._float_to_mac(float_as_mac):
                 # if this is also an access port, we have found the dpid and the port
-                _, _, dpid, _, n, _, port, _, vlan = re.split('\W+', labels)
-                if dpid in dp_port_mode and
-                        port in dp_port_mode[dpid] and
+                _, _, dpid, _, n, _, port, _, vlan, _ = re.split('\W+', labels)
+                if dpid in dp_port_mode and \
+                        port in dp_port_mode[dpid] and \
                         dp_port_mode[dpid][port] == 'access':
                     ret_port = int(port)
                     ret_dp_name = dpid_name[dpid]
                     break
-        
+        print("name: {} port: {}".format(ret_dp_name, ret_port)) 
         return ret_dp_name, ret_port
 
     def _get_cp_arp_acls(self, mac):
@@ -403,7 +421,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param user username of authenticated user
         :param rules List of ACL rules to be applied to port that mac is associated with.
         """
-
+        print("rules")
+        print(rules)
         # TODO might want to make it so that acls can be added to any port_acl,
         # load faucet.yaml
         acl = auth_config_parser.load_acl(self.config.faucet_config_file, dp_name, switchport)
@@ -414,7 +433,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # apply ACL for user to the switchport ACL
         new_port_acl = []
         inserted = False
-
+        print("portacl")
+        print(type(port_acl))
+        print(port_acl)
         hashable_port_acl = self._get_hashable_list(port_acl)
         for rule in port_acl:
 
@@ -424,12 +445,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
             elif "name" in rule["rule"] and rule["rule"]["name"] == "redir41x":
                 if not inserted:
                     inserted = True
-                    for new_rule in rules:
-                        if not self._is_rule_in(new_rule, hashable_port_acl):
+                    for port_to_apply , new_rules in rules.items():
+                        for new_rule in new_rules:
+                            if not self._is_rule_in(new_rule, hashable_port_acl):
                             # only insert the new rule if it is not already in the port_acl (config file)
-                            #if rule is in rules
-                            new_port_acl.insert(i, new_rule)
-                            i = i + 1
+                            #if rule is in rules  
+                                new_port_acl.insert(i, new_rule)
+                                i = i + 1
 
                 new_port_acl.insert(i, rule)
                 i = i + 1

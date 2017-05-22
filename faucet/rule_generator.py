@@ -46,8 +46,10 @@ class RuleGenerator():
 
                 if portacl == "_authport_":
                     # rename the port acl to the one the user authenticated on.
-                    rules[auth_port_acl] = rules[portacl]
+                    temp = rules[portacl]
                     del rules[portacl]
+                    rules[auth_port_acl] = temp
+        print("got rules")
         print(rules)
         return rules
 
