@@ -1,4 +1,6 @@
+# pylint: disable=import-error
 from http.server import BaseHTTPRequestHandler, HTTPServer
+# pylint: disable=import-error
 from socketserver import ThreadingMixIn
 
 import argparse
@@ -15,10 +17,6 @@ import config_parser
 import lockfile
 
 import rule_generator
-
-CAPFLOW = "/v1.1/authenticate/auth"
-AUTH_PATH = "/authenticate/auth"
-IDLE_PATH = "/idle"
 
 class Proto():
     ETHER_ARP = 0x0806
@@ -50,6 +48,7 @@ class HashableDict(dict):
 class AuthConfig():
     """Structure to hold configuration settings
     """
+    # TODO make this inherit from faucet/Conf.py and use the default thing
     def __init__(self, filename):
         data = yaml.load(open(filename, 'r'))
         self.version = data["version"]
@@ -220,6 +219,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         # TODO might need to break this out into dhcp, dns, gateway router, etc... for real world.       
         # TODO support multiple gateways and captive-portals somehow.
+        # TODO may want to load these from a file, so they can be customised by end user. 
+        # e.g. apply dhcp rules which could also include extra rules for non standard setups. (dhcp server sends via its IP instead of broadcast.)
 
         # Allow ARP to gateway to proceed.
         # The point of changing the dst mac is so that other hosts do not learn about the 
@@ -354,11 +355,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param startswith Boolean value should name field be compared using string.startswith(), or == equality
         """ 
 
-        # TODO load all acls
+        # TODO remove rules from any port acl.
         # load faucet.yaml and its included yamls
         all_acls = config_parser.load_acls(self.config.acl_config_file) #, switchname, switchport)
 
-        print(all_acls)
         aclname = 'port_' + switchname + '_' + str(switchport)
         port_acl = all_acls['acls'][aclname]
         i = 0
@@ -380,7 +380,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
       
         all_acls['acls'][aclname] = updated_port_acl
 
-        config_parser.write_acls_file(all_acls, self.config.acl_config_file)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file)
 
     def _is_rule_in(self, rule, list_):
         """Searches a list of HashableDicts for an item equal to rule.
@@ -475,16 +475,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         all_acls['acls'][aclname] = new_port_acl
         # TODO yaml
-        config_parser.write_acls_file(all_acls, self.config.acl_config_file)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file)
 
     def do_POST(self):
         json_data = self.check_if_json()
         if json_data == None:
             return
 
-        if self.path == AUTH_PATH: # or self.path == CAPFLOW:
+        if self.path == self.config.dot1x_auth_path: # or self.path == self.config.captive_portal_auth_path:
             self.authenticate(json_data)
-#        elif self.path == IDLE_PATH:
+#        elif self.path == self.config.idle_path:
 #            self.idle(json_data)
         else:
             self.send_error('Path not found\n')
@@ -494,13 +494,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
         if json_data == None:
             return
 
-        if self.path == AUTH_PATH:
+        if self.path == self.config.dot1x_auth_path:
             #check json has the right information
             if not ("mac" in json_data and "user" in json_data):
                 self.send_error('Invalid form\n')
                 return
             self.deauthenticate(json_data["mac"], json_data["user"])
-#        elif self.path == CAPFLOW:
+#        elif self.path == self.config.captive_portal_auth_path:
 #            #check json has the right information
 #            if not ("mac" in json_data and "user" in json_data):
 #                self.send_error('Invalid form\n')
@@ -513,7 +513,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def authenticate(self, json_data):
         print("authenticated: {}".format(json_data))
         conf_fd = None
-        if self.path == AUTH_PATH:  #request is for dot1xforwarder
+        if self.path == self.config.dot1x_auth_path:  #request is for dot1xforwarder
             if not ("mac" in json_data and "user" in json_data):
                 self.send_error('Invalid form\n')
                 return
@@ -622,19 +622,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         message = "deauthenticated client {} at {} \n".format(username, mac)
         self.wfile.write(message.encode(encoding='utf-8'))
         self.log_message("%s", message)
-
-    def write_to_file(self, filename, str1, str2):
-        ''' Write two strings which are comma separated, to a file
-
-        :param filename: the name of the file we are writing to
-        :param str1: the first string
-        :param str2: the second string
-        '''
-        #try to obtain lock to prevent concurrent access
-        fd = lockfile.lock(filename, os.O_APPEND | os.O_WRONLY)
-        string = str(str1) + "," + str(str2) + "\n"
-        os.write(fd, bytearray(string, 'utf-8'))
-        lockfile.unlock(fd)
 
     def send_signal(self, signal_type):
         ''' Send a signal to the controller to indicate a change in config file
