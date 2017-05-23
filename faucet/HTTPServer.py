@@ -1,6 +1,4 @@
-# pylint: disable=import-error
 from http.server import BaseHTTPRequestHandler, HTTPServer
-# pylint: disable=import-error
 from socketserver import ThreadingMixIn
 
 import argparse
