@@ -8,18 +8,12 @@ import os
 import re
 import signal
 import threading
-from collections import OrderedDict
-import ruamel.yaml
-from ruamel.yaml.comments import CommentedMap
-from ruamel.yaml.util import load_yaml_guess_indent
-from ruamel.yaml.scalarstring import DoubleQuotedScalarString
-
-
+import yaml
 import requests
 
+import config_parser
 import lockfile
-import auth_config_parser
-from auth_yaml import LocusCommentedMap
+
 import rule_generator
 
 CAPFLOW = "/v1.1/authenticate/auth"
@@ -57,17 +51,16 @@ class AuthConfig():
     """Structure to hold configuration settings
     """
     def __init__(self, filename):
-        data, ind, bsi = load_yaml_guess_indent(open(filename, 'r'))
+        data = yaml.load(open(filename, 'r'))
         self.version = data["version"]
 
         self.prom_port = int(data['faucet']['prometheus_port'])
         self.faucet_ip = data['faucet']['ip']
         self.prom_url = 'http://{}:{}'.format(self.faucet_ip, self.prom_port)
 
-
-
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
+        self.acl_config_file = data['files']['acl_config']
 
         self.captive_portal_auth_path = data["urls"]["capflow"]
         self.dot1x_auth_path = data["urls"]["dot1x"]
@@ -232,17 +225,17 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # The point of changing the dst mac is so that other hosts do not learn about the 
         #  unauthenticated host, (and vice versa as no arp replies should be sent,
         #  from anyone but the gateway or captive portal)
-        arpReq = CommentedMap()
+        arpReq = {}
         arpReq["name"] = "captiveportal_arp"
         arpReq["mac"] = mac
-        arpReq["dl_src"] = DoubleQuotedScalarString(mac)
+        arpReq["dl_src"] = mac
         arpReq["dl_type"] = Proto.ETHER_ARP
         arpReq["arp_tpa"] = self.config.gateways[0]["gateway"]["ip"]
-        arpReq["actions"] = CommentedMap()
+        arpReq["actions"] = {}
         arpReq["actions"]["allow"] = 1
         arpReq["actions"]["dl_dst"] = self.config.gateways[0]["gateway"]["mac"]
 
-        areq = CommentedMap()
+        areq = {}
         areq["rule"] = arpReq
 
         # redirect the rest of arp to a captive portal.
@@ -253,26 +246,26 @@ class HTTPHandler(BaseHTTPRequestHandler):
         #  arp. However this will result in poisoning the clients arp cache, which may
         #  cause more trouble than it is worth.
         # The portal currently does not do anything with these packets.
-        arpReply = CommentedMap()
+        arpReply = {}
         arpReply["name"] = "captiveportal_arp"
         arpReply["mac"] = mac
-        arpReply["dl_src"] = DoubleQuotedScalarString(mac)
+        arpReply["dl_src"] = mac
         arpReply["dl_type"] = Proto.ETHER_ARP
-        arpReply["actions"] = CommentedMap()
+        arpReply["actions"] = {}
         arpReply["actions"]["allow"] = 1
         arpReply["actions"]["dl_dst"] = self.config.captive_portals[0]["captive-portal"]["mac"]
 
-        arep = CommentedMap()
+        arep = {}
         arep["rule"] = arpReply
 
         return [areq, arep]
 
     def _get_cp_dhcp_acls(self, mac):
         # allow dhcp
-        dhcpReply = CommentedMap()
+        dhcpReply = {}
         dhcpReply["name"] = "captiveportal_dhcp"
         dhcpReply["mac"] = mac
-        dhcpReply["dl_src"] = DoubleQuotedScalarString(mac)
+        dhcpReply["dl_src"] = mac
         # TODO should we match on all these fields (dl_dst, ip.src/dst. udp.src)? pretty sure at some point
         #  I saw a DHCP REQUEST with the servers IP address as the destination,
         #  which would mean this rule would not be hit.
@@ -282,11 +275,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         dhcpReply["ip_proto"] = Proto.IP_UDP
 #        dhcpReply["udp_src"] = Proto.DHCP_CLIENT
         dhcpReply["udp_dst"] = Proto.DHCP_SERVER_PORT
-        dhcpReply["actions"] = CommentedMap()
+        dhcpReply["actions"] = {}
         dhcpReply["actions"]["allow"] = 1
         # TODO could possibly rewrite MAC to DHCP server. and maybe IP
 
-        dhrep = CommentedMap()
+        dhrep = {}
         dhrep["rule"] = dhcpReply
 
         return [dhrep]
@@ -298,17 +291,17 @@ class HTTPHandler(BaseHTTPRequestHandler):
         #  - Either way allow multiple DNS servers to be used.
 
         # allow dns
-        dnsReply = CommentedMap()
+        dnsReply = {}
         dnsReply["name"] = "captiveportal_dns"
         dnsReply["mac"] = mac
-        dnsReply["dl_src"] = DoubleQuotedScalarString(mac)
+        dnsReply["dl_src"] = mac
         dnsReply["dl_type"] = Proto.ETHER_IPv4
         dnsReply["ip_proto"] = Proto.IP_UDP
         dnsReply["udp_dst"] = Proto.DNS_PORT
-        dnsReply["actions"] = CommentedMap()
+        dnsReply["actions"] = {}
         dnsReply["actions"]["allow"] = 1
 
-        dnsrep = CommentedMap()
+        dnsrep = {}
         dnsrep["rule"] = dnsReply
 
         return [dnsrep]
@@ -320,18 +313,18 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         # TODO could possibly do a form of load balancing here,
         #  by selecting a different portal dst mac address.
-        tcpFwd = CommentedMap()
+        tcpFwd = {}
         tcpFwd["name"] = "captiveportal_tcp"
         tcpFwd["mac"] = mac
-        tcpFwd["dl_src"] = DoubleQuotedScalarString(mac)
+        tcpFwd["dl_src"] = mac
         tcpFwd["dl_type"] = Proto.ETHER_IPv4
         tcpFwd["ip_proto"] = Proto.IP_TCP
         tcpFwd["tcp_dst"] = Proto.HTTP_PORT
-        tcpFwd["actions"] = CommentedMap()
+        tcpFwd["actions"] = {}
         tcpFwd["actions"]["allow"] = 1
         tcpFwd["actions"]["dl_dst"] = self.config.captive_portals[0]["captive-portal"]["mac"]
 
-        ret = CommentedMap()
+        ret = {}
         ret["rule"] = tcpFwd 
 
         return [ret]
@@ -363,10 +356,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         # TODO load all acls
         # load faucet.yaml and its included yamls
-        acl = auth_config_parser.load_acl(self.config.faucet_config_file, switchname, switchport)
+        all_acls = config_parser.load_acls(self.config.acl_config_file) #, switchname, switchport)
 
-        aclname = acl[0]
-        port_acl = acl[1]
+        print(all_acls)
+        aclname = 'port_' + switchname + '_' + str(switchport)
+        port_acl = all_acls['acls'][aclname]
         i = 0
         updated_port_acl = []
         for rule in port_acl:
@@ -383,12 +377,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
             except KeyError:
                 updated_port_acl.insert(i, rule)
                 i = i + 1
-    
-        data = []
-        data.append(LocusCommentedMap(acl[1][0].conf_file))
-        data[0][acl[0]] = updated_port_acl
+      
+        all_acls['acls'][aclname] = updated_port_acl
 
-        auth_config_parser.write_config_file("acls", data)
+        config_parser.write_acls_file(all_acls, self.config.acl_config_file)
 
     def _is_rule_in(self, rule, list_):
         """Searches a list of HashableDicts for an item equal to rule.
@@ -430,9 +422,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
                                     dp_name, switchport, user, mac))
             return
         else:
-            acl = auth_config_parser.load_acl(self.config.faucet_config_file, dp_name, switchport)
+            all_acls = config_parser.load_acls(self.config.acl_config_file) #, dp_name, switchport)
+        aclname = 'port_' + dp_name + '_' + str(switchport)
 
-        port_acl = acl[1]
+        print(all_acls)
+        port_acl = all_acls['acls'][aclname]
 
         i = 0
         # apply ACL for user to the switchport ACL
@@ -479,11 +473,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                    new_port_acl.insert(i, new_rule)
                    i = i + 1
 
-        data = []
-        data.append(LocusCommentedMap(acl[1][0].conf_file))
-        data[0][acl[0]] = new_port_acl
-
-        auth_config_parser.write_config_file("acls", data)
+        all_acls['acls'][aclname] = new_port_acl
+        # TODO yaml
+        config_parser.write_acls_file(all_acls, self.config.acl_config_file)
 
     def do_POST(self):
         json_data = self.check_if_json()

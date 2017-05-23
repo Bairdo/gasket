@@ -4,7 +4,7 @@ yaml keys "_authport_*, and values "_usermac_" are currently used for replacing 
 
 TODO maybe make this an interface for yaml or db generator subclasses.
 """
-import ruamel.yaml
+import yaml
 
 
 class RuleGenerator():
@@ -58,7 +58,7 @@ class RuleGenerator():
         :param rule_file: path to file.
         """
         self.yaml_file = rule_file
-        self.conf = ruamel.yaml.round_trip_load(open(rule_file, "r"))
+        self.conf = yaml.load(open(rule_file, "r"))
 
 
     """
