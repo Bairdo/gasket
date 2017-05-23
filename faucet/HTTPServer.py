@@ -424,8 +424,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
         print("rules")
         print(rules)
         # TODO might want to make it so that acls can be added to any port_acl,
-        # load faucet.yaml
-        acl = auth_config_parser.load_acl(self.config.faucet_config_file, dp_name, switchport)
+        # load acls from faucet.yaml
+        if dp_name == '' or switchport == -1 :
+            print("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
+                                    dp_name, switchport, user, mac))
+            return
+        else:
+            acl = auth_config_parser.load_acl(self.config.faucet_config_file, dp_name, switchport)
 
         port_acl = acl[1]
 
@@ -526,8 +531,17 @@ class HTTPHandler(BaseHTTPRequestHandler):
             user = json_data["user"]
 
             switchname, switchport = self._get_dp_name_and_port(mac)
-
-            rules = self.rule_gen.get_rules(user, "port_" + switchname + "_" + str(switchport), mac)
+            if switchname == '' or switchport == -1 :
+                print("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for deauthed user '{}' on MAC '{}'".format(
+                                    switchname, switchport, user, mac))
+                #write response
+                message = "cant auth"
+                self._set_headers(200, 'text/html')
+                self.wfile.write(message.encode(encoding="utf-8"))
+                self.log_message("%s", message)
+                return
+            else:
+                rules = self.rule_gen.get_rules(user, "port_" + switchname + "_" + str(switchport), mac)
             message = "authenticated new client({}) at MAC: {}\n".format(
                 user, mac)
             # TODO lock
@@ -601,8 +615,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
        
         switchname, switchport = self._get_dp_name_and_port(mac)
-        
-        self.remove_acls(mac, username, switchname, switchport)
+        if switchname == '' or switchport == -1 :
+            print("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
+                                    switchname, switchport, username, mac))
+        else:
+            self.remove_acls(mac, username, switchname, switchport)
         # TODO unlock
         lockfile.unlock(conf_fd)
         thread_lock.release()
