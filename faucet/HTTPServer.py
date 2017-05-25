@@ -111,7 +111,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 d[dpid] = {}
             
             d[dpid][port] = mode
-        print("dp_port_mode_to_map returns: {}".format(d))
+        print(("dp_port_mode_to_map returns: {}".format(d)))
         return d
 
     def _get_dp_name_and_port(self, mac):
@@ -143,7 +143,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         ret_dp_name = ""
         for l in prom_mac_table:
             labels, float_as_mac = l.split(' ')
-            print("int as mac{}".format(self._float_to_mac(float_as_mac)))
+            print(("int as mac{}".format(self._float_to_mac(float_as_mac))))
             if mac == self._float_to_mac(float_as_mac):
                 # if this is also an access port, we have found the dpid and the port
                 _, _, dpid, _, n, _, port, _, vlan, _ = re.split('\W+', labels)
@@ -153,7 +153,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     ret_port = int(port)
                     ret_dp_name = dpid_name[dpid]
                     break
-        print("name: {} port: {}".format(ret_dp_name, ret_port)) 
+        print(("name: {} port: {}".format(ret_dp_name, ret_port)))
         return ret_dp_name, ret_port
 
     def _get_cp_arp_acls(self, mac):
@@ -366,8 +366,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # TODO might want to make it so that acls can be added to any port_acl,
         # load acls from faucet.yaml
         if dp_name == '' or switchport == -1 :
-            print("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
-                                    dp_name, switchport, user, mac))
+            print(("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
+                                    dp_name, switchport, user, mac)))
             return
         else:
             all_acls = config_parser.load_acls(self.config.acl_config_file) #, dp_name, switchport)
@@ -381,7 +381,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         new_port_acl = []
         inserted = False
         print("portacl")
-        print(type(port_acl))
+        print((type(port_acl)))
         print(port_acl)
         hashable_port_acl = self._get_hashable_list(port_acl)
         for rule in port_acl:
@@ -392,7 +392,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             elif '_name_' in rule['rule'] and rule['rule']['_name_'] == 'redir41x':
                 if not inserted:
                     inserted = True
-                    for port_to_apply , new_rules in rules.items():
+                    for port_to_apply , new_rules in list(rules.items()):
                         for new_rule in new_rules:
                             if not self._is_rule_in(new_rule, hashable_port_acl):
                             # only insert the new rule if it is not already in the port_acl (config file)
@@ -406,9 +406,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 # insert new rule if not already.
                 if not inserted:
                     inserted = True
-                    print("\n\nrules:\n{}".format(rules))
+                    print(("\n\nrules:\n{}".format(rules)))
                     for new_rule in rules['port_' + dp_name + '_' + str(switchport)]:
-                        print("\n\nnewrule:\n{}".format(new_rule))
+                        print(("\n\nnewrule:\n{}".format(new_rule)))
                         if not self._is_rule_in(new_rule, hashable_port_acl):
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
@@ -459,7 +459,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error('Path not found\n')
 
     def authenticate(self, json_data):
-        print("authenticated: {}".format(json_data))
+        print(("authenticated: {}".format(json_data)))
         conf_fd = None
         if self.path == self.config.dot1x_auth_path:  #request is for dot1xforwarder
             if not ('mac' in json_data and 'user' in json_data):
@@ -472,8 +472,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
             switchname, switchport = self._get_dp_name_and_port(mac)
             if switchname == '' or switchport == -1 :
-                print("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for deauthed user '{}' on MAC '{}'".format(
-                                    switchname, switchport, user, mac))
+                print(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for deauthed user '{}' on MAC '{}'".format(
+                                    switchname, switchport, user, mac)))
                 #write response
                 message = 'cant auth'
                 # auth server doesnt handle errors at this stage so return 200
@@ -557,8 +557,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
        
         switchname, switchport = self._get_dp_name_and_port(mac)
         if switchname == '' or switchport == -1 :
-            print("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
-                                    switchname, switchport, username, mac))
+            print(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
+                                    switchname, switchport, username, mac)))
         else:
             self.remove_acls(mac, username, switchname, switchport)
         # TODO unlock

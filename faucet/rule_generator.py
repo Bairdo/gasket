@@ -29,12 +29,12 @@ class RuleGenerator():
         """
         rules = dict()
 
-        if username in self.conf["users"].keys():
-            for portacl in self.conf["users"][username].keys():
+        if username in list(self.conf["users"].keys()):
+            for portacl in list(self.conf["users"][username].keys()):
                 rules[portacl] = []
                 for rule in self.conf["users"][username][portacl]:
                     r = rule["rule"] # should be CommentedMap.
-                    for k, v in r.items():
+                    for k, v in list(r.items()):
                         if v == "_user-mac_":
                             r[k] = mac
                         if v == "_user-name_":
