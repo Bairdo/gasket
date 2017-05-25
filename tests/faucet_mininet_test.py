@@ -74,6 +74,8 @@ EXTERNAL_DEPENDENCIES = (
      r'iperf version (\d+\.\d+)\.\d+', "2.0"),
     ('fping', ['-v'], 'fping',
      r'fping: Version (\d+\.\d+)', "3.13"),
+    ('rdisc6', ['-V'], 'ndisc6',
+     r'ndisc6.+tool (\d+\.\d+)', "1.0"),
 )
 
 # Must pass with 0 lint errors
@@ -230,13 +232,13 @@ class FaucetTest(faucet_mininet_test_base.FaucetTestBase):
         dumpNodeConnections(self.net.hosts)
 
     def tcpdump_helper(self, tcpdump_host, tcpdump_filter, funcs=[],
-                       timeout=10, packets=2, root_intf=False):
+                       vs='-v', timeout=10, packets=2, root_intf=False):
         intf = tcpdump_host.intf().name
         if root_intf:
             intf = intf.split('.')[0]
         tcpdump_cmd = self.timeout_soft_cmd(
-            'tcpdump -i %s -e -n -U -v -c %u %s' % (
-                intf, packets, tcpdump_filter),
+            'tcpdump -i %s -e -n -U %s -c %u %s' % (
+                intf, vs, packets, tcpdump_filter),
             timeout)
         tcpdump_out = tcpdump_host.popen(tcpdump_cmd, stderr=subprocess.STDOUT)
         popens = {tcpdump_host: tcpdump_out}
@@ -472,14 +474,14 @@ class FaucetUntaggedTcpIPv4IperfTest(FaucetUntaggedTest):
 
     def test_untagged(self):
         first_host, second_host = self.net.hosts[:2]
-        server_ip = ipaddress.ip_interface(
-            unicode(self.host_ipv4(second_host))).ip
+        second_host_ip = ipaddress.ip_address(unicode(second_host.IP()))
         for _ in range(3):
             self.ping_all_when_learned()
+            self.one_ipv4_ping(first_host, second_host_ip)
             self.verify_iperf_min(
                 ((first_host, self.port_map['port_1']),
                  (second_host, self.port_map['port_2'])),
-                1, server_ip)
+                1, second_host_ip)
             self.flap_all_switch_ports()
 
 
@@ -487,16 +489,17 @@ class FaucetUntaggedTcpIPv6IperfTest(FaucetUntaggedTest):
 
     def test_untagged(self):
         first_host, second_host = self.net.hosts[:2]
-        self.add_host_ipv6_address(first_host, 'fc00::1:1/112')
-        self.add_host_ipv6_address(second_host, 'fc00::1:2/112')
-        server_ip = ipaddress.ip_interface(
-            unicode(self.host_ipv6(second_host))).ip
+        first_host_ip = ipaddress.ip_interface(u'fc00::1:1/112')
+        second_host_ip = ipaddress.ip_interface(u'fc00::1:2/112')
+        self.add_host_ipv6_address(first_host, first_host_ip)
+        self.add_host_ipv6_address(second_host, second_host_ip)
         for _ in range(3):
             self.ping_all_when_learned()
+            self.one_ipv6_ping(first_host, second_host_ip.ip)
             self.verify_iperf_min(
                 ((first_host, self.port_map['port_1']),
                  (second_host, self.port_map['port_2'])),
-                1, server_ip)
+                1, second_host_ip.ip)
             self.flap_all_switch_ports()
 
 
@@ -560,15 +563,26 @@ vlans:
 acls:
     1:
         - rule:
-            dl_dst: "0e:00:00:00:01:01"
-            actions:
-                output:
-                    port: b1
-        - rule:
             dl_dst: "0e:00:00:00:02:02"
             actions:
                 output:
                     port: b2
+        - rule:
+            dl_type: 0x806
+            dl_dst: "ff:ff:ff:ff:ff:ff"
+            arp_tpa: "10.0.0.2"
+            actions:
+                output:
+                    port: b2
+        - rule:
+            actions:
+                allow: 0
+    2:
+        - rule:
+            dl_dst: "0e:00:00:00:01:01"
+            actions:
+                output:
+                    port: b1
         - rule:
             dl_type: 0x806
             dl_dst: "ff:ff:ff:ff:ff:ff"
@@ -577,12 +591,13 @@ acls:
                 output:
                     port: b1
         - rule:
-            dl_type: 0x806
-            dl_dst: "ff:ff:ff:ff:ff:ff"
-            arp_tpa: "10.0.0.2"
             actions:
-                output:
-                    port: b2
+                allow: 0
+    3:
+        - rule:
+            actions:
+                allow: 0
+    4:
         - rule:
             actions:
                 allow: 0
@@ -597,15 +612,15 @@ acls:
             b2:
                 number: %(port_2)d
                 native_vlan: 100
-                acl_in: 1
+                acl_in: 2
             b3:
                 number: %(port_3)d
                 native_vlan: 100
-                acl_in: 1
+                acl_in: 3
             b4:
                 number: %(port_4)d
                 native_vlan: 100
-                acl_in: 1
+                acl_in: 4
 """
 
     def test_untagged(self):
@@ -1131,6 +1146,78 @@ acls:
         self.verify_tp_dst_notblocked(5002, first_host, second_host)
 
 
+class FaucetSingleUntaggedBGPIPv4DefaultRouteTest(FaucetUntaggedTest):
+    """Test IPv4 routing and import default route from BGP."""
+
+    CONFIG_GLOBAL = """
+vlans:
+    100:
+        description: "untagged"
+        faucet_vips: ["10.0.0.254/24"]
+        bgp_port: 9179
+        bgp_as: 1
+        bgp_routerid: "1.1.1.1"
+        bgp_neighbor_addresses: ["127.0.0.1"]
+        bgp_neighbor_as: 2
+"""
+
+    CONFIG = """
+        arp_neighbor_timeout: 2
+        max_resolve_backoff_time: 1
+        interfaces:
+            %(port_1)d:
+                native_vlan: 100
+                description: "b1"
+            %(port_2)d:
+                native_vlan: 100
+                description: "b2"
+            %(port_3)d:
+                native_vlan: 100
+                description: "b3"
+            %(port_4)d:
+                native_vlan: 100
+                description: "b4"
+"""
+
+    exabgp_conf = """
+group test {
+  router-id 2.2.2.2;
+  neighbor 127.0.0.1 {
+    passive;
+    local-address 127.0.0.1;
+    peer-as 1;
+    local-as 2;
+    static {
+      route 0.0.0.0/0 next-hop 10.0.0.1 local-preference 100;
+   }
+ }
+}
+"""
+    exabgp_log = None
+
+    def pre_start_net(self):
+        self.exabgp_log = self.start_exabgp(self.exabgp_conf)
+
+    def test_untagged(self):
+        """Test IPv4 routing, and BGP routes received."""
+        first_host, second_host = self.net.hosts[:2]
+        first_host_alias_ip = ipaddress.ip_interface(u'10.99.99.99/24')
+        first_host_alias_host_ip = ipaddress.ip_interface(
+            ipaddress.ip_network(first_host_alias_ip.ip))
+        self.host_ipv4_alias(first_host, first_host_alias_ip)
+        self.wait_bgp_up('127.0.0.1', 100)
+        self.assertGreater(
+            self.scrape_prometheus_var(
+                'bgp_neighbor_routes', {'ipv': '4', 'vlan': '100'}),
+            0)
+        self.wait_exabgp_sent_updates(self.exabgp_log)
+        self.add_host_route(
+            second_host, first_host_alias_host_ip, self.FAUCET_VIPV4.ip)
+        self.one_ipv4_ping(second_host, first_host_alias_ip.ip)
+        self.stop_exabgp()
+        self.one_ipv4_controller_ping(first_host)
+
+
 class FaucetSingleUntaggedBGPIPv4RouteTest(FaucetUntaggedTest):
     """Test IPv4 routing and import from BGP."""
 
@@ -1211,6 +1298,8 @@ group test {
         self.flap_all_switch_ports()
         self.verify_ipv4_routing_mesh()
         self.stop_exabgp()
+        for host in first_host, second_host:
+            self.one_ipv4_controller_ping(first_host)
 
 
 class FaucetSingleUntaggedIPv4RouteTest(FaucetUntaggedTest):
@@ -1534,6 +1623,88 @@ vlans:
             for host in first_host, second_host:
                 self.one_ipv4_controller_ping(host)
             self.flap_all_switch_ports()
+
+
+class FaucetUntaggedIPv6RATest(FaucetUntaggedTest):
+
+    CONFIG_GLOBAL = """
+vlans:
+    100:
+        description: "untagged"
+        faucet_vips: ["fe80::1:254/64", "fc00::1:254/112", "fc00::2:254/112", "10.0.0.254/24"]
+"""
+
+    CONFIG = """
+        advertise_interval: 5
+        interfaces:
+            %(port_1)d:
+                native_vlan: 100
+                description: "b1"
+            %(port_2)d:
+                native_vlan: 100
+                description: "b2"
+            %(port_3)d:
+                native_vlan: 100
+                description: "b3"
+            %(port_4)d:
+                native_vlan: 100
+                description: "b4"
+"""
+
+    def test_ndisc6(self):
+        first_host = self.net.hosts[0]
+        for vip in ('fe80::1:254', 'fc00::1:254', 'fc00::2:254'):
+            self.assertEquals(
+                '0E:00:00:00:00:01',
+                first_host.cmd('ndisc6 -q %s %s' % (vip, first_host.defaultIntf())).strip())
+
+    def test_rdisc6(self):
+        first_host = self.net.hosts[0]
+        rdisc6_results = sorted(list(set(first_host.cmd(
+            'rdisc6 -q %s' % first_host.defaultIntf()).splitlines())))
+        self.assertEquals(
+            ['fc00::1:0/112', 'fc00::2:0/112'],
+            rdisc6_results)
+
+    def test_ra_advertise(self):
+        first_host = self.net.hosts[0]
+        tcpdump_filter = ' and '.join((
+            'ether dst 33:33:00:00:00:01',
+            'ether src 0e:00:00:00:00:01',
+            'icmp6',
+            'ip6[40] == 134',
+            'ip6 host fe80::1:254'))
+        tcpdump_txt = self.tcpdump_helper(
+            first_host, tcpdump_filter, [], timeout=30, vs='-vv', packets=1)
+        for ra_required in (
+            r'fe80::1:254 > ff02::1:.+ICMP6, router advertisement',
+            r'fc00::1:0/112, Flags \[onlink, auto\]',
+            r'fc00::2:0/112, Flags \[onlink, auto\]',
+            r'source link-address option \(1\), length 8 \(1\): 0e:00:00:00:00:01'):
+            self.assertTrue(
+                re.search(ra_required, tcpdump_txt),
+                msg='%s: %s' % (ra_required, tcpdump_txt))
+
+    def test_rs_reply(self):
+        first_host = self.net.hosts[0]
+        tcpdump_filter = ' and '.join((
+            'ether src 0e:00:00:00:00:01',
+            'ether dst %s' % first_host.MAC(),
+            'icmp6',
+            'ip6[40] == 134',
+            'ip6 host fe80::1:254'))
+        tcpdump_txt = self.tcpdump_helper(
+            first_host, tcpdump_filter, [
+                lambda: first_host.cmd('rdisc6 -1 %s' % first_host.defaultIntf())],
+            timeout=30, vs='-vv', packets=1)
+        for ra_required in (
+            r'fe80::1:254 > fe80::.+ICMP6, router advertisement',
+            r'fc00::1:0/112, Flags \[onlink, auto\]',
+            r'fc00::2:0/112, Flags \[onlink, auto\]',
+            r'source link-address option \(1\), length 8 \(1\): 0e:00:00:00:00:01'):
+            self.assertTrue(
+                re.search(ra_required, tcpdump_txt),
+                msg='%s: %s (%s)' % (ra_required, tcpdump_txt, tcpdump_filter))
 
 
 class FaucetUntaggedIPv6ControlPlaneTest(FaucetUntaggedTest):
@@ -2322,6 +2493,77 @@ vlans:
         self.one_ipv6_ping(second_host, first_host_net.ip)
 
 
+class FaucetSingleUntaggedBGPIPv6DefaultRouteTest(FaucetUntaggedTest):
+
+    CONFIG_GLOBAL = """
+vlans:
+    100:
+        description: "untagged"
+        faucet_vips: ["fc00::1:254/112"]
+        bgp_port: 9179
+        bgp_as: 1
+        bgp_routerid: "1.1.1.1"
+        bgp_neighbor_addresses: ["::1"]
+        bgp_neighbor_as: 2
+"""
+
+    CONFIG = """
+        arp_neighbor_timeout: 2
+        max_resolve_backoff_time: 1
+        interfaces:
+            %(port_1)d:
+                native_vlan: 100
+                description: "b1"
+            %(port_2)d:
+                native_vlan: 100
+                description: "b2"
+            %(port_3)d:
+                native_vlan: 100
+                description: "b3"
+            %(port_4)d:
+                native_vlan: 100
+                description: "b4"
+"""
+
+    exabgp_conf = """
+group test {
+  router-id 2.2.2.2;
+  neighbor ::1 {
+    passive;
+    local-address ::1;
+    peer-as 1;
+    local-as 2;
+    static {
+      route ::/0 next-hop fc00::1:1 local-preference 100;
+    }
+  }
+}
+"""
+
+    def pre_start_net(self):
+        self.exabgp_log = self.start_exabgp(self.exabgp_conf, '::1')
+
+    def test_untagged(self):
+        first_host, second_host = self.net.hosts[:2]
+        self.add_host_ipv6_address(first_host, 'fc00::1:1/112')
+        self.add_host_ipv6_address(second_host, 'fc00::1:2/112')
+        first_host_alias_ip = ipaddress.ip_interface(u'fc00::50:1/112')
+        first_host_alias_host_ip = ipaddress.ip_interface(
+            ipaddress.ip_network(first_host_alias_ip.ip))
+        self.add_host_ipv6_address(first_host, first_host_alias_ip)
+        self.wait_bgp_up('::1', 100)
+        self.assertGreater(
+            self.scrape_prometheus_var(
+                'bgp_neighbor_routes', {'ipv': '6', 'vlan': '100'}),
+            0)
+        self.wait_exabgp_sent_updates(self.exabgp_log)
+        self.add_host_route(
+            second_host, first_host_alias_host_ip, self.FAUCET_VIPV6.ip)
+        self.one_ipv6_ping(second_host, first_host_alias_ip.ip)
+        self.stop_exabgp()
+        self.one_ipv6_controller_ping(first_host)
+
+
 class FaucetSingleUntaggedBGPIPv6RouteTest(FaucetUntaggedTest):
 
     CONFIG_GLOBAL = """
@@ -2378,6 +2620,7 @@ group test {
         self.exabgp_log = self.start_exabgp(self.exabgp_conf, '::1')
 
     def test_untagged(self):
+        first_host, second_host = self.net.hosts[:2]
         self.wait_bgp_up('::1', 100)
         self.assertGreater(
             self.scrape_prometheus_var(
@@ -2390,6 +2633,8 @@ group test {
         self.flap_all_switch_ports()
         self.verify_ipv6_routing_mesh()
         self.stop_exabgp()
+        for host in first_host, second_host:
+            self.one_ipv6_controller_ping(host)
 
 
 class FaucetUntaggedSameVlanIPv6RouteTest(FaucetUntaggedTest):
@@ -3471,6 +3716,8 @@ def run_tests(requested_test_classes,
     os.remove(ports_sock)
     if not keep_logs and all_successful:
         shutil.rmtree(root_tmpdir)
+    if not all_successful:
+        sys.exit(-1)
 
 
 def parse_args():
