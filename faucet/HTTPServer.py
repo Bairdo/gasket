@@ -103,7 +103,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         for l in lines:
             _, _, dpid, _, port, mode_int, _ = re.split('\W+', l)
             if int(mode_int) == 1:
-                mode = "access"
+                mode = 'access'
             else:
                 mode = None
             if dpid not in d:
@@ -312,10 +312,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         updated_port_acl = []
         for rule in port_acl:
             try:
-                if rule["rule"]["mac"] is not None and rule["rule"]["name"] is not None:
-                    if startswith and rule["rule"]["mac"] == mac and rule["rule"]["name"].startswith(name):
+                if rule['rule']['_mac_'] is not None and rule['rule']['_name_'] is not None:
+                    if startswith and rule['rule']['_mac_'] == mac and rule['rule']['_name_'].startswith(name):
                         continue
-                    if rule["rule"]["mac"] == mac and rule["rule"]["name"] == name:
+                    if rule['rule']['_mac_'] == mac and rule['rule']['_name_'] == name:
                         continue
                     else:
                         updated_port_acl.insert(i, rule)
@@ -385,10 +385,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         hashable_port_acl = self._get_hashable_list(port_acl)
         for rule in port_acl:
 
-            if "name" in rule["rule"] and rule["rule"]["name"] == "d1x":
+            if '_name_' in rule['rule'] and rule['rule']['_name_'] == 'd1x':
                 new_port_acl.insert(i, rule)
                 i = i + 1
-            elif "name" in rule["rule"] and rule["rule"]["name"] == "redir41x":
+            elif '_name_' in rule['rule'] and rule['rule']['_name_'] == 'redir41x':
                 if not inserted:
                     inserted = True
                     for port_to_apply , new_rules in rules.items():
@@ -406,7 +406,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 if not inserted:
                     inserted = True
                     print("\n\nrules:\n{}".format(rules))
-                    for new_rule in rules["port_"+dp_name+"_"+str(switchport)]:
+                    for new_rule in rules['port_' + dp_name + '_' + str(switchport)]:
                         print("\n\nnewrule:\n{}".format(new_rule))
                         if not self._is_rule_in(new_rule, hashable_port_acl):
                             new_port_acl.insert(i, new_rule)
@@ -443,10 +443,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         if self.path == self.config.dot1x_auth_path:
             #check json has the right information
-            if not ("mac" in json_data and "user" in json_data):
+            if not ('mac' in json_data and 'user' in json_data):
                 self.send_error('Invalid form\n')
                 return
-            self.deauthenticate(json_data["mac"], json_data["user"])
+            self.deauthenticate(json_data['mac'], json_data['user'])
 #        elif self.path == self.config.captive_portal_auth_path:
 #            #check json has the right information
 #            if not ("mac" in json_data and "user" in json_data):
@@ -461,44 +461,45 @@ class HTTPHandler(BaseHTTPRequestHandler):
         print("authenticated: {}".format(json_data))
         conf_fd = None
         if self.path == self.config.dot1x_auth_path:  #request is for dot1xforwarder
-            if not ("mac" in json_data and "user" in json_data):
+            if not ('mac' in json_data and 'user' in json_data):
                 self.send_error('Invalid form\n')
                 return
 
             #valid request format so new user has authenticated
-            mac = json_data["mac"]
-            user = json_data["user"]
+            mac = json_data['mac']
+            user = json_data['user']
 
             switchname, switchport = self._get_dp_name_and_port(mac)
             if switchname == '' or switchport == -1 :
                 print("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for deauthed user '{}' on MAC '{}'".format(
                                     switchname, switchport, user, mac))
                 #write response
-                message = "cant auth"
+                message = 'cant auth'
+                # auth server doesnt handle errors at this stage so return 200
                 self._set_headers(200, 'text/html')
-                self.wfile.write(message.encode(encoding="utf-8"))
-                self.log_message("%s", message)
+                self.wfile.write(message.encode(encoding='utf-8'))
+                self.log_message('%s', message)
                 return
             else:
-                rules = self.rule_gen.get_rules(user, "port_" + switchname + "_" + str(switchport), mac)
-            message = "authenticated new client({}) at MAC: {}\n".format(
+                rules = self.rule_gen.get_rules(user, 'port_' + switchname + '_' + str(switchport), mac)
+            message = 'authenticated new client({}) at MAC: {}\n'.format(
                 user, mac)
             # TODO lock
             thread_lock.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
         else:  #request is for CapFlow
-            if not ("ip" in json_data and "user" in json_data and "mac" in json_data):
+            if not ('ip' in json_data and 'user' in json_data and 'mac' in json_data):
                 self.send_error('Invalid form\n')
                 return
 
             #valid request format so new user has authenticated
 
-            mac = json_data["mac"]
-            user = json_data["user"]
-            ip = json_data["ip"]
+            mac = json_data['mac']
+            user = json_data['user']
+            ip = json_data['ip']
 
             rules = self.get_users_rules(mac, user)
-            message = "authenticated new client({}) at MAC: {} and ip: {}\n".format(
+            message = 'authenticated new client({}) at MAC: {} and ip: {}\n'.format(
                 user, mac, ip)
              # get switchport
             switchname, switchport = self._get_dp_name_and_port(mac)
@@ -508,7 +509,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             # TODO lock
             thread_lock.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)            
-            self.remove_acls_startswith(mac, "captiveportal_", switchname, switchport)
+            self.remove_acls_startswith(mac, 'captiveportal_', switchname, switchport)
 
         self.add_acls(mac, user, rules, switchname, switchport)
         # TODO unlock
@@ -519,33 +520,33 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         #write response
         self._set_headers(200, 'text/html')
-        self.wfile.write(message.encode(encoding="utf-8"))
-        self.log_message("%s", message)
+        self.wfile.write(message.encode(encoding='utf-8'))
+        self.log_message('%s', message)
 
     def idle(self, json_data):
-        if not ("mac" in json_data and "retrans" in json_data):
-            self.send_error("Invalid form\n")
+        if not ('mac' in json_data and 'retrans' in json_data):
+            self.send_error('Invalid form\n')
             return
 
-        message = "Idle user on {} has had {} retransmissions".format(
-                    json_data["mac"], json_data["retrans"])
+        message = 'Idle user on {} has had {} retransmissions'.format(
+                    json_data['mac'], json_data['retrans'])
         self._set_headers(200, 'text/html')
-        self.log_message("%s", message)
+        self.log_message('%s', message)
         self.wfile.write(message.encode(encoding='utf-8'))
-        if json_data["retrans"] > self.config.retransmission_attempts:
+        if json_data['retrans'] > self.config.retransmission_attempts:
             # TODO lock
             thread_lock.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
-            self._add_cp_acls(json_data["mac"])
+            self._add_cp_acls(json_data['mac'])
 
             # TODO unlock
             lockfile.unlock(conf_fd)
             thread_lock.release()
 
             self.send_signal(signal.SIGHUP)
-            message = "Idle user on {} has been made to use captive portal after {} retransmissions\n".format(
-            json_data["mac"], json_data["retrans"])
+            message = 'Idle user on {} has been made to use captive portal after {} retransmissions\n'.format(
+            json_data['mac'], json_data['retrans'])
 
     def deauthenticate(self, mac, username):
         switchname, switchport = self._get_dp_name_and_port(mac)
@@ -566,16 +567,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_signal(signal.SIGHUP)
 
         self._set_headers(200, 'text/html')
-        message = "deauthenticated client {} at {} \n".format(username, mac)
+        message = 'deauthenticated client {} at {} \n'.format(username, mac)
         self.wfile.write(message.encode(encoding='utf-8'))
-        self.log_message("%s", message)
+        self.log_message('%s', message)
 
     def send_signal(self, signal_type):
         ''' Send a signal to the controller to indicate a change in config file
 
         :param signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
         '''
-        with open(self.config.contr_pid_file, "r") as f:
+        with open(self.config.contr_pid_file, 'r') as f:
             contr_pid = int(f.read())
             os.kill(contr_pid, signal_type)
 
@@ -584,25 +585,25 @@ class HTTPHandler(BaseHTTPRequestHandler):
             ctype, pdict = cgi.parse_header(
                 self.headers.get('content-type'))
         except:
-            self.send_error("No content-type header\n")
+            self.send_error('No content-type header\n')
             return None
 
         if ctype != 'application/json':
-            self.send_error("Data is not a JSON object\n")
+            self.send_error('Data is not a JSON object\n')
             return None
         content_length = int(self.headers.get('content-length'))
-        data = self.rfile.read(content_length).decode("utf-8")
+        data = self.rfile.read(content_length).decode('utf-8')
         try:
             json_data = json.loads(data)
         except ValueError:
-            self.send_error("Not JSON object\n")
+            self.send_error('Not JSON object\n')
             return None
 
         return json_data
 
     def send_error(self, error):
         self._set_headers(404, 'text/html')
-        self.log_message("Error: %s", error)
+        self.log_message('Error: %s', error)
         self.wfile.write(error.encode(encoding='utf_8'))
 
     do_GET = do_POST
@@ -612,9 +613,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     pass
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--config", help="location of yaml configuration file")
+    parser.add_argument('-c', '--config', help='location of yaml configuration file')
 
     args = parser.parse_args()
     config_filename = args.config
@@ -624,6 +625,6 @@ if __name__ == "__main__":
     HTTPHandler.rule_gen = rule_generator.RuleGenerator(conf.rules)
 
     server = ThreadedHTTPServer(('', 8080), HTTPHandler)
-    print("starting server")
+    print('starting server')
     server.serve_forever()
 
