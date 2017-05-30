@@ -9,7 +9,8 @@ RUN \
     libyaml-dev \
     python-pip \
     python3.5 \
-    python3-pip
+    python3-pip \
+    libpython3.5-dev
 
 COPY ./ /faucet-src/
 
@@ -19,14 +20,14 @@ RUN \
   pip install -r /faucet-src/requirements.txt && \
   pip install /faucet-src
 
-
 RUN \
   pip3 install --upgrade pip && \
-  pip3 install ruamel.yaml
+  pip3 install setuptools  virtualenv --upgrade && \
+  pip3 install pyyaml requests networkx
 
 VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/"]
 
 EXPOSE 6653
 EXPOSE 8080
 
-CMD ryu-manager faucet.faucet & echo $! > /etc/ryu/contr_pid; python3.5 /faucet-src/faucet/HTTPServer.py --config /faucet-src/auth.yaml
+CMD ryu-manager faucet.faucet & echo $! > /etc/ryu/faucet/contr_pid; python3.5 /faucet-src/faucet/HTTPServer.py --config /faucet-src/auth.yaml
