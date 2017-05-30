@@ -2,6 +2,7 @@
 
 USERNAME=$1
 PASSWORD=$2
+HOST=$3
 echo '# Where is the control interface located? This is the default path:
 ctrl_interface=/var/run/wpa_supplicant
 
@@ -29,5 +30,5 @@ password="'$PASSWORD'"
 phase1="auth=MD5"
 phase2="auth=PAP password=password"
 eapol_flags=0
-}' > /etc/wpa_supplicant/wpa_supplicant.conf
+}' > /etc/wpa_supplicant/$HOST.conf
 

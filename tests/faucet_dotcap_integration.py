@@ -102,7 +102,8 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
 
     def logon_dot1x(self, host):
         """Log on a host using dot1x"""
-        cmd = "{0}_wpa.sh".format(os.path.join(self.script_path, host.name))
+#        cmd = "{0}_wpa.sh".format(os.path.join(self.script_path, host.name))
+        cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf &".format(host.name)
         print("cmd {}".format(cmd))
         print(host.cmdPrint(cmd))
         time.sleep(2)
@@ -205,7 +206,7 @@ option  lease   60  # seconds
                 privateDirs=['/etc/wpa_supplicant'])
             self.net.addLink(host, switch2)
             print host.cmdPrint('/faucet-src/tests/scripts/copyconfigs.sh', "host11{0}user".format(i),
-                          "host11{0}pass".format(i))
+                          "host11{0}pass".format(i), host.name)
             print host.cmdPrint("ls /etc/wpa_supplicant")
                         
 
