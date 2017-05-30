@@ -128,7 +128,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         prom_dpid_port_mode = []
         for l in prom_txt.splitlines():
             print(l)
-            if l.startswith('learned_macs{'):
+            if l.startswith('learned_macs'):
                 prom_mac_table.append(l)
             if l.startswith('faucet_config_dp_name'):
                 prom_name_dpid.append(l)
@@ -136,9 +136,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 # TODO this is not implemented on the faucet side yet.
                 prom_dpid_port_mode.append(l)
 
-        dpid_name = self._dpid_name_to_map(prom_name_dpid)
+        dpid_name = self._dpid_name_to_map(prom_name_dpid)       
         dp_port_mode = self._dp_port_mode_to_map(prom_dpid_port_mode)
-
+ 
         ret_port = -1
         ret_dp_name = ""
         for l in prom_mac_table:
@@ -318,6 +318,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
                         continue
                     if rule['rule']['_mac_'] == mac and rule['rule']['_name_'] == name:
                         continue
+                    if rule['rule']['_mac_'] == mac and '(null)' == name:
+                        continue
                     else:
                         updated_port_acl.insert(i, rule)
                         i = i + 1
@@ -441,7 +443,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         json_data = self.check_if_json()
         if json_data == None:
             return
-
+ 
         if self.path == self.config.dot1x_auth_path:
             #check json has the right information
             if not ('mac' in json_data and 'user' in json_data):
