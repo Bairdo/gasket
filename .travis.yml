@@ -20,5 +20,5 @@ script:
   - "docker build -t reannz/faucet-tests -f Dockerfile.tests ."
   - "sudo docker run --privileged -ti --env FAUCET_TESTS=FaucetUntaggedTest reannz/faucet-tests"
 # hopefully this will use the cached build from above.
-  - "docker build -t reannz/faucet-auth-tests -f Dockerfile.auth-tests"
+  - "docker build -t reannz/faucet-auth-tests -f Dockerfile.auth-tests ."
   - "sudo docker run --privileged -ti reannz/faucet-auth-tests"
