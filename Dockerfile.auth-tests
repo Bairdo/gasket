@@ -11,8 +11,7 @@ RUN \
     python3.5 \
     python3-pip \
     libpython3.5-dev \
-    udhcpd \
-    isc-dhcp-client
+    udhcpd
 
 RUN \
   git clone https://github.com/Bairdo/hostapd-d1xf.git && \
@@ -42,9 +41,6 @@ RUN \
   pip3 install --upgrade pip && \
   pip3 install setuptools  virtualenv --upgrade && \
   pip3 install pyyaml requests networkx
-
-RUN mv /sbin/dhclient /usr/sbin/dhclient
-
 
 RUN \
   mkdir -p /var/log/ryu/faucet && \
