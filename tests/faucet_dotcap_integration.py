@@ -26,13 +26,6 @@ import faucet_mininet_test_util
 
 #from config_parser import dp_parser
 
-class InbandController(RemoteController):
-    """The controller is one of the mininet hosts"""
-
-    def checkListening(self):
-        "Overridden to do nothing."
-        return
-
 
 class FaucetDot1xCapFlowController(RemoteController):
     """A controller that uses the integrated version """
@@ -44,15 +37,6 @@ class FaucetDot1xCapFlowController(RemoteController):
     def checkListening(self):
         "Overridden to do nothing."
         return
-
-
-class MultiSwitch(OVSSwitch):
-    "Custom Switch() subclass that connects to different controllers"
-
-    def start(self, controllers):
-        """get s1 to connect to c0 and s2 to c1"""
-        i = int(self.name[1:]) - 1
-        return OVSSwitch.start(self, [controllers[i]])
 
 
 class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
@@ -192,7 +176,6 @@ option  subnet  255.255.255.0
 option  domain  local
 option  lease   60  # seconds
 """
-
 
             "Create a DHCP configuration file"
             config = (
