@@ -111,7 +111,7 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
         print(host.cmdPrint(cmd))
         host.cmdPrint("ip route add default via 10.0.12.1")
         host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
-        print host.cmdPrint("cat h0-wpa.txt")
+#        print host.cmdPrint("cat h0-wpa.txt")
 
     def fail_ping_ipv4(self, host, dst, retries=3):
         """Try to ping to a destination from a host. This should fail on all the retries"""
@@ -258,7 +258,7 @@ class FaucetIntegrationSomeLoggedOnTest(FaucetIntegrationTest):
         users = self.get_users()
         self.logon_capflow(users[0])
         self.logon_capflow(users[1])
-        cmd = "ip addr flush {0}-eth0 && dhclient {0}-eth0".format(
+        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
             users[2].name)
         users[2].cmdPrint(cmd)
         self.ping_between_hosts(users)
@@ -268,7 +268,7 @@ class FaucetIntegrationSomeLoggedOnTest(FaucetIntegrationTest):
         users = self.get_users()
         self.logon_dot1x(users[0])
         self.logon_dot1x(users[1])
-        cmd = "ip addr flush {0}-eth0 && dhclient {0}-eth0".format(
+        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
             users[2].name)
         users[2].cmdPrint(cmd)
         self.ping_between_hosts(users)
@@ -278,7 +278,7 @@ class FaucetIntegrationSomeLoggedOnTest(FaucetIntegrationTest):
         users = self.get_users()
         self.logon_dot1x(users[0])
         self.logon_capflow(users[1])
-        cmd = "ip addr flush {0}-eth0 && dhclient {0}-eth0".format(
+        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
             users[2].name)
         users[2].cmdPrint(cmd)
         self.ping_between_hosts(users)
@@ -294,7 +294,7 @@ class FaucetIntegrationNoLogOnTest(FaucetIntegrationTest):
         """
         users = self.get_users()
         for user in users:
-            cmd = "ip addr flush {0}-eth0 && dhclient  -timeout 5 {0}-eth0".format(
+            cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
                 user.name)
             user.cmdPrint(cmd)
             user.defaultIntf().updateIP()
