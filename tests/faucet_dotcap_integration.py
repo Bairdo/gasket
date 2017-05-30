@@ -24,12 +24,6 @@ from faucet_mininet_test import make_suite
 from faucet_mininet_test import parse_args
 import faucet_mininet_test_util
 
-
-
-testdir = os.path.dirname(__file__)
-srcdir = '../src/ryu_faucet/org/onfsdn/faucet'
-sys.path.insert(0, os.path.abspath(os.path.join(testdir, srcdir)))
-
 #from config_parser import dp_parser
 
 class InbandController(RemoteController):
@@ -65,9 +59,6 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the integration tests """
 
     RUN_GAUGE = False
-#    script_path = os.path.join(
-#        os.path.dirname(os.path.realpath(sys.argv[0])),
-#        "dot1x_capflow_scripts")
     script_path = "/faucet-src/tests/dot1x_capflow_scripts" 
 
     def setUp(self):
@@ -170,7 +161,7 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
         switch1 = self.net.addSwitch(
             "s1", cls=OVSSwitch, inband=True, protocols=["OpenFlow13"])
         switch1.start([c0])
-#        print switch1.vsctl("set-controller tcp:127.0.0.1:6633")
+
         switch2 = self.net.addSwitch(
             "s2", cls=OVSSwitch, inband=False, protocols=["OpenFlow13"])
         self.net.addLink(switch1, switch2)
@@ -216,22 +207,13 @@ option  lease   60  # seconds
         def startDHCPserver( host, gw, dns ):
             "Start DHCP server on host with specified DNS server"
             print( '* Starting DHCP server on', host, 'at', host.IP(), '\n' )
-#            print(host.cmdPrint('ip addr add 10.0.12.1/24 dev interweb-eth0'))
             dhcpConfig = '/tmp/%s-udhcpd.conf' % host
             makeDHCPconfig( dhcpConfig, host.defaultIntf(), gw, dns )
             host.cmd( 'udhcpd -f', dhcpConfig,
               '1>/tmp/%s-dhcp.log 2>&1  &' % host )
         
-
-
-
-#        interweb.cmdPrint('service isc-dhcp-server restart &')
         interweb.cmdPrint('echo "Google is built by a large" > index.txt')
         interweb.cmdPrint('python -m SimpleHTTPServer 8080 &')
-        #controllerHost = self.net.addHost(
-        #    "contr", ip='10.0.10.2/24', mac='63:6f:6e:74:72:6f')
-        #self.net.addLink(
-        #    controllerHost, switch2, params2={'ip': '10.0.10.1/24'})
 
         for i in range(0, 3):
             host = self.net.addHost(
@@ -255,13 +237,7 @@ option  lease   60  # seconds
         portal.cmdPrint('/faucet-src/tests/scripts/portal.sh')
         print "portal route"
         portal.cmdPrint('ip route add 10.0.0.0/8 dev portal-eth0')
-        #print "controller route"
-        #controllerHost.cmdPrint('ip route add 10.0.0.0/8 dev contr-eth0')
-        #print "contorller rm"
-        #controllerHost.cmdPrint('rm -r /var/run/wpa_supplicant') 
         os.system("ps aux")
-
-        #CLI(self.net)
 
 class FaucetIntegrationCapFlowLogonTest(FaucetIntegrationTest):
     """Check if a user can logon successfully using CapFlow"""
@@ -351,7 +327,6 @@ class FaucetIntegrationDot1XLogonTest(FaucetIntegrationTest):
         os.system("ps aux")
         h0 = self.find_host("h0")
         self.logon_dot1x(h0) 
-        #CLI(self.net)
         self.one_ipv4_ping(h0, "10.0.12.1")
         result = self.check_http_connection(h0)
         self.assertTrue(result)
@@ -370,7 +345,6 @@ class FaucetIntegrationDot1XLogoffTest(FaucetIntegrationTest):
 
         self.assertTrue(result)
         print h0.cmdPrint("wpa_cli logoff")
-#        CLI(self.net) 
         time.sleep(9)
         self.fail_ping_ipv4(h0, "10.0.12.1")
         result = self.check_http_connection(h0)
