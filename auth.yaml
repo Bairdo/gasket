@@ -8,10 +8,12 @@ faucet:
 files:
     # the location files, pid should contain the process id (pid) of the main faucet process (ryu-manager)
     #  should be obtainable with "ps aux |grep faucet.faucet |head -n1 | awk '{print $2}' > /etc/ryu/contr_pid"
-    controller_pid: /etc/ryu/contr_pid
+    controller_pid: /etc/ryu/faucet/contr_pid
     faucet_config: /etc/ryu/faucet/faucet.yaml
     acl_config: /etc/ryu/faucet/acls.yaml
 
+
+# TODO add port for httpserver to listen on.
 urls:
     # HTTP endpoints for HTTPServer.py
     capflow: /v1.1/authenticate/auth
