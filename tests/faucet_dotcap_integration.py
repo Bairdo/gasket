@@ -493,7 +493,8 @@ def start_all_tests():
 
         if inspect.isclass(obj) and name.startswith("FaucetAuthentication"):
             tests.addTest(make_suite(obj, config, root_tmpdir, ports_sock))
-            silent_obj = type(obj.__class__.__name__ + 'Multi', obj.__bases__, dict(obj.__dict__))
+
+            silent_obj = type(obj.__name__ + 'Multi', obj.__bases__, dict(obj.__dict__))
             silent_obj.__bases__ = (FaucetAuthenticationMultiSwitchSilentTest,)
             tests.addTest(make_suite(silent_obj, config, root_tmpdir, ports_sock))
     unittest.TextTestRunner(verbosity=2).run(tests)
