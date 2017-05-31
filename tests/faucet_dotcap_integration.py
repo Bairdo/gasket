@@ -69,13 +69,11 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
         if self.net is not None:
             host = self.net.hosts[0]
             print "about to kill everything"
-            print host.name
-#            print host.cmdPrint('/faucet-src/tests/scripts/kill.sh')
-#            CLI(self.net)
 
-            for pid in self.pids.values():
+            for name, pid in self.pids.iteritems():
+                print name, pid
                 host.cmdPrint('kill ' + str(pid))
-            print self.contr.cmdPrint('kill ' + str(self.contr_pid))
+#            print self.contr.cmdPrint('kill ' + str(self.contr_pid))
             print "should of killed everything"
             self.net.stop()
 
@@ -142,11 +140,11 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
         host.cmdPrint('ryu-manager ryu.app.ofctl_rest faucet.faucet --wsapi-port 8084 &')
         lastPid = host.lastPid
         host.cmdPrint('echo {} > /etc/ryu/faucet/contr_pid'.format(lastPid))
+        self.pids['faucet'] = lastPid
         print lastPid
         self.contr_pid = lastPid
-        host.cmdPrint('python3.5 /faucet-src/faucet/HTTPServer.py --config  /faucet-src/tests/config/auth.yaml > httpserver.txt &') #, printPid=True)# \
-#        print s
-#                      'echo $! > /root/http_server.pid.txt')
+        host.cmdPrint('python3.5 /faucet-src/faucet/HTTPServer.py --config  /faucet-src/tests/config/auth.yaml > httpserver.txt &')
+        self.pids['auth_server'] = host.lastPid 
         print 'Controller started.'
         print 'lastPid' + str(host.lastPid)
 
@@ -174,13 +172,14 @@ COMMIT \
                       '#cd /home/$(whoami)/sdn-authenticator-webserver/' \
                       '#nohup java -cp uber-captive-portal-webserver-1.0-SNAPSHOT.jar Main config.yaml > /home/$(whoami)/portal_webserver.out 2>&1 &' \
                       '#echo $! > /home/$(whoami)/portal_webserver_pid.txt')
-
+        self.pids['captive_portal'] = host.lastPid
 
     def run_hostapd(self, host):
         print 'Starting hostapd ....'
         print host.cmdPrint('cd /root/;' \
-                            '/root/hostapd-d1xf/hostapd/hostapd -d /root/hostapd-d1xf/hostapd/wired.conf > hostapd.out 2>&1 &' \
-                            'echo $! > /root/hostapd_pid.txt')
+                            '/root/hostapd-d1xf/hostapd/hostapd -d /root/hostapd-d1xf/hostapd/wired.conf > hostapd.out 2>&1 &')
+#                            'echo $! > /root/hostapd_pid.txt')
+        self.pids['hostapd'] = host.lastPid
 
     def start_net(self):
         """Start Mininet."""
