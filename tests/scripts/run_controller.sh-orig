@@ -1,4 +1,0 @@
-nohup ryu-manager /home/$(whoami)/ACLSwitch-1/Ryu_Application/ofctl_rest.py --wsapi-port 8084> controller.out 2>&1 &
-echo $! > controller_pid.txt
-nohup python /home/$(whoami)/ACLSwitch-1/Ryu_Application/HTTPServer.py > server.out 2>&1 &
-echo $! > server_pid.txt
