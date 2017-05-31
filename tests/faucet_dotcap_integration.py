@@ -39,7 +39,7 @@ class FaucetDot1xCapFlowController(RemoteController):
         return
 
 
-class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
+class FaucetAuthenticationTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the integration tests """
 
     RUN_GAUGE = False
@@ -73,8 +73,8 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
             for name, pid in self.pids.iteritems():
                 print name, pid
                 host.cmdPrint('kill ' + str(pid))
-#            print self.contr.cmdPrint('kill ' + str(self.contr_pid))
-            print "should of killed everything"
+
+
             self.net.stop()
 
     def get_users(self):
@@ -107,7 +107,6 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
 
     def logon_dot1x(self, host):
         """Log on a host using dot1x"""
-#        cmd = "{0}_wpa.sh".format(os.path.join(self.script_path, host.name))
         cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf &".format(host.name)
         print("cmd {}".format(cmd))
         print(host.cmdPrint(cmd))
@@ -116,7 +115,6 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
         print(host.cmdPrint(cmd))
         host.cmdPrint("ip route add default via 10.0.12.1")
         host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
-#        print host.cmdPrint("cat h0-wpa.txt")
 
     def fail_ping_ipv4(self, host, dst, retries=3):
         """Try to ping to a destination from a host. This should fail on all the retries"""
@@ -141,12 +139,11 @@ class FaucetIntegrationTest(faucet_mininet_test_base.FaucetTestBase):
         lastPid = host.lastPid
         host.cmdPrint('echo {} > /etc/ryu/faucet/contr_pid'.format(lastPid))
         self.pids['faucet'] = lastPid
-        print lastPid
-        self.contr_pid = lastPid
+
         host.cmdPrint('python3.5 /faucet-src/faucet/HTTPServer.py --config  /faucet-src/tests/config/auth.yaml > httpserver.txt &')
         self.pids['auth_server'] = host.lastPid 
         print 'Controller started.'
-        print 'lastPid' + str(host.lastPid)
+
 
     def run_captive_portal(self, host):
         # TODO this was mostly copied from portal.sh so not sure if it actually works here.
@@ -176,9 +173,8 @@ COMMIT \
 
     def run_hostapd(self, host):
         print 'Starting hostapd ....'
-        print host.cmdPrint('cd /root/;' \
+        host.cmdPrint('cd /root/;' \
                             '/root/hostapd-d1xf/hostapd/hostapd -d /root/hostapd-d1xf/hostapd/wired.conf > hostapd.out 2>&1 &')
-#                            'echo $! > /root/hostapd_pid.txt')
         self.pids['hostapd'] = host.lastPid
 
     def start_net(self):
@@ -202,7 +198,7 @@ COMMIT \
         switch2 = self.net.addSwitch(
             "s2", cls=OVSSwitch, inband=False, protocols=["OpenFlow13"])
         self.net.addLink(switch1, switch2)
-        #print switch1.connected()
+
         portal = self.net.addHost(
             "portal", ip='10.0.12.3/24', mac="70:6f:72:74:61:6c")
         self.net.addLink(portal, switch1)
@@ -268,13 +264,11 @@ option  lease   60  # seconds
         startDHCPserver(interweb, gw='10.0.12.1', dns='8.8.8.8')
         print "start portal"
         self.run_hostapd(portal)
-#        portal.cmdPrint('/faucet-src/tests/scripts/portal.sh')
-        print "portal route"
         portal.cmdPrint('ip route add 10.0.0.0/8 dev portal-eth0')
         os.system("ps aux")
 
 
-class FaucetIntegrationCapFlowLogonTest(FaucetIntegrationTest):
+class FaucetAuthenticationCapFlowLogonTest(FaucetAuthenticationTest):
     """Check if a user can logon successfully using CapFlow"""
 
     def test_capflowlogon(self):
@@ -286,7 +280,7 @@ class FaucetIntegrationCapFlowLogonTest(FaucetIntegrationTest):
         self.assertTrue(result)
 
 
-class FaucetIntegrationSomeLoggedOnTest(FaucetIntegrationTest):
+class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationTest):
     """Check if authenticated and unauthenticated users can communicate"""
 
     def ping_between_hosts(self, users):
@@ -335,7 +329,7 @@ class FaucetIntegrationSomeLoggedOnTest(FaucetIntegrationTest):
         self.ping_between_hosts(users)
 
 
-class FaucetIntegrationNoLogOnTest(FaucetIntegrationTest):
+class FaucetAuthenticationNoLogOnTest(FaucetAuthenticationTest):
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
@@ -354,7 +348,7 @@ class FaucetIntegrationNoLogOnTest(FaucetIntegrationTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class FaucetIntegrationDot1XLogonTest(FaucetIntegrationTest):
+class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationTest):
     """Check if a user can logon successfully using dot1x"""
 
     def test_dot1xlogon(self):
@@ -367,7 +361,7 @@ class FaucetIntegrationDot1XLogonTest(FaucetIntegrationTest):
         self.assertTrue(result)
 
 
-class FaucetIntegrationDot1XLogoffTest(FaucetIntegrationTest):
+class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationTest):
     """Log on using dot1x and log off"""
 
     def test_logoff(self):
@@ -386,7 +380,7 @@ class FaucetIntegrationDot1XLogoffTest(FaucetIntegrationTest):
         self.assertFalse(result)
 
 
-class FaucetIntegrationCapFlowLogoffTest(FaucetIntegrationTest):
+class FaucetAuthenticationCapFlowLogoffTest(FaucetAuthenticationTest):
     """Log on using CapFlow and log off"""
 
     def test_logoff(self):
@@ -416,7 +410,7 @@ def start_all_tests():
         if requested_test_classes and name not in requested_test_classes:
             continue
 
-        if inspect.isclass(obj) and name.startswith("FaucetIntegration"):
+        if inspect.isclass(obj) and name.startswith("FaucetAuthentication"):
             tests.addTest(make_suite(obj, config, root_tmpdir, ports_sock))
     unittest.TextTestRunner(verbosity=2).run(tests)
 
