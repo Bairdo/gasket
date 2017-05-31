@@ -45,25 +45,6 @@ class FaucetAuthenticationTest(faucet_mininet_test_base.FaucetTestBase):
     RUN_GAUGE = False
     script_path = "/faucet-src/tests/dot1x_capflow_scripts" 
     pids = {}
-    contr = None
-    def setUp(self):
-        self.net = None
-        self.dpid = "1"
-
-#        self.v2_config_hashes, v2_dps = dp_parser('/faucet-src/tests/config/testconfigv2-1x.yaml', 'test_auth')
-#        self.v2_dps_by_id = {}
-#        for dp in v2_dps:
-#            self.v2_dps_by_id[dp.dp_id] = dp
-#        self.v2_dp = self.v2_dps_by_id[0x1]
-
-        # copy config file from tests/config to /etc/ryu/faucet/facuet/yaml
-        try:
-            os.makedirs('/etc/ryu/faucet')
-        except:
-            pass
-        shutil.copyfile("/faucet-src/tests/config/testconfigv2-1x.yaml", "/etc/ryu/faucet/faucet.yaml")
-
-        self.start_net()
 
     def tearDown(self):
         if self.net is not None:
@@ -177,6 +158,59 @@ COMMIT \
                             '/root/hostapd-d1xf/hostapd/hostapd -d /root/hostapd-d1xf/hostapd/wired.conf > hostapd.out 2>&1 &')
         self.pids['hostapd'] = host.lastPid
 
+    def makeDHCPconfig(self, filename, intf, gw, dns ):
+
+        DNSTemplate = """
+start       10.0.12.10
+end     10.0.12.20
+option  subnet  255.255.255.0
+option  domain  local
+option  lease   60  # seconds
+"""
+
+        "Create a DHCP configuration file"
+        config = (
+            'interface %s' % intf,
+            DNSTemplate,
+            'option router %s' % gw,
+            'option dns %s' % dns,
+            '' )
+        with open( filename, 'w' ) as f:
+            f.write( '\n'.join( config ) )
+
+    def startDHCPserver(self, host, gw, dns ):
+        "Start DHCP server on host with specified DNS server"
+        print( '* Starting DHCP server on', host, 'at', host.IP(), '\n' )
+        dhcpConfig = '/tmp/%s-udhcpd.conf' % host
+        self.makeDHCPconfig( dhcpConfig, host.defaultIntf(), gw, dns )
+        host.cmd( 'udhcpd -f', dhcpConfig,
+          '1>/tmp/%s-dhcp.log 2>&1  &' % host )
+
+class FaucetAuthenticationMultiSwitchTest(FaucetAuthenticationTest):
+
+    def setUp(self):
+
+        print 'mULTIsWITCH test'
+
+        self.net = None
+        self.dpid = "1"
+
+#        self.v2_config_hashes, v2_dps = dp_parser('/faucet-src/tests/config/testconfigv2-1x.yaml', 'test_auth')
+#        self.v2_dps_by_id = {}
+#        for dp in v2_dps:
+#            self.v2_dps_by_id[dp.dp_id] = dp
+#        self.v2_dp = self.v2_dps_by_id[0x1]
+
+        # copy config file from tests/config to /etc/ryu/faucet/facuet/yaml
+        try:
+            os.makedirs('/etc/ryu/faucet')
+        except:
+            pass
+        shutil.copyfile("/faucet-src/tests/config/testconfigv2-1x.yaml", "/etc/ryu/faucet/faucet.yaml")
+
+        self.start_net()
+
+
     def start_net(self):
         """Start Mininet."""
         os.system('pwd')
@@ -212,35 +246,6 @@ COMMIT \
             "interweb", ip='10.0.12.1/24', mac="08:00:27:ee:ee:ee")
         self.net.addLink(interweb, switch1)
 
-
-        def makeDHCPconfig( filename, intf, gw, dns ):
-
-            DNSTemplate = """
-start       10.0.12.10
-end     10.0.12.20
-option  subnet  255.255.255.0
-option  domain  local
-option  lease   60  # seconds
-"""
-
-            "Create a DHCP configuration file"
-            config = (
-                'interface %s' % intf,
-                DNSTemplate,
-                'option router %s' % gw,
-                'option dns %s' % dns,
-                '' )
-            with open( filename, 'w' ) as f:
-                f.write( '\n'.join( config ) )
-
-        def startDHCPserver( host, gw, dns ):
-            "Start DHCP server on host with specified DNS server"
-            print( '* Starting DHCP server on', host, 'at', host.IP(), '\n' )
-            dhcpConfig = '/tmp/%s-udhcpd.conf' % host
-            makeDHCPconfig( dhcpConfig, host.defaultIntf(), gw, dns )
-            host.cmd( 'udhcpd -f', dhcpConfig,
-              '1>/tmp/%s-dhcp.log 2>&1  &' % host )
-        
         interweb.cmdPrint('echo "This is a text file on a webserver" > index.txt')
         interweb.cmdPrint('python -m SimpleHTTPServer 8080 &')
 
@@ -261,14 +266,90 @@ option  lease   60  # seconds
             Intf(iface, node=switch1)
 
         self.net.start()
-        startDHCPserver(interweb, gw='10.0.12.1', dns='8.8.8.8')
+        self.startDHCPserver(interweb, gw='10.0.12.1', dns='8.8.8.8')
         print "start portal"
         self.run_hostapd(portal)
         portal.cmdPrint('ip route add 10.0.0.0/8 dev portal-eth0')
         os.system("ps aux")
 
 
-class FaucetAuthenticationCapFlowLogonTest(FaucetAuthenticationTest):
+class FaucetAuthenticationMultiSwitchSilentTest(FaucetAuthenticationTest):
+
+    def setUp(self):
+
+        print 'sINGLE sWITCH test'
+        self.net = None
+        self.dpid = "1"
+
+#        self.v2_config_hashes, v2_dps = dp_parser('/faucet-src/tests/config/testconfigv2-1x.yaml', 'test_auth')
+#        self.v2_dps_by_id = {}
+#        for dp in v2_dps:
+#            self.v2_dps_by_id[dp.dp_id] = dp
+#        self.v2_dp = self.v2_dps_by_id[0x1]
+
+        # copy config file from tests/config to /etc/ryu/faucet/facuet/yaml
+        try:
+            os.makedirs('/etc/ryu/faucet')
+        except:
+            pass
+        shutil.copyfile("/faucet-src/tests/config/testconfigv2-1x-1s.yaml", "/etc/ryu/faucet/faucet.yaml")
+
+        self.start_net()
+
+
+    def start_net(self):
+        """Start Mininet."""
+        self.net = Mininet(build=False)
+        c0 = self.net.addController(
+            "c0",
+            controller=FaucetDot1xCapFlowController,
+            ip='127.0.0.1',
+            port=6653,
+            switch=OVSSwitch)
+        self.contr = c0
+        self.run_controller(c0)
+ 
+        switch1 = self.net.addSwitch(
+            "s1", cls=OVSSwitch, inband=True, protocols=["OpenFlow13"])
+        switch1.start([c0])
+
+        portal = self.net.addHost(
+            "portal", ip='10.0.12.3/24', mac="70:6f:72:74:61:6c")
+        self.net.addLink(portal, switch1)
+        self.net.addLink(
+            portal,
+            c0,
+            params1={'ip': '10.0.13.2/24'},
+            params2={'ip': '10.0.13.3/24'})
+
+        interweb = self.net.addHost(
+            "interweb", ip='10.0.12.1/24', mac="08:00:27:ee:ee:ee")
+        self.net.addLink(interweb, switch1)
+
+        interweb.cmdPrint('echo "This is a text file on a webserver" > index.txt')
+        interweb.cmdPrint('python -m SimpleHTTPServer 8080 &')
+
+        for i in range(0, 3):
+            host = self.net.addHost(
+                "h{0}".format(i),
+                mac="00:00:00:00:00:1{0}".format(i),
+                privateDirs=['/etc/wpa_supplicant'])
+            self.net.addLink(host, switch1)
+            host.cmdPrint('/faucet-src/tests/scripts/copyconfigs.sh', "host11{0}user".format(i),
+                          "host11{0}pass".format(i), host.name)
+            host.cmdPrint("ls /etc/wpa_supplicant")
+                        
+
+        self.net.build()
+        self.net.start()
+        self.startDHCPserver(interweb, gw='10.0.12.1', dns='8.8.8.8')
+#        CLI(self.net)
+        self.run_hostapd(portal)
+        portal.cmdPrint('ip route add 10.0.0.0/8 dev portal-eth0')
+
+
+
+class FaucetAuthenticationCapFlowLogonTest(FaucetAuthenticationMultiSwitchTest):
     """Check if a user can logon successfully using CapFlow"""
 
     def test_capflowlogon(self):
@@ -280,7 +361,7 @@ class FaucetAuthenticationCapFlowLogonTest(FaucetAuthenticationTest):
         self.assertTrue(result)
 
 
-class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationTest):
+class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationMultiSwitchTest):
     """Check if authenticated and unauthenticated users can communicate"""
 
     def ping_between_hosts(self, users):
@@ -329,7 +410,7 @@ class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationTest):
         self.ping_between_hosts(users)
 
 
-class FaucetAuthenticationNoLogOnTest(FaucetAuthenticationTest):
+class FaucetAuthenticationNoLogOnTest(FaucetAuthenticationMultiSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
@@ -348,7 +429,7 @@ class FaucetAuthenticationNoLogOnTest(FaucetAuthenticationTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationTest):
+class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationMultiSwitchTest):
     """Check if a user can logon successfully using dot1x"""
 
     def test_dot1xlogon(self):
@@ -361,7 +442,7 @@ class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationTest):
         self.assertTrue(result)
 
 
-class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationTest):
+class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationMultiSwitchTest):
     """Log on using dot1x and log off"""
 
     def test_logoff(self):
@@ -374,13 +455,13 @@ class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationTest):
 
         self.assertTrue(result)
         print h0.cmdPrint("wpa_cli logoff")
-        time.sleep(9)
+        time.sleep(10)
         self.fail_ping_ipv4(h0, "10.0.12.1")
         result = self.check_http_connection(h0)
         self.assertFalse(result)
 
 
-class FaucetAuthenticationCapFlowLogoffTest(FaucetAuthenticationTest):
+class FaucetAuthenticationCapFlowLogoffTest(FaucetAuthenticationMultiSwitchTest):
     """Log on using CapFlow and log off"""
 
     def test_logoff(self):
@@ -412,6 +493,9 @@ def start_all_tests():
 
         if inspect.isclass(obj) and name.startswith("FaucetAuthentication"):
             tests.addTest(make_suite(obj, config, root_tmpdir, ports_sock))
+            silent_obj = type(obj.__class__.__name__ + 'Multi', obj.__bases__, dict(obj.__dict__))
+            silent_obj.__bases__ = (FaucetAuthenticationMultiSwitchSilentTest,)
+            tests.addTest(make_suite(silent_obj, config, root_tmpdir, ports_sock))
     unittest.TextTestRunner(verbosity=2).run(tests)
 
 
