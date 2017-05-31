@@ -278,16 +278,8 @@ class FaucetAuthenticationMultiSwitchTest(FaucetAuthenticationTest):
         interweb.cmdPrint('python -m SimpleHTTPServer 8080 &')
 
         for i in range(0, 3):
-            host = self.net.addHost(
-                "h{0}".format(i),
-                mac="00:00:00:00:00:1{0}".format(i),
-                privateDirs=['/etc/wpa_supplicant'])
-            self.net.addLink(host, switch2)
-            print host.cmdPrint('/faucet-src/tests/scripts/copyconfigs.sh', "host11{0}user".format(i),
-                          "host11{0}pass".format(i), host.name)
-            print host.cmdPrint("ls /etc/wpa_supplicant")
+            self.setup_host(i, switch2)
                         
-
         self.net.build()
         for iface in ['eth0', ]:
             # Connect the switch to the eth0 interface of this host machine
