@@ -273,7 +273,7 @@ class FaucetAuthenticationMultiSwitchTest(FaucetAuthenticationTest):
         os.system("ps aux")
 
 
-class FaucetAuthenticationMultiSwitchSilentTest(FaucetAuthenticationTest):
+class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
 
     def setUp(self):
 
