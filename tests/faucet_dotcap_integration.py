@@ -58,6 +58,34 @@ class FaucetAuthenticationTest(faucet_mininet_test_base.FaucetTestBase):
 
             self.net.stop()
 
+    def setup_host(self, i, switch):
+        host = self.net.addHost(
+            "h{0}".format(i),
+                mac="00:00:00:00:00:1{0}".format(i),
+                privateDirs=['/etc/wpa_supplicant'])
+        self.net.addLink(host, switch)
+        username = 'host11{0}user'.format(i)
+        password = 'host11{0}pass'.format(i)
+        host.cmdPrint("ls /etc/wpa_supplicant")
+
+        wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
+ctrl_interface_group=0
+eapol_version=2
+ap_scan=0
+network={
+key_mgmt=IEEE8021X
+eap=TTLS MD5
+identity="%s"
+anonymous_identity="%s"
+password="%s"
+phase1="auth=MD5"
+phase2="auth=PAP password=password"
+eapol_flags=0
+}''' % (username, username, password)
+        host.cmdPrint('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
+        
+
+
     def get_users(self):
         """
         Get the hosts that are users
@@ -330,20 +358,13 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
         interweb.cmdPrint('python -m SimpleHTTPServer 8080 &')
 
         for i in range(0, 3):
-            host = self.net.addHost(
-                "h{0}".format(i),
-                mac="00:00:00:00:00:1{0}".format(i),
-                privateDirs=['/etc/wpa_supplicant'])
-            self.net.addLink(host, switch1)
-            host.cmdPrint('/faucet-src/tests/scripts/copyconfigs.sh', "host11{0}user".format(i),
-                          "host11{0}pass".format(i), host.name)
-            host.cmdPrint("ls /etc/wpa_supplicant")
+            self.setup_host(i, switch1)
                         
 
         self.net.build()
         self.net.start()
         self.startDHCPserver(interweb, gw='10.0.12.1', dns='8.8.8.8')
-#        CLI(self.net)
+
         self.run_hostapd(portal)
         portal.cmdPrint('ip route add 10.0.0.0/8 dev portal-eth0')
 
