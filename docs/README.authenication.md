@@ -137,7 +137,9 @@ sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eap_server/eap_server.c
 sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c
 make && sudo make install
 ```
+- hostapd/wired.conf provides the configuration file for hostapd.
 
+Example wired.conf if using hostapd's RADIUS server.
 ```txt
 interface=eth0
 driver=wired
@@ -161,10 +163,9 @@ Example hostapd.eap_user:
 "host112user"   MD5     "host112pass"
 "host113user"   MD5     "host113pass"
 "host114user"   MD5     "host114pass"```
+```
 
-- hostapd/wired.conf provides the configuration file for hostapd.
-
-The Following are required (the acct_* may not be required and at this time hostapd will not provide any meaningful accounting statistics to your RADIUS server):
+If not using the integrated RADIUS, the Following are required (the acct_* may not be required and at this time hostapd will not provide any meaningful accounting statistics to your RADIUS server):
 ```ini
 interface=<interface to listen on>
 driver=wired
@@ -192,6 +193,7 @@ If you are using Windows clients EAP-MSCHAPv2 will need to be enabled.
 - Get the faucet from where you are reading this doc. Note: NOT the official reannz repo at this time
 ```bash
 $ git clone https://github.com/bairdo/faucet.git
+$ git checkout <branch>
 ```
 
 We recommend starting off with the following configuration:
@@ -288,6 +290,10 @@ These configuration files are based on the network diagram at the top.
 - For the rule 'name' field, please do not use 'd1x' or 'redir41x' as rules which match are treated specially internally.
 - Change the mac address '08:00:27:00:03:02' to the mac address of the server that hostap is running on.
 It should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port acls (untested).
+
+The base directoy contains the file rules.yaml.
+rules.yaml contains the rules to apply when a user successfully logs on.
+
 
 ##### HTTPServer.py
 The faucet repository contains HTTPServer.py which is used as the 'proxy' between the authentication servers and faucet.
