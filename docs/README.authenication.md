@@ -126,6 +126,7 @@ Once the captive portal is working reliably the hostapd server will be able to a
 
 ```bash
 $ git clone https://github.com/bairdo/hostapd-d1xf.git
+$ git checkout username-fix-2
 ```
 
 - Configure the build.
