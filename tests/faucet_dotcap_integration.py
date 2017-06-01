@@ -392,7 +392,7 @@ class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationMultiSwitchTest):
         ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
         self.assertAlmostEqual(ploss, 100)
 
-    def test_onlycapflow(self):
+    def QWERTYtest_onlycapflow(self):
         """Only authenticate through CapFlow """
         users = self.get_users()
         self.logon_capflow(users[0])
@@ -412,7 +412,7 @@ class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationMultiSwitchTest):
         users[2].cmdPrint(cmd)
         self.ping_between_hosts(users)
 
-    def test_bothauthentication(self):
+    def QWERTYtest_bothauthentication(self):
         """Authenicate one user with dot1x and the other with CapFlow"""
         users = self.get_users()
         self.logon_dot1x(users[0])
