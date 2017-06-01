@@ -155,141 +155,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     break
         print(("name: {} port: {}".format(ret_dp_name, ret_port)))
         return ret_dp_name, ret_port
-
-    def _get_cp_arp_acls(self, mac):
-        """Creates two rules for allowing ARP requests from/to MAC.
-        Note: the yaml keys 'name' and 'mac' are used to identify the rule to a user,
-             so that when they log off, if there is already a rule that is the same, that one will not be removed.
-            If we were to just use 'dl_src', there is the potential for the rule to already exist, although possibly unlikley.
-        :param mac MAC address of the client
-        :return list of rules (ruamel.CommentedMap, which is like a normal dict)
-        """
-
-        # TODO might need to break this out into dhcp, dns, gateway router, etc... for real world.       
-        # TODO support multiple gateways and captive-portals somehow.
-        # TODO may want to load these from a file, so they can be customised by end user. 
-        # e.g. apply dhcp rules which could also include extra rules for non standard setups. (dhcp server sends via its IP instead of broadcast.)
-
-        # Allow ARP to gateway to proceed.
-        # The point of changing the dst mac is so that other hosts do not learn about the 
-        #  unauthenticated host, (and vice versa as no arp replies should be sent,
-        #  from anyone but the gateway or captive portal)
-        arpReq = {}
-        arpReq["name"] = "captiveportal_arp"
-        arpReq["mac"] = mac
-        arpReq["dl_src"] = mac
-        arpReq["dl_type"] = Proto.ETHER_ARP
-        arpReq["arp_tpa"] = self.config.gateways[0]["gateway"]["ip"]
-        arpReq["actions"] = {}
-        arpReq["actions"]["allow"] = 1
-        arpReq["actions"]["dl_dst"] = self.config.gateways[0]["gateway"]["mac"]
-
-        areq = {}
-        areq["rule"] = arpReq
-
-        # redirect the rest of arp to a captive portal.
-
-        # The idea of this was to get the portal to reply to all arp requests,
-        #  so that any tcp connections (which need arp to happen first) that are not
-        #  destined to/past the gateway will be sent to the portal, which can then reply to the
-        #  arp. However this will result in poisoning the clients arp cache, which may
-        #  cause more trouble than it is worth.
-        # The portal currently does not do anything with these packets.
-        arpReply = {}
-        arpReply["name"] = "captiveportal_arp"
-        arpReply["mac"] = mac
-        arpReply["dl_src"] = mac
-        arpReply["dl_type"] = Proto.ETHER_ARP
-        arpReply["actions"] = {}
-        arpReply["actions"]["allow"] = 1
-        arpReply["actions"]["dl_dst"] = self.config.captive_portals[0]["captive-portal"]["mac"]
-
-        arep = {}
-        arep["rule"] = arpReply
-
-        return [areq, arep]
-
-    def _get_cp_dhcp_acls(self, mac):
-        # allow dhcp
-        dhcpReply = {}
-        dhcpReply["name"] = "captiveportal_dhcp"
-        dhcpReply["mac"] = mac
-        dhcpReply["dl_src"] = mac
-        # TODO should we match on all these fields (dl_dst, ip.src/dst. udp.src)? pretty sure at some point
-        #  I saw a DHCP REQUEST with the servers IP address as the destination,
-        #  which would mean this rule would not be hit.
-#        dhcpReply["dl_dst"] = "ff:ff:ff:ff:ff:ff" # ignore for mean time.
-#   could also add ip.src 0.0.0.0 and dst 255.255.255.255 to resp and repl
-        dhcpReply["dl_type"] = Proto.ETHER_IPv4
-        dhcpReply["ip_proto"] = Proto.IP_UDP
-#        dhcpReply["udp_src"] = Proto.DHCP_CLIENT
-        dhcpReply["udp_dst"] = Proto.DHCP_SERVER_PORT
-        dhcpReply["actions"] = {}
-        dhcpReply["actions"]["allow"] = 1
-        # TODO could possibly rewrite MAC to DHCP server. and maybe IP
-
-        dhrep = {}
-        dhrep["rule"] = dhcpReply
-
-        return [dhrep]
-
-    def _get_cp_dns_acls(self, mac):
-        # TODO currently allows dns to any server, as long as it uses the DNS port.
-        #  Change so either DNS only allowed to ones specified in config, 
-        #  OR redirect to ones in config.
-        #  - Either way allow multiple DNS servers to be used.
-
-        # allow dns
-        dnsReply = {}
-        dnsReply["name"] = "captiveportal_dns"
-        dnsReply["mac"] = mac
-        dnsReply["dl_src"] = mac
-        dnsReply["dl_type"] = Proto.ETHER_IPv4
-        dnsReply["ip_proto"] = Proto.IP_UDP
-        dnsReply["udp_dst"] = Proto.DNS_PORT
-        dnsReply["actions"] = {}
-        dnsReply["actions"]["allow"] = 1
-
-        dnsrep = {}
-        dnsrep["rule"] = dnsReply
-
-        return [dnsrep]
-
-    def _get_cp_tcp_acls(self, mac):
-        """
-        :param mac client's MAC address
-        :return List of Rules to redirect mac to a NFV portal by changing the dst MAC to the portal.
-        """
-        # TODO could possibly do a form of load balancing here,
-        #  by selecting a different portal dst mac address.
-        tcpFwd = {}
-        tcpFwd["name"] = "captiveportal_tcp"
-        tcpFwd["mac"] = mac
-        tcpFwd["dl_src"] = mac
-        tcpFwd["dl_type"] = Proto.ETHER_IPv4
-        tcpFwd["ip_proto"] = Proto.IP_TCP
-        tcpFwd["tcp_dst"] = Proto.HTTP_PORT
-        tcpFwd["actions"] = {}
-        tcpFwd["actions"]["allow"] = 1
-        tcpFwd["actions"]["dl_dst"] = self.config.captive_portals[0]["captive-portal"]["mac"]
-
-        ret = {}
-        ret["rule"] = tcpFwd 
-
-        return [ret]
-
-    def _get_captive_portal_acls(self, mac):
-        """Generates the rules for mac to be able to use the captive portal.
-        :param mac MAC address of client
-        :return List of rules to be applied to a port ACL for the specified MAC address.
-        """
-        rules = []
-        rules.extend(self._get_cp_arp_acls(mac))
-        rules.extend(self._get_cp_dhcp_acls(mac))
-        rules.extend(self._get_cp_dns_acls(mac))
-        rules.extend(self._get_cp_tcp_acls(mac))
-
-        return rules
        
     def remove_acls_startswith(self, mac, name, switchname, switchport):
         self.remove_acls(mac, name, switchname, switchport, startswith=True)
@@ -450,13 +315,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 self.send_error('Invalid form\n')
                 return
             self.deauthenticate(json_data['mac'], json_data['user'])
-#        elif self.path == self.config.captive_portal_auth_path:
-#            #check json has the right information
-#            if not ("mac" in json_data and "user" in json_data):
-#                self.send_error('Invalid form\n')
-#                return
-#            print("deauth capflow")
-#            self.deauthenticate(json_data["mac"], json_data["user"])
         else:
             self.send_error('Path not found\n')
 
@@ -490,29 +348,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
             # TODO lock
             thread_lock.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-        else:  #request is for CapFlow
-            if not ('ip' in json_data and 'user' in json_data and 'mac' in json_data):
-                self.send_error('Invalid form\n')
-                return
-
-            #valid request format so new user has authenticated
-
-            mac = json_data['mac']
-            user = json_data['user']
-            ip = json_data['ip']
-
-            rules = self.get_users_rules(mac, user)
-            message = 'authenticated new client({}) at MAC: {} and ip: {}\n'.format(
-                user, mac, ip)
-             # get switchport
-            switchname, switchport = self._get_dp_name_and_port(mac)
-        
-            # remove the redirect to captive portal acl rules for the mac that just authed.
-            # TODO does removal happen to early, and that we loose the end of one of the TCP connections to the cp?
-            # TODO lock
-            thread_lock.acquire()
-            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)            
-            self.remove_acls_startswith(mac, 'captiveportal_', switchname, switchport)
 
         self.add_acls(mac, user, rules, switchname, switchport)
         # TODO unlock
