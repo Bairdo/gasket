@@ -129,11 +129,38 @@ $ git clone https://github.com/bairdo/hostapd-d1xf.git
 ```
 
 - Configure the build.
-The provided .config should suffix. However if you wish to modify it, we basically need the wired driver, and you may also want the integrated RADIUS Server.
-- Build.
+The provided .config should suffice. However if you wish to modify it, we basically need the wired driver, and you may also want the integrated RADIUS Server.
+- The IP address of the httpserver is hardcoded :( the sed command below will replace '10.0.0.2' with '10.0.13.3' replace '10\.0\.13\.3' with the IP address of your faucet's non controlplane link.
+- Build and install.
 ```bash
+sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eap_server/eap_server.c
+sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c
 make && sudo make install
 ```
+
+```txt
+interface=eth0
+driver=wired
+logger_stdout=-1
+logger_stdout_level=0
+ieee8021x=1
+eap_reauth_period=3600
+use_pae_group_addr=0
+eap_server=1
+eap_user_file=<PATH TO FILE>/hostapd.eap_user
+```
+
+If using the integrated RADIUS server a file containing username, auth-type, password is required. 
+
+See [here for more](http://web.mit.edu/freebsd/head/contrib/wpa/hostapd/hostapd.eap_user)
+Example hostapd.eap_user:
+```ini
+"user"          MD5     "password"
+"host110user"   MD5     "host110pass"
+"host111user"   MD5     "host111pass"
+"host112user"   MD5     "host112pass"
+"host113user"   MD5     "host113pass"
+"host114user"   MD5     "host114pass"```
 
 - hostapd/wired.conf provides the configuration file for hostapd.
 
@@ -293,13 +320,15 @@ Start the RADIUS server according to your implementations instructions.
 
 ## Captive Portal
 Not Implemented yet.
-### Componets
+### Components
 - Captive Portal Webserver
 - RADIUS Server
 - Faucet
 - HTTPServer
 
 # TODO
+
+- change example config to use only one switch.
 
 - allow user to have their own rules on the port before our user is authenticated ones and after the 1x to hostapd.
 For example if all traffic from port is not allowed to go to 8.8.8.8 for what ever reason.
