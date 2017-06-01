@@ -91,7 +91,7 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 - Weird things may happen if a user moves 'access' port, they should successfully reauthenticate, however they might have issues if a malicious user fakes the authenticated users MAC on the old port (poisoning the MAC-port learning table), and if they (malicious user) were to log off the behaviour is currently 'undefined'.
 See [TODO](#todo) for more.
 
-- Currently the authenticated rules are hardcoded into HTTPServer.py as block traffic to 8.8.8.8, and allow everything else from the authenticated MAC address.
+- Each user must have a rule entry, Groups, etc are not supported at this time.
 - Captive Portal transmits passwords in cleartext between user and webserver, need to add HTTPS support.
 
 ## 802.1X
@@ -110,7 +110,7 @@ When a user sends the EAP-Logoff message  they are unauthenticated from the port
 
 When a user successfully authenticates Access Control List (ACL) rules get applied.
 These ACLs can match on any field that Ryu supports (and therefore Faucet), see [Ryu documentation](http://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#flow-match-structure).
-Typically these 'authorisation' rules should include the 'dl_src' with the users MAC address (TODO allow runtime insertion of MAC from rule file) to ensure that the rule gets applied to the user, however if desired this is not necessary, **BUT this could mean that unauthenticated users can use the network!** so do so at your own risk.
+Typically these 'authorisation' rules should include the 'dl_src' with the users MAC address to ensure that the rule gets applied to the user, however if desired this is not necessary, **BUT this could mean that unauthenticated users can use the network!** so do so at your own risk.
 
 The hostapd process typically runs on its own server and has a separate (from the switch's dataplane) network connection to the controller.
 This connection is used for HTTP messages to the HTTPServer process when the state of a user changes.
@@ -162,7 +162,7 @@ If you are using Windows clients EAP-MSCHAPv2 will need to be enabled.
 
 #### Controller
 ##### Faucet
-- Get faucet. Note: NOT the official reannz repo at this time
+- Get the faucet from where you are reading this doc. Note: NOT the official reannz repo at this time
 ```bash
 $ git clone https://github.com/bairdo/faucet.git
 ```
@@ -184,15 +184,13 @@ dps:
                   1:
                         name: portal
                         native_vlan: 100
-                        acl_in: allow_all_acl
                   2:
                         name: gateway
                         native_vlan: 100
-                        acl_in: allow_all_acl
                   4:
                         name: hosts
                         native_vlan: 100
-                        acl_in: allow_all_acl
+
 
       ovs-hosts-switch:
             dp_id: 2
@@ -201,17 +199,16 @@ dps:
                   1:
                         name: h1
                         native_vlan: 100
-                        acl_in: port2_1
-                        mode: access
+                        acl_in: port_ovs-hosts-switch_1
+                        auth_mode: access
                   2:
                         name: h2
                         native_vlan: 100
-                        acl_in: port2_2
-                        mode: access
+                        acl_in: port_ovs-hosts-switch_2
+                        auth_mode: access
                   3:
                         name: switch1
                         native_vlan: 100
-                        acl_in: allow_all_acl
 
 include:
     - acls.yaml
@@ -220,11 +217,7 @@ include:
 ###### acls.yaml
 ```yaml
 acls:
-      allow_all_acl:
-          - rule:
-                  actions:
-                        allow: 1
-      port2_1:
+      port_ovs-hosts-switch_1:
           - rule:
                   # This rule must be at the top of the port acl.
                   # It will redirect all 802.1X traffic to the hostap server that
@@ -244,7 +237,7 @@ acls:
                   actions:
                         allow: 1
                         dl_dst: 08:00:27:00:03:02
-      port2_2:
+      port_ovs-hosts-switch_2:
           - rule:
                   name: d1x
                   dl_type: 34958
@@ -260,11 +253,11 @@ These configuration files are based on the network diagram at the top.
 
 - Each 'interface' that is to use 802.1X authentication requires two configurations:
 
-1. The key 'mode' must be set with the value 'access'
+1. The key 'auth_mode' must be set with the value 'access'
 
-2. Each 'acl_in' must be unique to each interface ('port acl' from here on). This will restrict a user to the interface that they authenticate on. (It may be possible to have users authenticated across multiple interfaces (if they only authenticate on one), if the acl spans multiple ports, but this is not tested.)
+2. Each 'acl_in' must be in the form 'port_' + <DATAPATH NAME> + '_' + <PORT NUMBER> e.g. for the above configurations 'port_ovs-hosts_switch_2'.
 
-- 'port2_1' & 'port2_2' show the rules that each 802.1X port acl requires.
+- 'port_ovs-hosts-switch_1' & 'port_ovs-hosts-switch_2' show the rules that each 802.1X port acl requires.
 - For the rule 'name' field, please do not use 'd1x' or 'redir41x' as rules which match are treated specially internally.
 - Change the mac address '08:00:27:00:03:02' to the mac address of the server that hostap is running on.
 It should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port acls (untested).
@@ -280,28 +273,15 @@ auth.yaml is the configuration file and contains annotations on required parts. 
 
 #### Controller
 
-##### Faucet
+##### Faucet + HTTPServer
 
-To start faucet run:
+To start faucet and the httpserver use Docker.auth:
 ```bash
-$ export FAUCET_CONFIG=/home/ubuntu/faucet-dev/faucet.yaml
-$ export GAUGE_CONFIG=/etc/ryu/faucet/gauge.yaml
-$ export FAUCET_LOG=/var/log/faucet/faucet.log
-$ export FAUCET_EXCEPTION_LOG=/var/log/faucet/faucet_exception.log
-$ export GAUGE_LOG=/var/log/faucet/gauge_exception.log
-$ export GAUGE_EXCEPTION_LOG=/var/log/faucet/gauge_exception.log
-$ export GAUGE_DB_CONFIG=/etc/ryu/faucet/gauge_db.yaml
-
-$ ryu-manager faucet.faucet
+docker build -t /reannz/faucet-auth -f Dockerfile.auth .
+docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6653:6653 -p 9244:9244 -p 8080:8080 -ti reannz/faucet-auth
 ```
-changing directories as required.
+Port 6653 is used for OpenFlow, port 9244 is used for Prometheus and 8080 is used by the httpserver - port 9244 may be omitted if you do not need Prometheus.
 
-##### HTTPServer
-To start the httpserver run:
-```hash
-$ cd faucet/
-$ python3 faucet/HTTPServer.py --config auth.yaml
-```
 #### Authentication Server
 
 To start hostapd run as sudo:
@@ -322,6 +302,6 @@ Not Implemented yet.
 # TODO
 
 - allow user to have their own rules on the port before our user is authenticated ones and after the 1x to hostapd.
-For example if all traffic from port is not allowed to go to 8.8.8.8 for what ever reason.i
+For example if all traffic from port is not allowed to go to 8.8.8.8 for what ever reason.
 
 - allow the use of 3 modes; 802.1X, Captive Portal, 802.1X with Captive Portal fallback on a port (not necessarily 1X).
