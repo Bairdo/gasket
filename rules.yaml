@@ -22,8 +22,6 @@ rules:
             actions:
                 allow: 1
 
-
-
 users:
     
     host110user:
@@ -60,21 +58,3 @@ users:
                 dl_type: 0x0806
                 actions:
                     allow: 1
-
-              
-              #        port1_1: # a specific port
-                #            - rule:
-                # ...
-    welch:
-        # unique port (per user/group), containing list of rules.
-
-
-groups:
-    staff:
-        # again unique port, containing list of rules
-    students:
-
-    nwen302-students:
-        # this might be a subclass of students
-    nwen302:
-        # this might be both staff and students.
