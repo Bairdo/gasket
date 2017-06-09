@@ -112,9 +112,9 @@ class FaucetTest(faucet_mininet_test_base.FaucetTestBase):
             self.tmpdir, 'gauge.log')
         os.environ['GAUGE_EXCEPTION_LOG'] = os.path.join(
             self.tmpdir, 'gauge-exception.log')
-        prom_port, _ = faucet_mininet_test_util.find_free_port(
+        self.prom_port, _ = faucet_mininet_test_util.find_free_port(
             self.ports_sock)
-        os.environ['FAUCET_PROMETHEUS_PORT'] = str(prom_port)
+        os.environ['FAUCET_PROMETHEUS_PORT'] = str(self.prom_port)
         self.debug_log_path = os.path.join(
             self.tmpdir, 'ofchannel.log')
         self.monitor_stats_file = os.path.join(
@@ -159,7 +159,7 @@ class FaucetTest(faucet_mininet_test_base.FaucetTestBase):
 
         self.CONFIG = '\n'.join((
             self.get_config_header(
-                self.CONFIG_GLOBAL, self.debug_log_path, self.dpid, self.hardware),
+                self.CONFIG_GLOBAL % self.port_map, self.debug_log_path, self.dpid, self.hardware),
             self.CONFIG % self.port_map))
         open(os.environ['FAUCET_CONFIG'], 'w').write(self.CONFIG)
         self.influx_port, _ = faucet_mininet_test_util.find_free_port(
