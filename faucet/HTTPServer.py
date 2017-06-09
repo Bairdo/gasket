@@ -454,15 +454,12 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', help='location of yaml configuration file')
-
     args = parser.parse_args()
     config_filename = args.config
     conf = AuthConfig(config_filename)
-    
     HTTPHandler.config = conf
     HTTPHandler.rule_gen = rule_generator.RuleGenerator(conf.rules)
-
-    server = ThreadedHTTPServer(('', 8080), HTTPHandler)
-    print('starting server')
+    server = ThreadedHTTPServer(('', conf.listen_port), HTTPHandler)
+    print('starting server {}'.format(conf.listen_port))
     server.serve_forever()
 

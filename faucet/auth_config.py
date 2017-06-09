@@ -8,6 +8,8 @@ class AuthConfig(object):
         data = yaml.load(open(filename, 'r'))
         self.version = data["version"]
 
+        self.listen_port = int(data['listen_port'])
+
         self.prom_port = int(data['faucet']['prometheus_port'])
         self.faucet_ip = data['faucet']['ip']
         self.prom_url = 'http://{}:{}'.format(self.faucet_ip, self.prom_port)
