@@ -1,16 +1,16 @@
 ---
 version: 0
 
+listen_port: %(listenport)d
+
 faucet:
-    prometheus_port: 9244
+    prometheus_port: %(promport)d
     ip: 127.0.0.1
 
 files:
-    # the location files, pid should contain the process id (pid) of the main faucet process (ryu-manager)
-    #  should be obtainable with "ps aux |grep faucet.faucet |head -n1 | awk '{print $2}' > /etc/ryu/contr_pid"
-    controller_pid: /etc/ryu/faucet/contr_pid
-    faucet_config: /etc/ryu/faucet/faucet.yaml
-    acl_config: /etc/ryu/faucet/faucet.yaml
+    controller_pid: %(tmpdir)s/contr_pid
+    faucet_config: %(tmpdir)s/faucet.yaml
+    acl_config: %(tmpdir)s/faucet.yaml
 
 
 # TODO add port for httpserver to listen on.
@@ -59,22 +59,3 @@ captive-portal:
 #  THIS IS NOT ACTUALLY USED AT THIS TIME.
 auth-rules:
     file: /faucet-src/rules.yaml
-    # group
-    student:
-        - rule:
-            name: block-8.8.8.8
-            dl_src: $MAC$
-            dl_type: 0x0800
-            nw_dst: 8.8.8.8
-            actions:
-                allow: 0
-        - rule:
-            name: allow-all
-            dl_src: $MAC$
-            dl_type: 0x0800
-            actions:
-                allow: 1
-
-    # TODO may want to have rules specified in another file(s)
-
-            
