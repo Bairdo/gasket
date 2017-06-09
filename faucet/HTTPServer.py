@@ -460,6 +460,6 @@ if __name__ == '__main__':
     HTTPHandler.config = conf
     HTTPHandler.rule_gen = rule_generator.RuleGenerator(conf.rules)
     server = ThreadedHTTPServer(('', conf.listen_port), HTTPHandler)
-    print('starting server {}'.format(conf.listen_port))
+    print(('starting server {}'.format(conf.listen_port)))
     server.serve_forever()
 
