@@ -5,6 +5,7 @@ from socketserver import ThreadingMixIn
 import argparse
 import cgi
 import json
+import logging
 import os
 import re
 import signal
@@ -12,8 +13,11 @@ import threading
 import yaml
 import requests
 
+import time
+
+from valve_util import get_logger
 import config_parser
-import lockfile
+import my_lockfile as lockfile
 from auth_config import AuthConfig
 import rule_generator
 
@@ -56,7 +60,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     config = None
     rule_gen = None
-
+    logger = None
     def _set_headers(self, code, ctype):
         self.send_response(code)
         self.send_header('Content-type', ctype)
@@ -86,10 +90,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :returns dictionary
         '''
         d = {}
-        print("dpid name to map")
+        self.logger.info("dpid name to map")
         for l in lines:
             # TODO maybe dont use regex?
-            print(l)
+            self.logger.info(l)
             _, _, dpid, _, name, _ = re.split('[{=",]+', l)
             d[dpid] = name
         return d
@@ -111,7 +115,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 d[dpid] = {}
             
             d[dpid][port] = mode
-        print(("dp_port_mode_to_map returns: {}".format(d)))
+        self.logger.info(("dp_port_mode_to_map returns: {}".format(d)))
         return d
 
     def _get_dp_name_and_port(self, mac):
@@ -127,7 +131,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         prom_name_dpid = []
         prom_dpid_port_mode = []
         for l in prom_txt.splitlines():
-            print(l)
+            self.logger.info(l)
             if l.startswith('learned_macs'):
                 prom_mac_table.append(l)
             if l.startswith('faucet_config_dp_name'):
@@ -143,7 +147,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         ret_dp_name = ""
         for l in prom_mac_table:
             labels, float_as_mac = l.split(' ')
-            print(("int as mac{}".format(self._float_to_mac(float_as_mac))))
+            self.logger.info(("int as mac{}".format(self._float_to_mac(float_as_mac))))
             if mac == self._float_to_mac(float_as_mac):
                 # if this is also an access port, we have found the dpid and the port
                 _, _, dpid, _, n, _, port, _, vlan, _ = re.split('\W+', labels)
@@ -153,7 +157,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     ret_port = int(port)
                     ret_dp_name = dpid_name[dpid]
                     break
-        print(("name: {} port: {}".format(ret_dp_name, ret_port)))
+        self.logger.info(("name: {} port: {}".format(ret_dp_name, ret_port)))
         return ret_dp_name, ret_port
        
     def remove_acls_startswith(self, mac, name, switchname, switchport):
@@ -195,7 +199,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
       
         all_acls['acls'][aclname] = updated_port_acl
 
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file, self.logger)
 
     def _is_rule_in(self, rule, list_):
         """Searches a list of HashableDicts for an item equal to rule.
@@ -228,28 +232,28 @@ class HTTPHandler(BaseHTTPRequestHandler):
         :param user username of authenticated user
         :param rules List of ACL rules to be applied to port that mac is associated with.
         """
-        print("rules")
-        print(rules)
+        self.logger.info("rules")
+        self.logger.info(rules)
         # TODO might want to make it so that acls can be added to any port_acl,
         # load acls from faucet.yaml
         if dp_name == '' or switchport == -1 :
-            print(("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
+            self.logger.info(("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
                                     dp_name, switchport, user, mac)))
             return
         else:
             all_acls = config_parser.load_acls(self.config.acl_config_file) #, dp_name, switchport)
         aclname = 'port_' + dp_name + '_' + str(switchport)
 
-        print(all_acls)
+        self.logger.info(all_acls)
         port_acl = all_acls['acls'][aclname]
 
         i = 0
         # apply ACL for user to the switchport ACL
         new_port_acl = []
         inserted = False
-        print("portacl")
-        print((type(port_acl)))
-        print(port_acl)
+        self.logger.info("portacl")
+        self.logger.info((type(port_acl)))
+        self.logger.info(port_acl)
         hashable_port_acl = self._get_hashable_list(port_acl)
         for rule in port_acl:
 
@@ -273,9 +277,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 # insert new rule if not already.
                 if not inserted:
                     inserted = True
-                    print(("\n\nrules:\n{}".format(rules)))
+                    self.logger.info(("\n\nrules:\n{}".format(rules)))
                     for new_rule in rules['port_' + dp_name + '_' + str(switchport)]:
-                        print(("\n\nnewrule:\n{}".format(new_rule)))
+                        self.logger.info(("\n\nnewrule:\n{}".format(new_rule)))
                         if not self._is_rule_in(new_rule, hashable_port_acl):
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
@@ -290,7 +294,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         all_acls['acls'][aclname] = new_port_acl
         # TODO yaml
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file)
+        self.logger.info('writing the following acls')
+        self.logger.info(all_acls)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file, self.logger)
 
     def do_POST(self):
         json_data = self.check_if_json()
@@ -319,7 +325,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error('Path not found\n')
 
     def authenticate(self, json_data):
-        print(("authenticated: {}".format(json_data)))
+        self.logger.info(("****authenticated: {}".format(json_data)))
         conf_fd = None
         if self.path == self.config.dot1x_auth_path:  #request is for dot1xforwarder
             if not ('mac' in json_data and 'user' in json_data):
@@ -332,7 +338,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
             switchname, switchport = self._get_dp_name_and_port(mac)
             if switchname == '' or switchport == -1 :
-                print(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for deauthed user '{}' on MAC '{}'".format(
+                self.logger.info(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for deauthed user '{}' on MAC '{}'".format(
                                     switchname, switchport, user, mac)))
                 #write response
                 message = 'cant auth'
@@ -353,7 +359,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # TODO unlock
         lockfile.unlock(conf_fd)
         thread_lock.release()
-
+        os.system('lsof | grep -i "\.yaml"')
         self.send_signal(signal.SIGHUP)
 
         #write response
@@ -387,6 +393,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             json_data['mac'], json_data['retrans'])
 
     def deauthenticate(self, mac, username):
+        self.logger.info('---deauthenticated: {} {}'.format(mac, username))
         switchname, switchport = self._get_dp_name_and_port(mac)
         # TODO lock
         thread_lock.acquire()
@@ -394,7 +401,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
        
         switchname, switchport = self._get_dp_name_and_port(mac)
         if switchname == '' or switchport == -1 :
-            print(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
+            self.logger.info(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
                                     switchname, switchport, username, mac)))
         else:
             self.remove_acls(mac, username, switchname, switchport)
@@ -417,6 +424,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         with open(self.config.contr_pid_file, 'r') as f:
             contr_pid = int(f.read())
             os.kill(contr_pid, signal_type)
+            self.logger.info('sending signal {} to pid {}'.format(signal_type, contr_pid))
 
     def check_if_json(self):
         try:
@@ -457,9 +465,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config_filename = args.config
     conf = AuthConfig(config_filename)
+    logger = get_logger(
+            'httpserver', conf.logger_location, logging.DEBUG, 0)
+    HTTPHandler.logger = logger
     HTTPHandler.config = conf
     HTTPHandler.rule_gen = rule_generator.RuleGenerator(conf.rules)
     server = ThreadedHTTPServer(('', conf.listen_port), HTTPHandler)
-    print(('starting server {}'.format(conf.listen_port)))
+    logger.info(('starting server {}'.format(conf.listen_port)))
     server.serve_forever()
 

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 """
 Classes for testing the FAUCET and Authentication
 methods (Dot1x and Capflow)
@@ -142,15 +142,22 @@ eapol_flags=0
         host.cmd('tcpdump %s &' % tcpdump_args)
         self.pids['%s-tcpdump' % host.name] = host.lastPid
 
+        start_reload_count = self.get_configure_count()
         cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf &".format(host.name)
         print("cmd {}".format(cmd))
-        time.sleep(10)
+        time.sleep(10) # ?????
         print(host.cmdPrint(cmd))
         time.sleep(10)
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         print(host.cmdPrint(cmd))
         host.cmdPrint("ip route add default via 10.0.0.2")
         host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
+
+
+        print('start_reload_count' + str(start_reload_count))
+        end_reload_count = self.get_configure_count()
+        print('end_reload_count' + str(end_reload_count))
+        self.assertGreater(end_reload_count, start_reload_count)
 
     def fail_ping_ipv4(self, host, dst, retries=3):
         """Try to ping to a destination from a host. This should fail on all the retries"""
@@ -190,9 +197,11 @@ eapol_flags=0
         m['tmpdir'] = self.tmpdir
         m['promport'] = self.prom_port
         m['listenport'] = self.auth_server_port
+        m['logger_location'] = self.tmpdir + '/httpserver.log'
         host.cmdPrint('echo "%s" > %s/auth.yaml' % (httpconfig % m, self.tmpdir))
-        host.cmdPrint('cp -r /faucet-src %s/' % self.tmpdir) 
-        print host.cmd('python3.5 %s/faucet-src/faucet/HTTPServer.py --config  %s/auth.yaml > %s/httpserver.txt 2> %s/httpserver.err &' % (self.tmpdir, self.tmpdir, self.tmpdir, self.tmpdir))
+        host.cmdPrint('cp -r /faucet-src %s/' % self.tmpdir)
+# > %s/httpserver.txt 2> %s/httpserver.err &'
+        print host.cmdPrint('python3.5 %s/faucet-src/faucet/HTTPServer.py --config  %s/auth.yaml  > %s/httpserver.txt 2> %s/httpserver.err &'  % (self.tmpdir, self.tmpdir, self.tmpdir, self.tmpdir))
         print 'httpserver started'
         self.pids['auth_server'] = host.lastPid 
         print 'httpserver pid'
@@ -434,7 +443,7 @@ vlans:
     100:
         description: "untagged"
 acls:
-    port_faucet-1_%(port_3)d:
+    port_faucet-1_3:
         - rule:
             _name_: d1x
             actions:
@@ -525,7 +534,7 @@ acls:
         port = 0
         while port <=9999:
             port, _ = faucet_mininet_test_util.find_free_port(
-                self.ports_sock)
+                self.ports_sock, self._test_name())
             print 'auth_server_port: ' + str(port)
 
         self.auth_server_port = port
@@ -582,7 +591,7 @@ acls:
 
         interweb.cmdPrint('echo "This is a text file on a webserver" > index.txt')
         self.ws_port, _ = faucet_mininet_test_util.find_free_port(
-            self.ports_sock)
+            self.ports_sock, self._test_name())
         print "ws_port"
         print self.ws_port        
         interweb.cmdPrint('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
@@ -709,6 +718,7 @@ class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationMultiSwitchTest):
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
         self.logon_dot1x(h0)
+        time.sleep(5)
         self.one_ipv4_ping(h0, '10.0.0.2')
         time.sleep(5)
         result = self.check_http_connection(h0)
@@ -745,11 +755,8 @@ def start_all_tests():
     requested_test_classes, clean, keep_logs, nocheck, serial, excluded_test_classes = parse_args()
     tests = unittest.TestSuite()
     root_tmpdir = tempfile.mkdtemp(prefix='faucet-tests-')
-    ports_sock = os.path.join(root_tmpdir, 'ports-server')
-    ports_server = threading.Thread(
-        target=faucet_mininet_test_util.serve_ports, args=(ports_sock,))
-    ports_server.setDaemon(True)
-    ports_server.start()
+    ports_sock = faucet_mininet_test.start_port_server(root_tmpdir) 
+
     config = None
     parallel_tests = unittest.TestSuite()
     for name, obj in inspect.getmembers(sys.modules[__name__]):
@@ -761,7 +768,7 @@ def start_all_tests():
 
             silent_obj = type(obj.__name__ + 'Single', obj.__bases__, dict(obj.__dict__))
             silent_obj.__bases__ = (FaucetAuthenticationSingleSwitchTest,)
-            parallel_tests.addTest(make_suite(silent_obj, config, root_tmpdir, ports_sock))
+            tests.addTest(make_suite(silent_obj, config, root_tmpdir, ports_sock))
     unittest.TextTestRunner(verbosity=2).run(tests)
 
 

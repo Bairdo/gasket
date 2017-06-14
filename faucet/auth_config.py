@@ -6,8 +6,8 @@ class AuthConfig(object):
     # TODO make this inherit from faucet/Conf.py and use the default thing
     def __init__(self, filename):
         data = yaml.load(open(filename, 'r'))
-        self.version = data["version"]
-
+        self.version = data['version']
+        self.logger_location = data['logger_location']
         self.listen_port = int(data['listen_port'])
 
         self.prom_port = int(data['faucet']['prometheus_port'])
