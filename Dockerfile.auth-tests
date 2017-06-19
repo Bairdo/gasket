@@ -8,18 +8,12 @@ RUN \
     openssl \
     build-essential \
     dhcpcd5 \
-    python3.5 \
-    python3-pip \
-    libpython3.5-dev \
     udhcpd
 
 RUN \
   git clone https://github.com/Bairdo/hostapd-d1xf.git && \
   cd hostapd-d1xf/hostapd && \
   git checkout username-fix-2 && \
-  sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' /root/hostapd-d1xf/src/eap_server/eap_server.c && \
-  sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' /root/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
-  make && \
   printf "interface=portal-eth0\n\
 driver=wired\n\
 logger_stdout=-1\n\
@@ -38,12 +32,6 @@ eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > wired.conf && \
 
 
 RUN \
-  pip3 install --upgrade pip && \
-  pip3 install setuptools  virtualenv --upgrade && \
-  pip3 install pyyaml requests networkx
-
-RUN \
-  mkdir -p /var/log/ryu/faucet && \
-  touch /var/log/ryu/faucet/faucet.log 
+  pip3 install requests
 
 CMD ["/faucet-src/docker/run_authtests.sh"]
