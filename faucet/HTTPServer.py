@@ -199,7 +199,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
       
         all_acls['acls'][aclname] = updated_port_acl
 
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file, self.logger)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
 
     def _is_rule_in(self, rule, list_):
         """Searches a list of HashableDicts for an item equal to rule.
@@ -237,7 +237,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # TODO might want to make it so that acls can be added to any port_acl,
         # load acls from faucet.yaml
         if dp_name == '' or switchport == -1 :
-            self.logger.info(("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
+            self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
                                     dp_name, switchport, user, mac)))
             return
         else:
@@ -296,7 +296,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # TODO yaml
         self.logger.info('writing the following acls')
         self.logger.info(all_acls)
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file, self.logger)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
 
     def do_POST(self):
         json_data = self.check_if_json()
@@ -338,7 +338,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
             switchname, switchport = self._get_dp_name_and_port(mac)
             if switchname == '' or switchport == -1 :
-                self.logger.info(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for deauthed user '{}' on MAC '{}'".format(
+                self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for authed user '{}' on MAC '{}'".format(
                                     switchname, switchport, user, mac)))
                 #write response
                 message = 'cant auth'
@@ -356,16 +356,23 @@ class HTTPHandler(BaseHTTPRequestHandler):
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
         self.add_acls(mac, user, rules, switchname, switchport)
+        self.swap_temp_file()
         # TODO unlock
         lockfile.unlock(conf_fd)
         thread_lock.release()
         os.system('lsof | grep -i "\.yaml"')
         self.send_signal(signal.SIGHUP)
-
+        self.logger.error(config_parser.load_acls(self.config.acl_config_file))
         #write response
         self._set_headers(200, 'text/html')
         self.wfile.write(message.encode(encoding='utf-8'))
         self.log_message('%s', message)
+
+    def swap_temp_file(self):
+        # delete old file
+        # rename .tmp to old file.
+        os.remove(self.config.acl_config_file)
+        os.rename(self.config.acl_config_file + '.tmp', self.config.acl_config_file)
 
     def idle(self, json_data):
         if not ('mac' in json_data and 'retrans' in json_data):
@@ -401,20 +408,22 @@ class HTTPHandler(BaseHTTPRequestHandler):
        
         switchname, switchport = self._get_dp_name_and_port(mac)
         if switchname == '' or switchport == -1 :
-            self.logger.info(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
+            self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
                                     switchname, switchport, username, mac)))
         else:
             self.remove_acls(mac, username, switchname, switchport)
+            self.swap_temp_file()
         # TODO unlock
         lockfile.unlock(conf_fd)
         thread_lock.release()
 
-        self.send_signal(signal.SIGHUP)
+
 
         self._set_headers(200, 'text/html')
         message = 'deauthenticated client {} at {} \n'.format(username, mac)
         self.wfile.write(message.encode(encoding='utf-8'))
         self.log_message('%s', message)
+        self.send_signal(signal.SIGHUP)
 
     def send_signal(self, signal_type):
         ''' Send a signal to the controller to indicate a change in config file
@@ -425,6 +434,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
             contr_pid = int(f.read())
             os.kill(contr_pid, signal_type)
             self.logger.info('sending signal {} to pid {}'.format(signal_type, contr_pid))
+
+        os.kill(self.config.b, signal_type)
 
     def check_if_json(self):
         try:

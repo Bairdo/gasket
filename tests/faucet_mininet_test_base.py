@@ -71,12 +71,21 @@ class FaucetTestBase(unittest.TestCase):
     cpn_intf = None
     config_ports = {'bgp_port': None}
     env = collections.defaultdict(dict)
+    rand_dpids = set()
 
     def __init__(self, name, config, root_tmpdir, ports_sock):
         super(FaucetTestBase, self).__init__(name)
         self.config = config
         self.root_tmpdir = root_tmpdir
         self.ports_sock = ports_sock
+
+    def rand_dpid(self):
+        reserved_range = 100
+        while True:
+            dpid = random.randint(1, (2**32 - reserved_range)) + reserved_range
+            if dpid not in self.rand_dpids:
+                self.rand_dpids.add(dpid)
+                return str(dpid)
 
     def _set_var(self, controller, var, value):
         self.env[controller][var] = value
@@ -179,7 +188,9 @@ class FaucetTestBase(unittest.TestCase):
             self.dpid = faucet_mininet_test_util.str_int_dpid(self.dpid)
         else:
             self.topo_class = faucet_mininet_test_topo.FaucetSwitchTopo
-            self.dpid = str(random.randint(1, 2**32))
+
+            self.dpid = self.rand_dpid()
+
             self.of_port, _ = faucet_mininet_test_util.find_free_port(
                 self.ports_sock, self._test_name())
             self.gauge_of_port, _ = faucet_mininet_test_util.find_free_port(
@@ -398,7 +409,8 @@ class FaucetTestBase(unittest.TestCase):
                             func()
                 else:
                     print('tcpdump_helper: %s' % line)
-        self.assertTrue(tcpdump_started)
+
+        self.assertTrue(tcpdump_started, msg='%s did not start' % tcpdump_cmd)
         return tcpdump_txt
 
     def pre_start_net(self):
@@ -741,6 +753,37 @@ dbs:
         self.assertTrue(
             self._signal_proc_on_port(controller, controller.port, 1))
 
+    def verify_controller_fping(self, host, faucet_vip,
+                                total_packets=100, packet_interval_ms=100):
+        fping_bin = 'fping'
+        if faucet_vip.version == 6:
+            fping_bin = 'fping6'
+        fping_cli = '%s -s -c %u -i %u -p 1 -T 1 %s' % (
+            fping_bin, total_packets, packet_interval_ms, faucet_vip.ip)
+        timeout = int(((1000.0 / packet_interval_ms) * total_packets) * 1.5)
+        fping_out = host.cmd(faucet_mininet_test_util.timeout_cmd(
+            fping_cli, timeout))
+        print(fping_out)
+        self.assertTrue(
+            not re.search('\s+0 ICMP Echo Replies received', fping_out),
+            msg=fping_out)
+
+    def verify_vlan_flood_limited(self, vlan_first_host, vlan_second_host,
+                                  other_vlan_host):
+        """Verify that flooding doesn't cross VLANs."""
+        for first_host, second_host in (
+                (vlan_first_host, vlan_second_host),
+                (vlan_second_host, vlan_first_host)):
+            tcpdump_filter = 'ether host %s or ether host %s' % (
+                first_host.MAC(), second_host.MAC())
+            tcpdump_txt = self.tcpdump_helper(
+                other_vlan_host, tcpdump_filter, [
+                    lambda: first_host.cmd('arp -d %s' % second_host.IP()),
+                    lambda: first_host.cmd('ping -c1 %s' % second_host.IP())],
+                packets=1)
+            self.assertTrue(
+                re.search('0 packets captured', tcpdump_txt), msg=tcpdump_txt)
+
     def verify_ping_mirrored(self, first_host, second_host, mirror_host):
         self.net.ping((first_host, second_host))
         for host in (first_host, second_host):
@@ -917,7 +960,8 @@ dbs:
         self.fail(msg=msg)
 
     def set_port_down(self, port_no):
-        self.assertEquals(0,
+        self.assertEquals(
+            0,
             os.system(self._curl_portmod(
                 self.dpid,
                 port_no,
@@ -925,7 +969,8 @@ dbs:
                 ofp.OFPPC_PORT_DOWN)))
 
     def set_port_up(self, port_no):
-        self.assertEquals(0,
+        self.assertEquals(
+            0,
             os.system(self._curl_portmod(
                 self.dpid,
                 port_no,
@@ -1077,8 +1122,9 @@ dbs:
             'hello\r\n',
             first_host.cmd('nc -w 5 %s %u' % (second_host.IP(), port)))
         if table_id is not None:
-            self.wait_nonzero_packet_count_flow({u'tp_dst': int(port)},
-                table_id=table_id)
+            self.wait_nonzero_packet_count_flow(
+                {u'tp_dst': int(port)}, table_id=table_id)
+
 
     def swap_host_macs(self, first_host, second_host):
         """Swap the MAC addresses of two Mininet hosts."""

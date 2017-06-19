@@ -1,6 +1,8 @@
 ---
 version: 0
 
+b: %(b)d
+
 logger_location: %(logger_location)s
 
 listen_port: %(listenport)d

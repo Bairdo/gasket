@@ -5,7 +5,6 @@
 # pylint: disable=missing-docstring
 
 import os
-import random
 import re
 import shutil
 import threading
@@ -671,6 +670,8 @@ vlans:
     100:
         description: "untagged"
 
+    200:
+        description: "untagged"
 """
     CONFIG = """
         interfaces:
@@ -722,6 +723,8 @@ acls:
             actions:
                 allow: 1
 """
+
+
     def setUp(self):
         super(FaucetConfigReloadTest, self).setUp()
         self.acl_config_file = '%s/acl.yaml' % self.tmpdir
@@ -736,55 +739,87 @@ acls:
     def _get_conf(self):
         return yaml.load(open(self.faucet_config_path, 'r').read())
 
-    def _reload_conf(self, conf, restart):
+    def _reload_conf(self, conf, restart, cold_start, change_expected=True):
         open(self.faucet_config_path, 'w').write(yaml.dump(conf))
         if restart:
+            var = 'faucet_config_reload_warm'
+            if cold_start:
+                var = 'faucet_config_reload_cold'
+            old_count = int(
+                self.scrape_prometheus_var(var, dpid=True, default=0))
             self.verify_hup_faucet()
+            new_count = int(
+                self.scrape_prometheus_var(var, dpid=True, default=0))
+            if change_expected:
+                self.assertEquals(
+                    old_count + 1, new_count,
+                    msg='%s did not increment: %u' % (var, new_count))
+            else:
+                self.assertEquals(
+                    old_count, new_count,
+                    msg='%s incremented: %u' % (var, new_count))
 
     def get_port_match_flow(self, port_no, table_id=3):
         flow = self.get_matching_flow_on_dpid(
             self.dpid, {u'in_port': int(port_no)}, table_id)
         return flow
 
+    def test_add_unknown_dp(self):
+        conf = self._get_conf()
+        conf['dps']['unknown'] = {
+            'dp_id': int(self.rand_dpid()),
+            'hardware': 'Open vSwitch',
+        }
+        self._reload_conf(
+            conf, restart=True, cold_start=False, change_expected=False)
+
     def change_port_config(self, port, config_name, config_value,
-                           restart=True, conf=None):
+                           restart=True, conf=None, cold_start=False):
         if conf is None:
             conf = self._get_conf()
         conf['dps']['faucet-1']['interfaces'][port][config_name] = config_value
-        self._reload_conf(conf, restart)
+        self._reload_conf(conf, restart, cold_start)
 
     def change_vlan_config(self, vlan, config_name, config_value,
-                           restart=True, conf=None):
+                           restart=True, conf=None, cold_start=False):
         if conf is None:
             conf = self._get_conf()
         conf['vlans'][vlan][config_name] = config_value
-        self._reload_conf(conf, restart)
+        self._reload_conf(conf, restart, cold_start)
 
     def test_port_change_vlan(self):
-        first_host = self.net.hosts[0]
-        second_host = self.net.hosts[1]
+        first_host, second_host = self.net.hosts[:2]
+        third_host, fourth_host = self.net.hosts[2:]
+
         self.ping_all_when_learned()
         self.change_port_config(
             self.port_map['port_1'], 'native_vlan', 200, restart=False)
         self.change_port_config(
-            self.port_map['port_2'], 'native_vlan', 200, restart=True)
-        self.wait_until_matching_flow(
-            {u'in_port': int(self.port_map['port_1'])},
-            table_id=1,
-            actions=[u'SET_FIELD: {vlan_vid:4296}'],
-            timeout=2)
+            self.port_map['port_2'], 'native_vlan', 200, restart=True, cold_start=True)
+        for port_name in ('port_1', 'port_2'):
+            self.wait_until_matching_flow(
+                {u'in_port': int(self.port_map[port_name])},
+                table_id=1,
+                actions=[u'SET_FIELD: {vlan_vid:4296}'])
         self.one_ipv4_ping(first_host, second_host.IP(), require_host_learned=False)
+        # hosts 1 and 2 now in VLAN 200, so they shouldn't see floods for 3 and 4.
+        self.verify_vlan_flood_limited(
+            third_host, fourth_host, first_host)
 
     def test_port_change_acl(self):
         self.ping_all_when_learned()
         first_host, second_host = self.net.hosts[0:2]
         orig_conf = self._get_conf()
-        self.change_port_config(self.port_map['port_1'], 'acl_in', 1)
+
+        self.change_port_config(
+            self.port_map['port_1'], 'acl_in', 1, cold_start=False)
         self.wait_until_matching_flow(
             {u'in_port': int(self.port_map['port_1']), u'tp_dst': 5001}, table_id=0)
         self.verify_tp_dst_blocked(5001, first_host, second_host)
         self.verify_tp_dst_notblocked(5002, first_host, second_host)
-        self._reload_conf(orig_conf, True)
+
+        self._reload_conf(orig_conf, True, cold_start=False)
+
         self.verify_tp_dst_notblocked(
             5001, first_host, second_host, table_id=None)
         self.verify_tp_dst_notblocked(
@@ -792,7 +827,9 @@ acls:
 
     def test_port_change_permanent_learn(self):
         first_host, second_host, third_host = self.net.hosts[0:3]
-        self.change_port_config(self.port_map['port_1'], 'permanent_learn', True)
+
+        self.change_port_config(
+            self.port_map['port_1'], 'permanent_learn', True, cold_start=False)
         self.ping_all_when_learned()
         original_third_host_mac = third_host.MAC()
         third_host.setMAC(first_host.MAC())
@@ -801,7 +838,7 @@ acls:
         third_host.setMAC(original_third_host_mac)
         self.ping_all_when_learned()
         self.change_port_config(
-            self.port_map['port_1'], 'acl_in', 1)
+            self.port_map['port_1'], 'acl_in', 1, cold_start=False)
         self.wait_until_matching_flow(
             {u'in_port': int(self.port_map['port_1']), u'tp_dst': 5001},
             table_id=0)
@@ -1227,7 +1264,8 @@ vlans:
         self.ping_all_when_learned()
 
 
-class FaucetUntaggedIPv4ControlPlaneTest(FaucetUntaggedTest):
+
+class FaucetSingleUntaggedIPv4ControlPlaneTest(FaucetUntaggedTest):
 
     CONFIG_GLOBAL = """
 vlans:
@@ -1260,6 +1298,11 @@ vlans:
             for host in first_host, second_host:
                 self.one_ipv4_controller_ping(host)
             self.flap_all_switch_ports()
+
+    def test_fping_controller(self):
+        first_host = self.net.hosts[0]
+        self.one_ipv4_controller_ping(first_host)
+        self.verify_controller_fping(first_host, self.FAUCET_VIPV4)
 
 
 class FaucetUntaggedIPv6RATest(FaucetUntaggedTest):
@@ -1345,7 +1388,8 @@ vlans:
                 msg='%s: %s (%s)' % (ra_required, tcpdump_txt, tcpdump_filter))
 
 
-class FaucetUntaggedIPv6ControlPlaneTest(FaucetUntaggedTest):
+
+class FaucetSingleUntaggedIPv6ControlPlaneTest(FaucetUntaggedTest):
 
     CONFIG_GLOBAL = """
 vlans:
@@ -1380,6 +1424,12 @@ vlans:
             for host in first_host, second_host:
                 self.one_ipv6_controller_ping(host)
             self.flap_all_switch_ports()
+
+    def test_fping_controller(self):
+        first_host = self.net.hosts[0]
+        self.add_host_ipv6_address(first_host, 'fc00::1:1/112')
+        self.one_ipv6_controller_ping(first_host)
+        self.verify_controller_fping(first_host, self.FAUCET_VIPV6)
 
 
 class FaucetTaggedAndUntaggedTest(FaucetTest):
@@ -1417,6 +1467,10 @@ vlans:
     def test_seperate_untagged_tagged(self):
         tagged_host_pair = self.net.hosts[:2]
         untagged_host_pair = self.net.hosts[2:]
+        self.verify_vlan_flood_limited(
+            tagged_host_pair[0], tagged_host_pair[1], untagged_host_pair[0])
+        self.verify_vlan_flood_limited(
+            untagged_host_pair[0], untagged_host_pair[1], tagged_host_pair[0])
         # hosts within VLANs can ping each other
         self.assertEquals(0, self.net.ping(tagged_host_pair))
         self.assertEquals(0, self.net.ping(untagged_host_pair))
@@ -2532,8 +2586,7 @@ class FaucetStringOfDPTest(FaucetTest):
                   n_untagged=0, untagged_vid=100,
                   include=[], include_optional=[], acls={}, acl_in_dp={}):
         """Set up Mininet and Faucet for the given topology."""
-
-        self.dpids = [str(random.randint(1, 2**32)) for _ in range(n_dps)]
+        self.dpids = [str(self.rand_dpid()) for _ in range(n_dps)]
         self.dpid = self.dpids[0]
         self.CONFIG = self.get_config(
             self.dpids,
@@ -3152,4 +3205,615 @@ acls:
         source_host, overridden_host, rewrite_host = self.net.hosts[0:3]
         self.verify_dest_rewrite(
             source_host, overridden_host, rewrite_host, overridden_host)
+
+###################################################
+class FaucetAuthenticationTest(FaucetTest):
+    """Base class for the integration tests """
+
+    RUN_GAUGE = False
+    script_path = "/faucet-src/tests/dot1x_capflow_scripts" 
+    pids = {}
+
+    N_UNTAGGED = 5
+    N_TAGGED = 0
+
+    auth_server_port = 0
+
+    def tearDown(self):
+        if self.net is not None:
+            host = self.net.hosts[0]
+            print "about to kill everything"
+            os.system('ps aux')
+            for name, pid in self.pids.iteritems():
+                print name, pid
+                host.cmdPrint('kill ' + str(pid))
+
+#            CLI(self.net)
+            self.net.stop()
+
+    def setup_host(self, hosts, switch):
+        i = 0
+        for host in hosts:
+#        host = self.net.addHost(
+#            "h{0}".format(i),
+#                mac="00:00:00:00:00:1{0}".format(i),
+#                privateDirs=['/etc/wpa_supplicant'])
+#        self.net.addLink(host, switch)
+            username = 'host11{0}user'.format(i)
+            password = 'host11{0}pass'.format(i)
+            i += 1
+            host.cmdPrint("ls /etc/wpa_supplicant")
+
+            wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
+ctrl_interface_group=0
+eapol_version=2
+ap_scan=0
+network={
+key_mgmt=IEEE8021X
+eap=TTLS MD5
+identity="%s"
+anonymous_identity="%s"
+password="%s"
+phase1="auth=MD5"
+phase2="auth=PAP password=password"
+eapol_flags=0
+}''' % (username, username, password)
+            host.cmdPrint('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
+        
+
+
+    def get_users(self):
+        """
+        Get the hosts that are users
+        (ie not the portal or controller hosts)
+        """
+        users = []
+        for host in self.net.hosts:
+            if host.name.startswith("h"):
+                users.append(host)
+        return users
+
+    def find_host(self, hostname):
+        """Find a host when given the name"""
+        for host in self.net.hosts:
+            if host.name == hostname:
+                return host
+        return None
+
+    def logon_capflow(self, host):
+        """Log on a host using CapFlow"""
+        cmd = "ip addr flush {0}-eth0 && dhclient {0}-eth0 -timeout 5".format(host.name)
+        host.cmdPrint(cmd)
+        host.cmdPrint("ip route add default via 10.0.12.1")
+        host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
+        cmd = 'lynx -cmd_script={0}_lynx'.format(
+            os.path.join(self.script_path, host.name))
+        host.cmdPrint(cmd)
+
+    def logon_dot1x(self, host):
+        """Log on a host using dot1x"""
+
+        tcpdump_args = ' '.join((
+            '-s 0',
+            '-e',
+            '-n',
+            '-U',
+            '-q',
+            '-i %s-eth0' % host.name,
+            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+            '>/dev/null',
+            '2>/dev/null',
+        ))
+        host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['%s-tcpdump' % host.name] = host.lastPid
+
+        start_reload_count = self.get_configure_count()
+        cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf &".format(host.name)
+        print("cmd {}".format(cmd))
+        time.sleep(10) # ?????
+        print(host.cmdPrint(cmd))
+        time.sleep(10)
+        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
+        print(host.cmdPrint(cmd))
+        host.cmdPrint("ip route add default via 10.0.0.2")
+        host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
+
+
+        print('start_reload_count' + str(start_reload_count))
+        end_reload_count = self.get_configure_count()
+        print('end_reload_count' + str(end_reload_count))
+        self.assertGreater(end_reload_count, start_reload_count)
+
+    def fail_ping_ipv4(self, host, dst, retries=3):
+        """Try to ping to a destination from a host. This should fail on all the retries"""
+        self.require_host_learned(host)
+        for _ in range(retries):
+            ping_result = host.cmd('ping -c1 %s' % dst)
+            print ping_result
+            self.assertIsNone(re.search(self.ONE_GOOD_PING, ping_result), ping_result)
+
+    def check_http_connection(self, host, retries=3):
+        """Test the http connectivity"""
+        for _ in range(retries):
+            # pylint: disable=no-member 
+            result = host.cmdPrint("wget --output-document=- --quiet 10.0.0.2:{}/index.txt".format(self.ws_port))
+            print 'wgot'
+            print result
+            if re.search("This is a text file on a webserver",result) is not None:
+                return True
+        return False
+
+    def run_controller(self, host):
+        print 'Starting Controller ....'
+#        host.cmdPrint('ryu-manager ryu.app.ofctl_rest faucet.faucet --wsapi-port 8084 &')
+#        lastPid = host.lastPid
+#        print lastPid
+#        os.system('ps a')
+#        host.cmdPrint('echo {} > {}/contr_pid'.format(lastPid, self.tmpdir))
+#        os.system('ps a')
+
+#        self.pids['faucet'] = lastPid
+
+        # think want to get the auth.yaml, and change the location of the faucet.yaml to be the tmp dir.
+
+        with open('/faucet-src/tests/config/auth.yaml', 'r') as f:
+            httpconfig = f.read()
+
+        host.cmdPrint('cp /faucet-src/b.py {}/'.format(self.tmpdir))
+        host.cmdPrint('python3 {0}/b.py {0}/faucet.yaml {0} &'.format(self.tmpdir))
+        self.pids['b'] = host.lastPid
+
+        m = {}
+        m['tmpdir'] = self.tmpdir
+        m['promport'] = self.prom_port
+        m['listenport'] = self.auth_server_port
+        m['logger_location'] = self.tmpdir + '/httpserver.log'
+        m['b'] = self.pids['b']
+
+
+        host.cmdPrint('echo "%s" > %s/auth.yaml' % (httpconfig % m, self.tmpdir))
+        host.cmdPrint('cp -r /faucet-src %s/' % self.tmpdir)
+# > %s/httpserver.txt 2> %s/httpserver.err &'
+        print host.cmdPrint('python3.5 %s/faucet-src/faucet/HTTPServer.py --config  %s/auth.yaml  > %s/httpserver.txt 2> %s/httpserver.err &'  % (self.tmpdir, self.tmpdir, self.tmpdir, self.tmpdir))
+        print 'httpserver started'
+        self.pids['auth_server'] = host.lastPid 
+        print 'httpserver pid'
+        print host.lastPid
+        print host.cmdPrint('ip addr')
+
+        tcpdump_args = ' '.join((
+            '-s 0',
+            '-e',
+            '-n',
+            '-U',
+            '-q',
+            '-i %s-eth0' % host.name,
+            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+            '>/dev/null',
+            '2>/dev/null',
+        ))
+        host.cmd('tcpdump %s &' % tcpdump_args)
+
+
+
+#        host.cmdPrint('tcpdump -i {0}-eth0 -vv >  {1}/controller-eth0.cap 2>&1 &'.format(host.name, self.tmpdir))
+        self.pids['tcpdump'] = host.lastPid
+
+        os.system('ps a')
+        os.system('lsof -i tcp')
+#        CLI(self.net)
+        print 'Controller started.'
+
+
+    def run_captive_portal(self, host):
+        # TODO this was mostly copied from portal.sh so not sure if it actually works here.
+        ipt = "# Generated by iptables-save v1.6.0 on Thu Feb 23 20:20:35 2017 \
+*nat \
+:PREROUTING ACCEPT [0:0] \
+:INPUT ACCEPT [2:120] \
+:OUTPUT ACCEPT [0:0] \
+:POSTROUTING ACCEPT [0:0] \
+-A PREROUTING -d 2.2.2.2/32 -i enp0s8 -p tcp -j REDIRECT \
+-A PREROUTING -i enp0s8 -p tcp -j REDIRECT \
+COMMIT \
+# Completed on Thu Feb 23 20:20:35 2017 \
+# Generated by iptables-save v1.6.0 on Thu Feb 23 20:20:35 2017 \
+*filter \
+:INPUT ACCEPT [111042:871714493] \
+:FORWARD ACCEPT [9:500] \
+:OUTPUT ACCEPT [79360:937635748] \
+COMMIT \
+# Completed on Thu Feb 23 20:20:35 2017 \
+"
+        host.cmdPrint('#echo {0}  | iptables-restore' \
+                      '#cd /home/$(whoami)/sdn-authenticator-webserver/' \
+                      '#nohup java -cp uber-captive-portal-webserver-1.0-SNAPSHOT.jar Main config.yaml > /home/$(whoami)/portal_webserver.out 2>&1 &' \
+                      '#echo $! > /home/$(whoami)/portal_webserver_pid.txt')
+        self.pids['captive_portal'] = host.lastPid
+
+    def run_hostapd(self, host):
+#        host.cmdPrint('cp')
+        # pylint: disable=no-member
+        contr_num = self.net.controller.name.split('-')[1]
+
+        print 'Starting hostapd ....'
+        host.cmdPrint('''echo "interface={0}-eth0\n
+driver=wired\n
+logger_stdout=-1\n
+logger_stdout_level=0\n
+ieee8021x=1\n
+eap_reauth_period=3600\n
+use_pae_group_addr=0\n
+eap_server=1\n
+eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name , self.tmpdir))
+
+        host.cmdPrint('cp -r /root/hostapd-d1xf/ {}/hostapd-d1xf'.format(self.tmpdir))
+
+
+#cd /root/hostapd-d1xf/hostapd && \
+        print host.cmdPrint('''sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
+sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
+sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
+sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
+cd {1}/hostapd-d1xf/hostapd && \
+make'''.format(contr_num, self.tmpdir, self.auth_server_port))
+
+        print 'made hostapd'
+#        host.cmdPrint("""sed -i 's/172\.30\.15\.3/172\.30\.13\.3/g' %s/hostapd""" % (self.tmpdir))
+#        host.cmdPrint("""sed -i 's/172\.30\.13\.3/172\.30\.%s\.3/g' %s/hostapd""" % (contr_num, self.tmpdir))
+#        host.cmdPrint("""sed -i 's/qwert/{0}/g' {1}/hostapd""".format(self.auth_server_port, self.tmpdir))
+
+        host.cmdPrint('{0}/hostapd-d1xf/hostapd/hostapd -d {0}/{1}-wired.conf > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, host.name))
+        self.pids['hostapd'] = host.lastPid
+
+        tcpdump_args = ' '.join((
+            '-s 0',
+            '-e',
+            '-n',
+            '-U',
+            '-q',
+            '-i %s-eth1' % host.name,
+            '-w %s/%s-eth1.cap' % (self.tmpdir, host.name),
+            '>/dev/null',
+            '2>/dev/null',
+        ))
+        host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['p1-tcpdump'] = host.lastPid
+
+        tcpdump_args = ' '.join((
+            '-s 0',
+            '-e',
+            '-n',
+            '-U',
+            '-q',
+            '-i %s-eth0' % host.name,
+            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+            '>/dev/null',
+            '2>/dev/null',
+        ))
+        host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['p0-tcpdump'] = host.lastPid
+
+        print os.system('ps aux') 
+
+    def makeDHCPconfig(self, filename, intf, gw, dns ):
+
+        DNSTemplate = """
+start       10.0.12.10
+end     10.0.12.255
+option  subnet  255.0.0.0
+option  domain  local
+option  lease   120  # seconds
+"""
+
+        "Create a DHCP configuration file"
+        config = (
+            'interface %s' % intf,
+            DNSTemplate,
+            'option router %s' % gw,
+            'option dns %s' % dns,
+            '' )
+        with open( filename, 'w' ) as f:
+            f.write( '\n'.join( config ) )
+
+    def startDHCPserver(self, host, gw, dns ):
+        "Start DHCP server on host with specified DNS server"
+        print( '* Starting DHCP server on', host, 'at', host.IP(), '\n' )
+        dhcpConfig = '/tmp/%s-udhcpd.conf' % host
+        self.makeDHCPconfig( dhcpConfig, host.defaultIntf(), gw, dns )
+        host.cmd( 'udhcpd -f', dhcpConfig,
+          '1>/tmp/%s-dhcp.log 2>&1  &' % host )
+
+    def setup(self):
+        super(FaucetAuthenticationTest, self).setUp()
+
+
+
+class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
+    ws_port = 0
+    clients = []
+    CONFIG_GLOBAL = """
+vlans:
+    100:
+        description: "untagged"
+acls:
+    port_faucet-1_3:
+        - rule:
+            _name_: d1x
+            actions:
+                allow: 1
+                dl_dst: 70:6f:72:74:61:6c
+            dl_type: 34958
+        - rule:
+            _name_: redir41x
+            actions:
+                allow: 1
+                output:
+                    dl_dst: 70:6f:72:74:61:6c
+    port_faucet-1_4:
+        - rule:
+            _name_: d1x
+            actions:
+                allow: 1
+                dl_dst: 70:6f:72:74:61:6c
+            dl_type: 34958
+        - rule:
+            _name_: redir41x
+            actions:
+                allow: 1
+                output:
+                    dl_dst: 70:6f:72:74:61:6c
+
+    port_faucet-1_5:
+        - rule:
+            _name_: d1x
+            actions:
+                allow: 1
+                dl_dst: 70:6f:72:74:61:6c
+            dl_type: 34958
+        - rule:
+            _name_: redir41x
+            actions:
+                allow: 1
+                output:
+                    dl_dst: 70:6f:72:74:61:6c
+"""
+
+    CONFIG = """
+        interfaces:
+            %(port_1)d:
+                name: portal
+                native_vlan: 100
+            %(port_2)d:
+                name: gateway
+                native_vlan: 100
+            %(port_3)d:
+                name: host1
+                native_vlan: 100
+                acl_in: port_faucet-1_%(port_3)d
+                auth_mode: access
+            %(port_4)d:
+                name: host2
+                native_vlan: 100
+                acl_in: port_faucet-1_%(port_4)d
+                auth_mode: access
+            %(port_5)d:
+                name: host3
+                native_vlan: 100
+                acl_in: port_faucet-1_%(port_5)d
+                auth_mode: access
+"""
+    def setUp(self):
+        super(FaucetAuthenticationSingleSwitchTest, self).setUp()
+        self.topo = self.topo_class(
+            self.ports_sock, dpid=self.dpid, n_tagged=0, n_untagged=5)
+
+        print 'sINGLE sWITCH test'
+#        self.net = None
+#        self.dpid = "1"
+
+#        self.v2_config_hashes, v2_dps = dp_parser('/faucet-src/tests/config/testconfigv2-1x.yaml', 'test_auth')
+#        self.v2_dps_by_id = {}
+#        for dp in v2_dps:
+#            self.v2_dps_by_id[dp.dp_id] = dp
+#        self.v2_dp = self.v2_dps_by_id[0x1]
+
+        # copy config file from tests/config to /etc/ryu/faucet/facuet/yaml
+#        try:
+#            os.makedirs('/etc/ryu/faucet')
+#        except:
+#            pass
+#        shutil.copyfile("/faucet-src/tests/config/testconfigv2-1x-1s.yaml", "/etc/ryu/faucet/faucet.yaml")
+        print 'finding free port'
+        port = 0
+        while port <=9999:
+            port, _ = faucet_mininet_test_util.find_free_port(
+                self.ports_sock, self._test_name())
+            print 'auth_server_port: ' + str(port)
+
+        self.auth_server_port = port
+        self.start_net()
+        self.start_programs() 
+
+    def start_programs(self):
+        """Start Mininet."""
+#        self.net = Mininet(build=False)
+#        c0 = self.net.addController(
+#            "c0",
+#            controller=FaucetDot1xCapFlowController,
+#            ip='127.0.0.1',
+#            port=6653,
+#            switch=OVSSwitch)
+
+        print 'Controller'
+        print self.net.controller
+
+ 
+#        switch1 = self.net.addSwitch(
+#            "s1", cls=OVSSwitch, inband=True, protocols=["OpenFlow13"])
+#        switch1.start([c0])
+        # pylint: disable=unbalanced-tuple-unpacking
+        portal, interweb, h0, h1, h2 = self.net.hosts
+        # pylint: disable=no-member
+        lastPid = self.net.controller.lastPid
+        print lastPid
+#        os.system('ps a')
+        # pylint: disable=no-member
+        self.net.controller.cmdPrint('echo {} > {}/contr_pid'.format(lastPid, self.tmpdir))
+        self.pids['faucet'] = lastPid
+
+#            self.net.addHost(
+#            "portal", ip='10.0.12.3/24', mac="70:6f:72:74:61:6c")
+#        self.net.addLink(portal, switch1)
+        # pylint: disable=no-member
+        contr_num = self.net.controller.name.split('-')[1]
+
+        self.net.addLink(
+            portal,
+            self.net.controller,
+#            params1={'ip': '172.30.13.2/24'},
+#            params2={'ip': '172.30.13.3/24'})
+#        print 'portal ping controller'
+#        print portal.cmdPrint('ping -c5 172.30.13.2')
+            params1={'ip': '192.168.%s.2/24' % contr_num},
+            params2={'ip': '192.168.%s.3/24' % contr_num})
+        print 'portal ping controller'
+        print portal.cmdPrint('ping -c5 192.168.%s.3' % contr_num)
+        self.run_controller(self.net.controller)
+
+#        interweb = self.net.addHost(
+#            "interweb", ip='10.0.12.1/24', mac="08:00:27:ee:ee:ee")
+#        self.net.addLink(interweb, switch1)
+
+        interweb.cmdPrint('echo "This is a text file on a webserver" > index.txt')
+        self.ws_port, _ = faucet_mininet_test_util.find_free_port(
+            self.ports_sock, self._test_name())
+        print "ws_port"
+        print self.ws_port        
+        interweb.cmdPrint('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
+
+ #       for i in range(0, 3):
+        hosts = self.net.hosts[2:]
+
+        print 'hosts'
+        print self.net.hosts
+        print 'clients'
+        print hosts
+        self.clients = hosts
+        self.setup_host(hosts, self.net.switch)
+                        
+
+#        self.net.build()
+#        self.net.start()
+        self.startDHCPserver(interweb, gw='10.0.0.2', dns='8.8.8.8')
+
+        self.run_hostapd(portal)
+        portal.cmdPrint('ip route add 10.0.0.0/8 dev {}-eth0'.format(portal.name))
+
+
+class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest):
+    """Check if authenticated and unauthenticated users can communicate"""
+
+    def ping_between_hosts(self, users):
+        """Ping between the specified hosts"""
+        for user in users:
+            user.defaultIntf().updateIP()
+
+        #ping between the authenticated hosts
+        ploss = self.net.ping(hosts=users[:2], timeout='5')
+        self.assertAlmostEqual(ploss, 0)
+
+        #ping between an authenticated host and an unauthenticated host
+        ploss = self.net.ping(hosts=users[1:], timeout='5')
+        self.assertAlmostEqual(ploss, 100)
+        ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
+        self.assertAlmostEqual(ploss, 100)
+
+    def QWERTYtest_onlycapflow(self):
+        """Only authenticate through CapFlow """
+        users = self.get_users()
+        self.logon_capflow(users[0])
+        self.logon_capflow(users[1])
+        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
+            users[2].name)
+        users[2].cmdPrint(cmd)
+        self.ping_between_hosts(users)
+
+    def test_onlydot1x(self):
+        """Only authenticate through dot1x"""
+        users = self.clients
+        self.logon_dot1x(users[0])
+        self.logon_dot1x(users[1])
+        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
+            users[2].name)
+        users[2].cmdPrint(cmd)
+        self.ping_between_hosts(users)
+
+    def QWERTYtest_bothauthentication(self):
+        """Authenicate one user with dot1x and the other with CapFlow"""
+        users = self.get_users()
+        self.logon_dot1x(users[0])
+        self.logon_capflow(users[1])
+        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
+            users[2].name)
+        users[2].cmdPrint(cmd)
+        self.ping_between_hosts(users)
+
+
+class FaucetAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
+    """Check the connectivity when the hosts are not authenticated"""
+
+    def test_nologon(self):
+        """
+        Get the users to ping each other 
+        before anyone has authenticated
+        """
+        users = self.clients
+        for user in users:
+            cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
+                user.name)
+            user.cmdPrint(cmd)
+            user.defaultIntf().updateIP()
+
+        ploss = self.net.ping(hosts=users, timeout='5')
+        self.assertAlmostEqual(ploss, 100)
+
+
+class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchTest):
+    """Check if a user can logon successfully using dot1x"""
+
+    def test_dot1xlogon(self):
+        """Log on using dot1x"""
+#        os.system("ps a")
+        h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+        self.logon_dot1x(h0) 
+        self.one_ipv4_ping(h0, '10.0.0.2')
+        result = self.check_http_connection(h0)
+        self.assertTrue(result)
+
+
+class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitchTest):
+    """Log on using dot1x and log off"""
+
+    def test_logoff(self):
+        """Check that the user cannot go on the internet after logoff"""
+        h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+        self.logon_dot1x(h0)
+#        time.sleep(5)
+        self.one_ipv4_ping(h0, '10.0.0.2')
+#        time.sleep(5)
+        result = self.check_http_connection(h0)
+
+        self.assertTrue(result)
+        print 'wpa_cli status'
+        print h0.cmdPrint('wpa_cli status')
+        print h0.cmdPrint("wpa_cli logoff")
+        time.sleep(60)
+        print 'wpa_cli status'
+        print h0.cmdPrint('wpa_cli status')
+        self.fail_ping_ipv4(h0, '10.0.0.2')
+        result = self.check_http_connection(h0)
+        self.assertFalse(result)
 
