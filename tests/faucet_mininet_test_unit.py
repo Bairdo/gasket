@@ -3308,15 +3308,25 @@ eapol_flags=0
         self.pids['%s-tcpdump' % host.name] = host.lastPid
 
         start_reload_count = self.get_configure_count()
-        cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf &".format(host.name)
+        
+        cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf > /dev/null 2>&1 &".format(host.name)
         print("cmd {}".format(cmd))
         time.sleep(10) # ?????
         print(host.cmdPrint(cmd))
-        time.sleep(10)
+        '''        
+        portal = self.net.hosts[0]
+        # pylint: disable=no-member
+        print('overriding hostapd logon')
+        cmd = 'python3 /faucet-src/h.py 192.168.{0}.3 {1} {2} logon'.format(self.net.controller.name.split('-')[1], self.auth_server_port, host.MAC() )
+        print(cmd)
+        print(portal.cmdPrint(cmd))
+        print('done h.py. logon')
+'''
+        time.sleep(20)
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         print(host.cmdPrint(cmd))
-        host.cmdPrint("ip route add default via 10.0.0.2")
-        host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
+#        host.cmdPrint("ip route add default via 10.0.0.2")
+#        host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
 
 
         print('start_reload_count' + str(start_reload_count))
@@ -3394,9 +3404,6 @@ eapol_flags=0
         ))
         host.cmd('tcpdump %s &' % tcpdump_args)
 
-
-
-#        host.cmdPrint('tcpdump -i {0}-eth0 -vv >  {1}/controller-eth0.cap 2>&1 &'.format(host.name, self.tmpdir))
         self.pids['tcpdump'] = host.lastPid
 
         os.system('ps a')
@@ -3434,7 +3441,7 @@ COMMIT \
     def run_hostapd(self, host):
 #        host.cmdPrint('cp')
         # pylint: disable=no-member
-        contr_num = self.net.controller.name.split('-')[1]
+        contr_num = int(self.net.controller.name.split('-')[1]) % 255
 
         print 'Starting hostapd ....'
         host.cmdPrint('''echo "interface={0}-eth0\n
@@ -3500,10 +3507,10 @@ make'''.format(contr_num, self.tmpdir, self.auth_server_port))
 
         DNSTemplate = """
 start       10.0.12.10
-end     10.0.12.255
+end     10.0.12.250
 option  subnet  255.0.0.0
 option  domain  local
-option  lease   120  # seconds
+option  lease   300  # seconds
 """
 
         "Create a DHCP configuration file"
@@ -3522,7 +3529,22 @@ option  lease   120  # seconds
         dhcpConfig = '/tmp/%s-udhcpd.conf' % host
         self.makeDHCPconfig( dhcpConfig, host.defaultIntf(), gw, dns )
         host.cmd( 'udhcpd -f', dhcpConfig,
-          '1>/tmp/%s-dhcp.log 2>&1  &' % host )
+          '> %s/%s-dhcp.log 2>&1  &' % (self.tmpdir, host ))
+
+        tcpdump_args = ' '.join((
+            '-s 0',
+            '-e',
+            '-n',
+            '-U',
+            '-q',
+            '-i %s-eth0' % host.name,
+            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+            '>/dev/null',
+            '2>/dev/null',
+        ))
+        host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['i-tcpdump'] = host.lastPid
+
 
     def setup(self):
         super(FaucetAuthenticationTest, self).setUp()
@@ -3666,8 +3688,8 @@ acls:
 #            "portal", ip='10.0.12.3/24', mac="70:6f:72:74:61:6c")
 #        self.net.addLink(portal, switch1)
         # pylint: disable=no-member
-        contr_num = self.net.controller.name.split('-')[1]
-
+        contr_num = int(self.net.controller.name.split('-')[1]) % 255
+        self.assertLess(int(contr_num), 255)
         self.net.addLink(
             portal,
             self.net.controller,
@@ -3719,15 +3741,41 @@ class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest)
         for user in users:
             user.defaultIntf().updateIP()
 
+        h0 = users[0]
+        h1 = users[1]
+        h2 = users[2]
+        h1_ip = ipaddress.ip_address(unicode(h1.IP()))
+        # h2 will not have an ip as they are unauthenticated
+        h2.setIP('10.0.12.253')
+        h2_ip = ipaddress.ip_address(unicode(h2.IP()))
         #ping between the authenticated hosts
-        ploss = self.net.ping(hosts=users[:2], timeout='5')
-        self.assertAlmostEqual(ploss, 0)
+        print('h1_ip %s' % h1_ip)
+        print(h0)
+        print(type(h0))
+        self.one_ipv4_ping(h0, h1_ip)
+        self.one_ipv4_ping(h1, '10.0.0.2')
+#        ploss = self.net.ping(hosts=users[:2], timeout='5')
+#        self.assertAlmostEqual(ploss, 0)
 
         #ping between an authenticated host and an unauthenticated host
-        ploss = self.net.ping(hosts=users[1:], timeout='5')
-        self.assertAlmostEqual(ploss, 100)
+        try:
+            self.one_ipv4_ping(h1, h2_ip)
+        except AssertionError:
+            pass
+        else:
+            self.fail('{0} {1} should not be able to ping {2} {3}'.format(h1, h1.IP(), h2, h2.IP()))
+#        ploss = self.net.ping(hosts=users[1:], timeout='5')
+#        self.assertAlmostEqual(ploss, 100)
+        
         ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
         self.assertAlmostEqual(ploss, 100)
+        try:
+            self.one_ipv4_ping(h0, h2_ip)
+        except AssertionError:
+            pass
+        else:
+            self.fail('{0} {1} should not be able to ping {2} {3}'.format(h0, h0.IP(), h2, h2.IP()))
+
 
     def QWERTYtest_onlycapflow(self):
         """Only authenticate through CapFlow """
@@ -3742,11 +3790,36 @@ class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest)
     def test_onlydot1x(self):
         """Only authenticate through dot1x"""
         users = self.clients
+
+        flows = self.get_all_flows_from_dpid(self.dpid)
+        print('printing table_id 3 flows:')
+        for flow in flows:
+            if re.search('''table_id": 3''', flow):
+                print(flow)
+
         self.logon_dot1x(users[0])
+#        time.sleep(320)
+        flows = self.get_all_flows_from_dpid(self.dpid)
+        print('printing table_id 3 flows after h0 logged on:')
+        for flow in flows:
+            if re.search('''table_id": 3''', flow):
+                print(flow)
+        # trick faucet into learning the port of h2
+#        try:
+#            self.one_ipv4_ping(users[1], '10.0.0.1')
+#        except AssertionError:
+#            pass
+
         self.logon_dot1x(users[1])
-        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
-            users[2].name)
-        users[2].cmdPrint(cmd)
+        time.sleep(10)
+        flows = self.get_all_flows_from_dpid(self.dpid)
+        print('printing table_id 0 flows after h1 logged on:')
+        for flow in flows:
+            if re.search('''table_id": 0''', flow):
+                print(flow)
+#        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
+#            users[2].name)
+#        users[2].cmdPrint(cmd)
         self.ping_between_hosts(users)
 
     def QWERTYtest_bothauthentication(self):
@@ -3787,8 +3860,8 @@ class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchTest):
 #        os.system("ps a")
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
-        self.logon_dot1x(h0) 
-        self.one_ipv4_ping(h0, '10.0.0.2')
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP())
         result = self.check_http_connection(h0)
         self.assertTrue(result)
 
@@ -3807,12 +3880,23 @@ class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitchTest):
         result = self.check_http_connection(h0)
 
         self.assertTrue(result)
+        
         print 'wpa_cli status'
         print h0.cmdPrint('wpa_cli status')
         print h0.cmdPrint("wpa_cli logoff")
         time.sleep(60)
         print 'wpa_cli status'
         print h0.cmdPrint('wpa_cli status')
+
+        '''
+        portal = self.net.hosts[0]
+        print('overriding hostapd logoff')
+        # pylint: disable=no-member
+        cmd = 'python3 /faucet-src/h.py 192.168.{0}.3 {1} {2} logoff'.format(self.net.controller.name.split('-')[1], self.auth_server_port, h0.MAC() )
+        print(cmd)
+        print(portal.cmdPrint(cmd))
+        print('done h.py. logoff')
+        '''
         self.fail_ping_ipv4(h0, '10.0.0.2')
         result = self.check_http_connection(h0)
         self.assertFalse(result)
