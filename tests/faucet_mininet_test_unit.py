@@ -3741,7 +3741,7 @@ acls:
         portal.cmdPrint('ip route add 10.0.0.0/8 dev {}-eth0'.format(portal.name))
 
 
-class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest):
     """Check if authenticated and unauthenticated users can communicate"""
 
     def ping_between_hosts(self, users):
@@ -3841,7 +3841,7 @@ class FaucetAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest)
         self.ping_between_hosts(users)
 
 
-class FaucetAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
@@ -3860,7 +3860,7 @@ class FaucetAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchTest):
     """Check if a user can logon successfully using dot1x"""
 
     def test_dot1xlogon(self):
@@ -3868,13 +3868,22 @@ class FaucetAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchTest):
 #        os.system("ps a")
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
+        flows = self.get_all_flows_from_dpid(self.dpid)
+        print('printing table_id 3 flows:')
+        for flow in flows:
+            if re.search('''table_id": 3''', flow):
+                print(flow)
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP())
         result = self.check_http_connection(h0)
         self.assertTrue(result)
+        flows = self.get_all_flows_from_dpid(self.dpid)
+        print('printing table_id 3 flows:')
+        for flow in flows:
+            if re.search('''table_id": 3''', flow):
+                print(flow)
 
-
-class FaucetAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitchTest):
     """Log on using dot1x and log off"""
 
     def test_logoff(self):
