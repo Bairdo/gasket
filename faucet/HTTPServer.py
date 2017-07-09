@@ -389,7 +389,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             thread_lock.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
-            self._add_cp_acls(json_data['mac'])
+#            self._add_cp_acls(json_data['mac'])
 
             # TODO unlock
             lockfile.unlock(conf_fd)
