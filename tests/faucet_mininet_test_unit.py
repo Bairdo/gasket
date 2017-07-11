@@ -3323,10 +3323,8 @@ class FaucetAuthenticationTest(FaucetTest):
         if self.net is not None:
             host = self.net.hosts[0]
             print "about to kill everything"
-            os.system('ps aux')
             for name, pid in self.pids.iteritems():
-                print name, pid
-                host.cmdPrint('kill ' + str(pid))
+                host.cmd('kill ' + str(pid))
 
             self.net.stop()
 
@@ -3340,7 +3338,6 @@ class FaucetAuthenticationTest(FaucetTest):
             username = 'host11{0}user'.format(i)
             password = 'host11{0}pass'.format(i)
             i += 1
-            host.cmdPrint("ls /etc/wpa_supplicant")
 
             wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
 ctrl_interface_group=0
@@ -3356,7 +3353,7 @@ phase1="auth=MD5"
 phase2="auth=PAP password=password"
 eapol_flags=0
 }''' % (username, username, password)
-            host.cmdPrint('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
+            host.cmd('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
         
     def get_users(self):
         """Get the hosts that are users (ie not the portal or controller hosts)
@@ -3419,9 +3416,7 @@ eapol_flags=0
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         print(host.cmdPrint(cmd))
 
-        print('start_reload_count' + str(start_reload_count))
         end_reload_count = self.get_configure_count()
-        print('end_reload_count' + str(end_reload_count))
         self.assertGreater(end_reload_count, start_reload_count)
 
     def fail_ping_ipv4(self, host, dst, retries=3):
@@ -3493,8 +3488,8 @@ eapol_flags=0
 
         self.pids['tcpdump'] = host.lastPid
 
-        os.system('ps a')
-        os.system('lsof -i tcp')
+
+
         print 'Controller started.'
 
     def run_captive_portal(self, host):
@@ -3585,8 +3580,6 @@ make'''.format(contr_num, self.tmpdir, self.auth_server_port))
         ))
         host.cmd('tcpdump %s &' % tcpdump_args)
         self.pids['p0-tcpdump'] = host.lastPid
-
-        print os.system('ps aux') 
 
     def makeDHCPconfig(self, filename, intf, gw, dns):
         """Create configuration file for udhcpd.
@@ -3776,14 +3769,8 @@ acls:
         print self.ws_port        
         interweb.cmdPrint('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
 
-        hosts = self.net.hosts[2:]
-
-        print 'hosts'
-        print self.net.hosts
-        print 'clients'
-        print hosts
-        self.clients = hosts
-        self.setup_hosts(hosts)
+        self.clients = self.net.hosts[2:]
+        self.setup_hosts(self.clients)
 
         self.startDHCPserver(interweb, gw='10.0.0.2', dns='8.8.8.8')
 
@@ -3810,9 +3797,6 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
         h2.setIP('10.0.12.253')
         h2_ip = ipaddress.ip_address(unicode(h2.IP()))
         # ping between the authenticated hosts
-        print('h1_ip %s' % h1_ip)
-        print(h0)
-        print(type(h0))
         self.one_ipv4_ping(h0, h1_ip)
         self.one_ipv4_ping(h1, '10.0.0.2')
 
@@ -3847,26 +3831,9 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
         """Only authenticate through dot1x"""
         users = self.clients
 
-        flows = self.get_all_flows_from_dpid(self.dpid)
-        print('printing table_id 3 flows:')
-        for flow in flows:
-            if re.search('''table_id": 3''', flow):
-                print(flow)
-
         self.logon_dot1x(users[0])
-        flows = self.get_all_flows_from_dpid(self.dpid)
-        print('printing table_id 3 flows after h0 logged on:')
-        for flow in flows:
-            if re.search('''table_id": 3''', flow):
-                print(flow)
-
         self.logon_dot1x(users[1])
         time.sleep(10)
-        flows = self.get_all_flows_from_dpid(self.dpid)
-        print('printing table_id 0 flows after h1 logged on:')
-        for flow in flows:
-            if re.search('''table_id": 0''', flow):
-                print(flow)
         self.ping_between_hosts(users)
 
     def QWERTYtest_bothauthentication(self):
@@ -3904,20 +3871,11 @@ class FaucetSingleAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchT
         """Log on using dot1x"""
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
-        flows = self.get_all_flows_from_dpid(self.dpid)
-        print('printing table_id 3 flows:')
-        for flow in flows:
-            if re.search('''table_id": 3''', flow):
-                print(flow)
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP())
         result = self.check_http_connection(h0)
         self.assertTrue(result)
-        flows = self.get_all_flows_from_dpid(self.dpid)
-        print('printing table_id 3 flows:')
-        for flow in flows:
-            if re.search('''table_id": 3''', flow):
-                print(flow)
+
 
 class FaucetSingleAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitchTest):
     """Log on using dot1x and log off"""
