@@ -3462,17 +3462,11 @@ eapol_flags=0
         with open('/faucet-src/tests/config/auth.yaml', 'r') as f:
             httpconfig = f.read()
 
-        host.cmdPrint('cp /faucet-src/b.py {}/'.format(self.tmpdir))
-        host.cmdPrint('python3 {0}/b.py {0}/faucet.yaml {0} &'.format(self.tmpdir))
-        self.pids['b'] = host.lastPid
-
         m = {}
         m['tmpdir'] = self.tmpdir
         m['promport'] = self.prom_port
         m['listenport'] = self.auth_server_port
         m['logger_location'] = self.tmpdir + '/httpserver.log'
-        m['b'] = self.pids['b']
-
 
         host.cmdPrint('echo "%s" > %s/auth.yaml' % (httpconfig % m, self.tmpdir))
         host.cmdPrint('cp -r /faucet-src %s/' % self.tmpdir)

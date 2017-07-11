@@ -435,8 +435,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
             os.kill(contr_pid, signal_type)
             self.logger.info('sending signal {} to pid {}'.format(signal_type, contr_pid))
 
-        os.kill(self.config.b, signal_type)
-
     def check_if_json(self):
         try:
             ctype, pdict = cgi.parse_header(

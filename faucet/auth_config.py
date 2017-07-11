@@ -7,8 +7,6 @@ class AuthConfig(object):
     def __init__(self, filename):
         data = yaml.load(open(filename, 'r'))
 
-        self.b = int(data['b'])
-
         self.version = data['version']
         self.logger_location = data['logger_location']
         self.listen_port = int(data['listen_port'])
