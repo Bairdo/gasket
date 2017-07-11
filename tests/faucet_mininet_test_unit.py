@@ -3308,7 +3308,7 @@ acls:
 
 
 class FaucetAuthenticationTest(FaucetTest):
-    """Base class for the integration tests """
+    """Base class for the authentication tests """
 
     RUN_GAUGE = False
     script_path = "/faucet-src/tests/dot1x_capflow_scripts" 
@@ -3330,7 +3330,11 @@ class FaucetAuthenticationTest(FaucetTest):
 
             self.net.stop()
 
-    def setup_host(self, hosts, switch):
+    def setup_hosts(self, hosts):
+        """Create wpa_supplicant config file for each authenticating host.
+        Args:
+            hosts (list<mininet.host>): host to create config for.
+        """
         i = 0
         for host in hosts:
             username = 'host11{0}user'.format(i)
@@ -3355,9 +3359,9 @@ eapol_flags=0
             host.cmdPrint('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
         
     def get_users(self):
-        """
-        Get the hosts that are users
-        (ie not the portal or controller hosts)
+        """Get the hosts that are users (ie not the portal or controller hosts)
+        Returns:
+            list<mininet.host>
         """
         users = []
         for host in self.net.hosts:
@@ -3366,7 +3370,10 @@ eapol_flags=0
         return users
 
     def find_host(self, hostname):
-        """Find a host when given the name"""
+        """Find a host when given the name
+        Args:
+            hostname (str): name of host to find.
+        """
         for host in self.net.hosts:
             if host.name == hostname:
                 return host
@@ -3383,7 +3390,10 @@ eapol_flags=0
         host.cmdPrint(cmd)
 
     def logon_dot1x(self, host):
-        """Log on a host using dot1x"""
+        """Log on a host using dot1x
+        Args:
+            host (mininet.host): host to logon.
+        """
 
         tcpdump_args = ' '.join((
             '-s 0',
@@ -3405,15 +3415,6 @@ eapol_flags=0
         print("cmd {}".format(cmd))
         time.sleep(10) # ?????
         print(host.cmdPrint(cmd))
-        '''        
-        portal = self.net.hosts[0]
-        # pylint: disable=no-member
-        print('overriding hostapd logon')
-        cmd = 'python3 /faucet-src/h.py 192.168.{0}.3 {1} {2} logon'.format(self.net.controller.name.split('-')[1], self.auth_server_port, host.MAC() )
-        print(cmd)
-        print(portal.cmdPrint(cmd))
-        print('done h.py. logon')
-'''
         time.sleep(20)
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         print(host.cmdPrint(cmd))
@@ -3424,7 +3425,12 @@ eapol_flags=0
         self.assertGreater(end_reload_count, start_reload_count)
 
     def fail_ping_ipv4(self, host, dst, retries=3):
-        """Try to ping to a destination from a host. This should fail on all the retries"""
+        """Try to ping to a destination from a host. This should fail on all the retries
+        Args:
+            host (mininet.host): source host.
+            dst (str): destination ip address.
+            retries (int): number of attempts.
+        """
         self.require_host_learned(host)
         for _ in range(retries):
             ping_result = host.cmd('ping -c1 %s' % dst)
@@ -3432,7 +3438,12 @@ eapol_flags=0
             self.assertIsNone(re.search(self.ONE_GOOD_PING, ping_result), ping_result)
 
     def check_http_connection(self, host, retries=3):
-        """Test the http connectivity"""
+        """Test the http connectivity by wget-ing a webpage on 10.0.0.2
+        Args:
+            host (mininet.host): source.
+            retries (int): number of attempts.
+        Returns:
+            True if download successful. False otherwise."""
         for _ in range(retries):
             # pylint: disable=no-member 
             result = host.cmdPrint("wget --output-document=- --quiet 10.0.0.2:{}/index.txt".format(self.ws_port))
@@ -3443,6 +3454,10 @@ eapol_flags=0
         return False
 
     def run_controller(self, host):
+        """Starts the authentication controller app.
+        Args:
+            host (mininet.host): host to start app on (generally the controller)
+        """
         print 'Starting Controller ....'
         with open('/faucet-src/tests/config/auth.yaml', 'r') as f:
             httpconfig = f.read()
@@ -3486,9 +3501,7 @@ eapol_flags=0
 
         os.system('ps a')
         os.system('lsof -i tcp')
-
         print 'Controller started.'
-
 
     def run_captive_portal(self, host):
         # TODO this was mostly copied from portal.sh so not sure if it actually works here.
@@ -3517,6 +3530,13 @@ COMMIT \
         self.pids['captive_portal'] = host.lastPid
 
     def run_hostapd(self, host):
+        """Compiles and starts the hostapd process.
+        Args:
+            host (mininet.host): host to run hostapd on.
+        """
+        # TODO fix this monstrosity, of compiling the program in the test.
+
+        # TODO fix this hack, (collisions also possible)
         # pylint: disable=no-member
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
 
@@ -3574,8 +3594,14 @@ make'''.format(contr_num, self.tmpdir, self.auth_server_port))
 
         print os.system('ps aux') 
 
-    def makeDHCPconfig(self, filename, intf, gw, dns ):
-
+    def makeDHCPconfig(self, filename, intf, gw, dns):
+        """Create configuration file for udhcpd.
+        Args:
+            filename (str): name of config file.
+            intf: interface of server to listen on.
+            gw (str): ip address of gateway
+            dns (str): ip address of dns server
+        """
         DNSTemplate = """
 start       10.0.12.10
 end     10.0.12.250
@@ -3595,7 +3621,13 @@ option  lease   300  # seconds
             f.write( '\n'.join( config ) )
 
     def startDHCPserver(self, host, gw, dns ):
-        "Start DHCP server on host with specified DNS server"
+        """Start DHCP server (udhcp) on host with specified DNS server
+        Args:
+            host (mininet.host): host to run udhcp server on.
+            intf: interface of server to listen on.
+            gw (str): ip address of gateway
+            dns (str): ip address of dns server
+        """
         print( '* Starting DHCP server on', host, 'at', host.IP(), '\n' )
         dhcpConfig = '/tmp/%s-udhcpd.conf' % host
         self.makeDHCPconfig( dhcpConfig, host.defaultIntf(), gw, dns )
@@ -3621,8 +3653,9 @@ option  lease   300  # seconds
         super(FaucetAuthenticationTest, self).setUp()
 
 
-
 class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
+    """Base Test class for single switch topology
+    """
     ws_port = 0
     clients = []
     CONFIG_GLOBAL = """
@@ -3715,6 +3748,8 @@ acls:
         self.start_programs() 
 
     def start_programs(self):
+        """Start the authentication controller app, hostapd, dhcp server, 'internet' webserver
+        """
         """Start Mininet."""
         print 'Controller'
         print self.net.controller
@@ -3754,7 +3789,7 @@ acls:
         print 'clients'
         print hosts
         self.clients = hosts
-        self.setup_host(hosts, self.net.switch)
+        self.setup_hosts(hosts)
 
         self.startDHCPserver(interweb, gw='10.0.0.2', dns='8.8.8.8')
 
@@ -3766,7 +3801,10 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
     """Check if authenticated and unauthenticated users can communicate"""
 
     def ping_between_hosts(self, users):
-        """Ping between the specified hosts"""
+        """Ping between the specified host
+        Args:
+            users (list<mininet.host>): users to ping between. 0 & 1 should be authenitcated. 2 should be unauthenticated,
+        """
         for user in users:
             user.defaultIntf().updateIP()
 
@@ -3852,9 +3890,7 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
-        """
-        Get the users to ping each other 
-        before anyone has authenticated
+        """Get the users to ping each other before anyone has authenticated
         """
         users = self.clients
         for user in users:
