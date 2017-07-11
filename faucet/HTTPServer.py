@@ -303,10 +303,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         if json_data == None:
             return
 
-        if self.path == self.config.dot1x_auth_path: # or self.path == self.config.captive_portal_auth_path:
+        if self.path == self.config.dot1x_auth_path:
             self.authenticate(json_data)
-#        elif self.path == self.config.idle_path:
-#            self.idle(json_data)
         else:
             self.send_error('Path not found\n')
 
@@ -373,31 +371,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         # rename .tmp to old file.
         os.remove(self.config.acl_config_file)
         os.rename(self.config.acl_config_file + '.tmp', self.config.acl_config_file)
-
-    def idle(self, json_data):
-        if not ('mac' in json_data and 'retrans' in json_data):
-            self.send_error('Invalid form\n')
-            return
-
-        message = 'Idle user on {} has had {} retransmissions'.format(
-                    json_data['mac'], json_data['retrans'])
-        self._set_headers(200, 'text/html')
-        self.log_message('%s', message)
-        self.wfile.write(message.encode(encoding='utf-8'))
-        if json_data['retrans'] > self.config.retransmission_attempts:
-            # TODO lock
-            thread_lock.acquire()
-            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-
-#            self._add_cp_acls(json_data['mac'])
-
-            # TODO unlock
-            lockfile.unlock(conf_fd)
-            thread_lock.release()
-
-            self.send_signal(signal.SIGHUP)
-            message = 'Idle user on {} has been made to use captive portal after {} retransmissions\n'.format(
-            json_data['mac'], json_data['retrans'])
 
     def deauthenticate(self, mac, username):
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
