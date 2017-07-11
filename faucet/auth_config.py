@@ -1,3 +1,4 @@
+"""Configuration parser for authentication controller app."""
 import yaml
 
 class AuthConfig(object):
@@ -26,31 +27,31 @@ class AuthConfig(object):
         servers = data["servers"]
 
         self.gateways = []
-        for g in servers["gateways"]:
-            self.gateways.append(g)
+        for gateway in servers["gateways"]:
+            self.gateways.append(gateway)
 
         self.captive_portals = []
-        for cp in servers["captive-portals"]:
-            self.captive_portals.append(cp)
+        for captive in servers["captive-portals"]:
+            self.captive_portals.append(captive)
 
         # these servers are not currently used by this app.
         self.dot1x_auth_servers = []
-        for d in servers["dot1x-servers"]:
-            self.dot1x_auth_servers.append(d)
+        for d1x_server in servers["dot1x-servers"]:
+            self.dot1x_auth_servers.append(d1x_server)
 
         self.dns_servers = []
-        for d in servers["dns-servers"]:
-            self.dns_servers.append(d)
+        for dns_server in servers["dns-servers"]:
+            self.dns_servers.append(dns_server)
 
         self.dhcp_servers = []
-        for d in servers["dhcp-servers"]:
-            self.dhcp_servers.append(d)
+        for dhcp_server in servers["dhcp-servers"]:
+            self.dhcp_servers.append(dhcp_server)
 
         self.wins_servers = []
-        for w in servers["wins-servers"]:
-            self.wins_servers.append(w)
+        for wins in servers["wins-servers"]:
+            self.wins_servers.append(wins)
 
-        self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"]) 
+        self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"])
 
         self.rules = data["auth-rules"]["file"]
 
