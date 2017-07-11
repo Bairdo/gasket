@@ -3409,8 +3409,8 @@ eapol_flags=0
         start_reload_count = self.get_configure_count()
         
         cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf > /dev/null 2>&1 &".format(host.name) 
-        time.sleep(10) # ?????
         host.cmd(cmd)
+        # TODO possibly replace this sleep with a wpa_cli status poll
         time.sleep(20)
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         host.cmd(cmd)
@@ -3439,7 +3439,7 @@ eapol_flags=0
             True if download successful. False otherwise."""
         for _ in range(retries):
             # pylint: disable=no-member 
-            result = host.cmdPrint("wget --output-document=- --quiet 10.0.0.2:{}/index.txt".format(self.ws_port))
+            result = host.cmd("wget --output-document=- --quiet 10.0.0.2:{}/index.txt".format(self.ws_port))
             if re.search("This is a text file on a webserver",result) is not None:
                 return True
         return False
@@ -3521,6 +3521,7 @@ COMMIT \
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
 
         print 'Starting hostapd ....'
+        # create the hostapd config file
         host.cmd('''echo "interface={0}-eth0\n
 driver=wired\n
 logger_stdout=-1\n
@@ -3531,17 +3532,17 @@ use_pae_group_addr=0\n
 eap_server=1\n
 eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name , self.tmpdir))
 
+        # compile hostapd with the new ip address and port of the authentication controller app.
         host.cmd('cp -r /root/hostapd-d1xf/ {}/hostapd-d1xf'.format(self.tmpdir))
-
-        print host.cmd('''sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
+        host.cmd('''sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
 sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
 sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
 sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
 cd {1}/hostapd-d1xf/hostapd && \
 make'''.format(contr_num, self.tmpdir, self.auth_server_port))
 
-        print 'made hostapd'
-        host.cmdPrint('{0}/hostapd-d1xf/hostapd/hostapd -d {0}/{1}-wired.conf > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, host.name))
+        # start hostapd
+        host.cmd('{0}/hostapd-d1xf/hostapd/hostapd -d {0}/{1}-wired.conf > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, host.name))
         self.pids['hostapd'] = host.lastPid
 
         tcpdump_args = ' '.join((
@@ -3757,7 +3758,6 @@ acls:
         self.startDHCPserver(interweb, gw='10.0.0.2', dns='8.8.8.8')
 
         self.run_hostapd(portal)
-        portal.cmdPrint('ip route add 10.0.0.0/8 dev {}-eth0'.format(portal.name))
 
 
 class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest):
@@ -3775,7 +3775,7 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
         h1 = users[1]
         h2 = users[2]
         h1_ip = ipaddress.ip_address(unicode(h1.IP()))
-        # h2 will not have an ip as they are unauthenticated
+        # h2 will not have an ip via dhcp as they are unauthenticated, so give them one.
         h2.setIP('10.0.12.253')
         h2_ip = ipaddress.ip_address(unicode(h2.IP()))
         # ping between the authenticated hosts
