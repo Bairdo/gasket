@@ -3306,7 +3306,7 @@ acls:
         self.verify_dest_rewrite(
             source_host, overridden_host, rewrite_host, overridden_host)
 
-###################################################
+
 class FaucetAuthenticationTest(FaucetTest):
     """Base class for the integration tests """
 
@@ -3328,17 +3328,11 @@ class FaucetAuthenticationTest(FaucetTest):
                 print name, pid
                 host.cmdPrint('kill ' + str(pid))
 
-#            CLI(self.net)
             self.net.stop()
 
     def setup_host(self, hosts, switch):
         i = 0
         for host in hosts:
-#        host = self.net.addHost(
-#            "h{0}".format(i),
-#                mac="00:00:00:00:00:1{0}".format(i),
-#                privateDirs=['/etc/wpa_supplicant'])
-#        self.net.addLink(host, switch)
             username = 'host11{0}user'.format(i)
             password = 'host11{0}pass'.format(i)
             i += 1
@@ -3360,8 +3354,6 @@ eapol_flags=0
 }''' % (username, username, password)
             host.cmdPrint('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
         
-
-
     def get_users(self):
         """
         Get the hosts that are users
@@ -3425,9 +3417,6 @@ eapol_flags=0
         time.sleep(20)
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         print(host.cmdPrint(cmd))
-#        host.cmdPrint("ip route add default via 10.0.0.2")
-#        host.cmdPrint('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
-
 
         print('start_reload_count' + str(start_reload_count))
         end_reload_count = self.get_configure_count()
@@ -3455,17 +3444,6 @@ eapol_flags=0
 
     def run_controller(self, host):
         print 'Starting Controller ....'
-#        host.cmdPrint('ryu-manager ryu.app.ofctl_rest faucet.faucet --wsapi-port 8084 &')
-#        lastPid = host.lastPid
-#        print lastPid
-#        os.system('ps a')
-#        host.cmdPrint('echo {} > {}/contr_pid'.format(lastPid, self.tmpdir))
-#        os.system('ps a')
-
-#        self.pids['faucet'] = lastPid
-
-        # think want to get the auth.yaml, and change the location of the faucet.yaml to be the tmp dir.
-
         with open('/faucet-src/tests/config/auth.yaml', 'r') as f:
             httpconfig = f.read()
 
@@ -3483,7 +3461,7 @@ eapol_flags=0
 
         host.cmdPrint('echo "%s" > %s/auth.yaml' % (httpconfig % m, self.tmpdir))
         host.cmdPrint('cp -r /faucet-src %s/' % self.tmpdir)
-# > %s/httpserver.txt 2> %s/httpserver.err &'
+
         print host.cmdPrint('python3.5 %s/faucet-src/faucet/HTTPServer.py --config  %s/auth.yaml  > %s/httpserver.txt 2> %s/httpserver.err &'  % (self.tmpdir, self.tmpdir, self.tmpdir, self.tmpdir))
         print 'httpserver started'
         self.pids['auth_server'] = host.lastPid 
@@ -3508,7 +3486,7 @@ eapol_flags=0
 
         os.system('ps a')
         os.system('lsof -i tcp')
-#        CLI(self.net)
+
         print 'Controller started.'
 
 
@@ -3539,7 +3517,6 @@ COMMIT \
         self.pids['captive_portal'] = host.lastPid
 
     def run_hostapd(self, host):
-#        host.cmdPrint('cp')
         # pylint: disable=no-member
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
 
@@ -3556,8 +3533,6 @@ eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.con
 
         host.cmdPrint('cp -r /root/hostapd-d1xf/ {}/hostapd-d1xf'.format(self.tmpdir))
 
-
-#cd /root/hostapd-d1xf/hostapd && \
         print host.cmdPrint('''sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
 sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
 sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
@@ -3566,10 +3541,6 @@ cd {1}/hostapd-d1xf/hostapd && \
 make'''.format(contr_num, self.tmpdir, self.auth_server_port))
 
         print 'made hostapd'
-#        host.cmdPrint("""sed -i 's/172\.30\.15\.3/172\.30\.13\.3/g' %s/hostapd""" % (self.tmpdir))
-#        host.cmdPrint("""sed -i 's/172\.30\.13\.3/172\.30\.%s\.3/g' %s/hostapd""" % (contr_num, self.tmpdir))
-#        host.cmdPrint("""sed -i 's/qwert/{0}/g' {1}/hostapd""".format(self.auth_server_port, self.tmpdir))
-
         host.cmdPrint('{0}/hostapd-d1xf/hostapd/hostapd -d {0}/{1}-wired.conf > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, host.name))
         self.pids['hostapd'] = host.lastPid
 
@@ -3731,23 +3702,9 @@ acls:
             self.ports_sock, dpid=self.dpid, n_tagged=0, n_untagged=5)
 
         print 'sINGLE sWITCH test'
-#        self.net = None
-#        self.dpid = "1"
-
-#        self.v2_config_hashes, v2_dps = dp_parser('/faucet-src/tests/config/testconfigv2-1x.yaml', 'test_auth')
-#        self.v2_dps_by_id = {}
-#        for dp in v2_dps:
-#            self.v2_dps_by_id[dp.dp_id] = dp
-#        self.v2_dp = self.v2_dps_by_id[0x1]
-
-        # copy config file from tests/config to /etc/ryu/faucet/facuet/yaml
-#        try:
-#            os.makedirs('/etc/ryu/faucet')
-#        except:
-#            pass
-#        shutil.copyfile("/faucet-src/tests/config/testconfigv2-1x-1s.yaml", "/etc/ryu/faucet/faucet.yaml")
         print 'finding free port'
         port = 0
+        # TODO fix this hack, (hostapd hardcoded portnumber)
         while port <=9999:
             port, _ = faucet_mininet_test_util.find_free_port(
                 self.ports_sock, self._test_name())
@@ -3759,53 +3716,29 @@ acls:
 
     def start_programs(self):
         """Start Mininet."""
-#        self.net = Mininet(build=False)
-#        c0 = self.net.addController(
-#            "c0",
-#            controller=FaucetDot1xCapFlowController,
-#            ip='127.0.0.1',
-#            port=6653,
-#            switch=OVSSwitch)
-
         print 'Controller'
         print self.net.controller
 
- 
-#        switch1 = self.net.addSwitch(
-#            "s1", cls=OVSSwitch, inband=True, protocols=["OpenFlow13"])
-#        switch1.start([c0])
         # pylint: disable=unbalanced-tuple-unpacking
         portal, interweb, h0, h1, h2 = self.net.hosts
         # pylint: disable=no-member
         lastPid = self.net.controller.lastPid
         print lastPid
-#        os.system('ps a')
         # pylint: disable=no-member
         self.net.controller.cmdPrint('echo {} > {}/contr_pid'.format(lastPid, self.tmpdir))
         self.pids['faucet'] = lastPid
 
-#            self.net.addHost(
-#            "portal", ip='10.0.12.3/24', mac="70:6f:72:74:61:6c")
-#        self.net.addLink(portal, switch1)
         # pylint: disable=no-member
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
         self.assertLess(int(contr_num), 255)
         self.net.addLink(
             portal,
             self.net.controller,
-#            params1={'ip': '172.30.13.2/24'},
-#            params2={'ip': '172.30.13.3/24'})
-#        print 'portal ping controller'
-#        print portal.cmdPrint('ping -c5 172.30.13.2')
             params1={'ip': '192.168.%s.2/24' % contr_num},
             params2={'ip': '192.168.%s.3/24' % contr_num})
         print 'portal ping controller'
         print portal.cmdPrint('ping -c5 192.168.%s.3' % contr_num)
         self.run_controller(self.net.controller)
-
-#        interweb = self.net.addHost(
-#            "interweb", ip='10.0.12.1/24', mac="08:00:27:ee:ee:ee")
-#        self.net.addLink(interweb, switch1)
 
         interweb.cmdPrint('echo "This is a text file on a webserver" > index.txt')
         self.ws_port, _ = faucet_mininet_test_util.find_free_port(
@@ -3814,7 +3747,6 @@ acls:
         print self.ws_port        
         interweb.cmdPrint('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
 
- #       for i in range(0, 3):
         hosts = self.net.hosts[2:]
 
         print 'hosts'
@@ -3823,10 +3755,7 @@ acls:
         print hosts
         self.clients = hosts
         self.setup_host(hosts, self.net.switch)
-                        
 
-#        self.net.build()
-#        self.net.start()
         self.startDHCPserver(interweb, gw='10.0.0.2', dns='8.8.8.8')
 
         self.run_hostapd(portal)
@@ -3848,14 +3777,12 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
         # h2 will not have an ip as they are unauthenticated
         h2.setIP('10.0.12.253')
         h2_ip = ipaddress.ip_address(unicode(h2.IP()))
-        #ping between the authenticated hosts
+        # ping between the authenticated hosts
         print('h1_ip %s' % h1_ip)
         print(h0)
         print(type(h0))
         self.one_ipv4_ping(h0, h1_ip)
         self.one_ipv4_ping(h1, '10.0.0.2')
-#        ploss = self.net.ping(hosts=users[:2], timeout='5')
-#        self.assertAlmostEqual(ploss, 0)
 
         #ping between an authenticated host and an unauthenticated host
         try:
@@ -3864,8 +3791,6 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
             pass
         else:
             self.fail('{0} {1} should not be able to ping {2} {3}'.format(h1, h1.IP(), h2, h2.IP()))
-#        ploss = self.net.ping(hosts=users[1:], timeout='5')
-#        self.assertAlmostEqual(ploss, 100)
         
         ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
         self.assertAlmostEqual(ploss, 100)
@@ -3875,7 +3800,6 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
             pass
         else:
             self.fail('{0} {1} should not be able to ping {2} {3}'.format(h0, h0.IP(), h2, h2.IP()))
-
 
     def QWERTYtest_onlycapflow(self):
         """Only authenticate through CapFlow """
@@ -3898,17 +3822,11 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
                 print(flow)
 
         self.logon_dot1x(users[0])
-#        time.sleep(320)
         flows = self.get_all_flows_from_dpid(self.dpid)
         print('printing table_id 3 flows after h0 logged on:')
         for flow in flows:
             if re.search('''table_id": 3''', flow):
                 print(flow)
-        # trick faucet into learning the port of h2
-#        try:
-#            self.one_ipv4_ping(users[1], '10.0.0.1')
-#        except AssertionError:
-#            pass
 
         self.logon_dot1x(users[1])
         time.sleep(10)
@@ -3917,9 +3835,6 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
         for flow in flows:
             if re.search('''table_id": 0''', flow):
                 print(flow)
-#        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
-#            users[2].name)
-#        users[2].cmdPrint(cmd)
         self.ping_between_hosts(users)
 
     def QWERTYtest_bothauthentication(self):
@@ -3957,7 +3872,6 @@ class FaucetSingleAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchT
 
     def test_dot1xlogon(self):
         """Log on using dot1x"""
-#        os.system("ps a")
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
         flows = self.get_all_flows_from_dpid(self.dpid)
@@ -3983,11 +3897,10 @@ class FaucetSingleAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitch
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
         self.logon_dot1x(h0)
-#        time.sleep(5)
-        self.one_ipv4_ping(h0, '10.0.0.2')
-#        time.sleep(5)
-        result = self.check_http_connection(h0)
 
+        self.one_ipv4_ping(h0, '10.0.0.2')
+
+        result = self.check_http_connection(h0)
         self.assertTrue(result)
         
         print 'wpa_cli status'
@@ -3997,15 +3910,6 @@ class FaucetSingleAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitch
         print 'wpa_cli status'
         print h0.cmdPrint('wpa_cli status')
 
-        '''
-        portal = self.net.hosts[0]
-        print('overriding hostapd logoff')
-        # pylint: disable=no-member
-        cmd = 'python3 /faucet-src/h.py 192.168.{0}.3 {1} {2} logoff'.format(self.net.controller.name.split('-')[1], self.auth_server_port, h0.MAC() )
-        print(cmd)
-        print(portal.cmdPrint(cmd))
-        print('done h.py. logoff')
-        '''
         self.fail_ping_ipv4(h0, '10.0.0.2')
         result = self.check_http_connection(h0)
         self.assertFalse(result)
