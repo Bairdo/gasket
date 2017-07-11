@@ -3411,7 +3411,6 @@ eapol_flags=0
         cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf > /dev/null 2>&1 &".format(host.name) 
         host.cmd(cmd)
         # TODO possibly replace this sleep with a wpa_cli status poll
-        time.sleep(1)
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         host.cmd(cmd)
 
@@ -3815,7 +3814,7 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
 
         self.logon_dot1x(users[0])
         self.logon_dot1x(users[1])
-        time.sleep(10)
+        time.sleep(5)
         self.ping_between_hosts(users)
 
     def QWERTYtest_bothauthentication(self):
