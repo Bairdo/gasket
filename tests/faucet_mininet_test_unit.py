@@ -3411,7 +3411,7 @@ eapol_flags=0
         cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf > /dev/null 2>&1 &".format(host.name) 
         host.cmd(cmd)
         # TODO possibly replace this sleep with a wpa_cli status poll
-        time.sleep(20)
+        time.sleep(1)
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         host.cmd(cmd)
 
@@ -3875,7 +3875,7 @@ class FaucetSingleAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitch
         
         h0.cmd("wpa_cli logoff")
         # TODO possibly poll wpa_cli status to check that the status has changed? instead of a sleep??
-        time.sleep(60)
+        time.sleep(1)
 
         self.fail_ping_ipv4(h0, '10.0.0.2')
         result = self.check_http_connection(h0)
