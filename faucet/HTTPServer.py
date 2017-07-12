@@ -10,10 +10,9 @@ import os
 import re
 import signal
 import threading
-import yaml
-import requests
 
-import time
+import requests
+import yaml
 
 from valve_util import get_logger
 import config_parser
@@ -21,7 +20,13 @@ import my_lockfile as lockfile
 from auth_config import AuthConfig
 import rule_generator
 
+
+THREAD_LOCK = threading.Lock()
+
+
 class Proto():
+    """Class for protocol constants.
+    """
     ETHER_ARP = 0x0806
     ETHER_IPv4 = 0x0800
     ETHER_IPv6 = 0x86DD
@@ -33,20 +38,68 @@ class Proto():
     DNS_PORT = 53
     HTTP_PORT = 80
 
-thread_lock = threading.Lock()
 
 class HashableDict(dict):
     '''
         Copied from http://stackoverflow.com/a/1151686
     '''
     def __key(self):
-        return tuple((k,self[k]) for k in sorted(self))
+        return tuple((k, self[k]) for k in sorted(self))
 
     def __hash__(self):
         return hash(self.__key())
 
     def __eq__(self, other):
         return self.__key() == other.__key()
+
+
+def float_to_mac(mac_as_float_str):
+    """Convert a float string to a mac address string
+    Args:
+        mac_as_float_str (str): float represented as a string e.g. "123456.0"
+            This float should be a whole number. (Right of the decimal == 0)
+    Returns:
+        MAC Address as a string. e.g. "00:00:00:01:e2:40"
+    """
+    h = '%012x' % int(mac_as_float_str.split('.')[0])
+    macstr = h[:2] + ':' + h[2:4] + \
+                 ':' + h[4:6] + ':' + h[6:8] + \
+                 ':' + h[8:10] + ':' +  h[10:12]
+    return macstr
+
+
+def dpid_name_to_map(lines):
+    '''Converts a list of lines containing the faucet_config_dp_name,
+       (from prometheus client (faucet)) to a dictionary.
+    :param lines list
+    :returns dictionary
+    '''
+    dpid_to_name = {}
+    for line in lines:
+        # TODO maybe dont use regex?
+        _, _, dpid, _, name, _ = re.split('[{=",]+', line)
+        dpid_to_name[dpid] = name
+    return dpid_to_name
+
+
+def dp_port_mode_to_map(lines):
+    '''Converts a list of lines containing dp_port_mode,
+       (from prometheus client (faucet)) to a dictionary dictionary.
+    :param lines list
+    :returns dictionary
+    '''
+    dpid_port_mode = {}
+    for line in lines:
+        _, _, dpid, _, port, mode_int, _ = re.split(r'\W+', line)
+        if int(mode_int) == 1:
+            mode = 'access'
+        else:
+            mode = None
+        if dpid not in dpid_port_mode:
+            dpid_port_mode[dpid] = {}
+
+        dpid_port_mode[dpid][port] = mode
+    return dpid_port_mode
 
 
 class HTTPHandler(BaseHTTPRequestHandler):
@@ -66,7 +119,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', ctype)
         self.end_headers()
 
-    def scrape_prometheus(self): 
+    def scrape_prometheus(self):
+        """Query prometheus specified by config. Removes comment lines.
+        Returns:
+            string containing all prometheus variables without comments.
+        """
         prom_url = self.config.prom_url
         prom_vars = []
         for prom_line in requests.get(prom_url).text.split('\n'):
@@ -74,53 +131,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 prom_vars.append(prom_line)
         return '\n'.join(prom_vars)
 
-
-    def _float_to_mac(self, mac_as_float_str):
-        h = '%012x' % int(mac_as_float_str.split('.')[0])
-        macstr = h[:2] + ':' + h[2:4] + \
-                     ':' + h[4:6] + ':' + h[6:8] + \
-                     ':' + h[8:10] + ':' +  h[10:12]
-        return macstr
-
-
-    def _dpid_name_to_map(self, lines):
-        '''Converts a list of lines containing the faucet_config_dp_name,
-           (from prometheus client (faucet)) to a dictionary.
-        :param lines list
-        :returns dictionary
-        '''
-        d = {}
-        self.logger.info("dpid name to map")
-        for l in lines:
-            # TODO maybe dont use regex?
-            self.logger.info(l)
-            _, _, dpid, _, name, _ = re.split('[{=",]+', l)
-            d[dpid] = name
-        return d
-
-    def _dp_port_mode_to_map(self, lines):
-        '''Converts a list of lines containing dp_port_mode,
-           (from prometheus client (faucet)) to a dictionary dictionary.
-        :param lines list
-        :returns dictionary
-        '''
-        d = {}
-        for l in lines:
-            _, _, dpid, _, port, mode_int, _ = re.split('\W+', l)
-            if int(mode_int) == 1:
-                mode = 'access'
-            else:
-                mode = None
-            if dpid not in d:
-                d[dpid] = {}
-            
-            d[dpid][port] = mode
-        self.logger.info(("dp_port_mode_to_map returns: {}".format(d)))
-        return d
-
     def _get_dp_name_and_port(self, mac):
-        """
-        Queries the prometheus faucet client, and returns the 'access port' that the mac address is connected on.
+        """Queries the prometheus faucet client,
+         and returns the 'access port' that the mac address is connected on.
         :param mac MAC address to find port for.
         :returns dp name & port number.
         """
@@ -130,27 +143,27 @@ class HTTPHandler(BaseHTTPRequestHandler):
         prom_mac_table = []
         prom_name_dpid = []
         prom_dpid_port_mode = []
-        for l in prom_txt.splitlines():
-            self.logger.info(l)
-            if l.startswith('learned_macs'):
+        for line in prom_txt.splitlines():
+            self.logger.info(line)
+            if line.startswith('learned_macs'):
                 prom_mac_table.append(l)
-            if l.startswith('faucet_config_dp_name'):
+            if line.startswith('faucet_config_dp_name'):
                 prom_name_dpid.append(l)
-            if l.startswith('dp_port_mode'):
+            if line.startswith('dp_port_mode'):
                 # TODO this is not implemented on the faucet side yet.
-                prom_dpid_port_mode.append(l)
+                prom_dpid_port_mode.append(line)
 
-        dpid_name = self._dpid_name_to_map(prom_name_dpid)       
-        dp_port_mode = self._dp_port_mode_to_map(prom_dpid_port_mode)
- 
+        dpid_name = dpid_name_to_map(prom_name_dpid)
+        dp_port_mode = dp_port_mode_to_map(prom_dpid_port_mode)
+
         ret_port = -1
         ret_dp_name = ""
-        for l in prom_mac_table:
-            labels, float_as_mac = l.split(' ')
-            self.logger.info(("int as mac{}".format(self._float_to_mac(float_as_mac))))
-            if mac == self._float_to_mac(float_as_mac):
+        for line in prom_mac_table:
+            labels, float_as_mac = line.split(' ')
+            self.logger.info(("int as mac{}".format(float_to_mac(float_as_mac))))
+            if mac == float_to_mac(float_as_mac):
                 # if this is also an access port, we have found the dpid and the port
-                _, _, dpid, _, n, _, port, _, vlan, _ = re.split('\W+', labels)
+                _, _, dpid, _, n, _, port, _, vlan, _ = re.split(r'\W+', labels)
                 if dpid in dp_port_mode and \
                         port in dp_port_mode[dpid] and \
                         dp_port_mode[dpid][port] == 'access':
@@ -159,22 +172,27 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     break
         self.logger.info(("name: {} port: {}".format(ret_dp_name, ret_port)))
         return ret_dp_name, ret_port
-       
+
     def remove_acls_startswith(self, mac, name, switchname, switchport):
+        """Helper function for self.remove_acls(), but passes startswith=True,
+             so that the name field will be compared using string.startswith,
+             instead of equality.
+        """
         self.remove_acls(mac, name, switchname, switchport, startswith=True)
 
     def remove_acls(self, mac, name, switchname, switchport, startswith=False):
-        """
-        Removes the ACLS for the mac and name from the config file.
+        """Removes the ACLS for the mac and name from the config file.
         NOTE: only from the port that the mac address is authenticated on, currently.
         :param mac mac address of authenticated user
-        :param name the 'name' field of the acl rule in faucet.yaml, generally username or captiveportal_*
-        :param startswith Boolean value should name field be compared using string.startswith(), or == equality
-        """ 
+        :param name the 'name' field of the acl rule in faucet.yaml,
+             generally username or captiveportal_*
+        :param startswith Boolean value should name field be compared using string.startswith(),
+             or == equality
+        """
 
         # TODO remove rules from any port acl.
         # load faucet.yaml and its included yamls
-        all_acls = config_parser.load_acls(self.config.acl_config_file) #, switchname, switchport)
+        all_acls = config_parser.load_acls(self.config.acl_config_file)
 
         aclname = 'port_' + switchname + '_' + str(switchport)
         port_acl = all_acls['acls'][aclname]
@@ -183,20 +201,21 @@ class HTTPHandler(BaseHTTPRequestHandler):
         for rule in port_acl:
             try:
                 if rule['rule']['_mac_'] is not None and rule['rule']['_name_'] is not None:
-                    if startswith and rule['rule']['_mac_'] == mac and rule['rule']['_name_'].startswith(name):
+                    if startswith and rule['rule']['_mac_'] == mac \
+                         and rule['rule']['_name_'].startswith(name):
                         continue
                     if rule['rule']['_mac_'] == mac and rule['rule']['_name_'] == name:
                         continue
-                    if rule['rule']['_mac_'] == mac and '(null)' == name:
+                    if rule['rule']['_mac_'] == mac and name == '(null)':
                         continue
                     else:
                         updated_port_acl.insert(i, rule)
                         i = i + 1
-               
+
             except KeyError:
                 updated_port_acl.insert(i, rule)
                 i = i + 1
-      
+
         all_acls['acls'][aclname] = updated_port_acl
 
         config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
@@ -226,8 +245,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         return hash_list
 
     def add_acls(self, mac, user, rules, dp_name, switchport):
-        """
-        Adds the acls to a port acl that the mac address is associated with, in the faucet configuration file.
+        """Adds the acls to a port acl that the mac address is associated with,
+         in the faucet configuration file.
         :param mac MAC address of authenticated user
         :param user username of authenticated user
         :param rules List of ACL rules to be applied to port that mac is associated with.
@@ -236,9 +255,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.logger.info(rules)
         # TODO might want to make it so that acls can be added to any port_acl,
         # load acls from faucet.yaml
-        if dp_name == '' or switchport == -1 :
+        if dp_name == '' or switchport == -1:
             self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot add acls for authed user '{}' on MAC '{}'".format(
-                                    dp_name, switchport, user, mac)))
+                dp_name, switchport, user, mac)))
             return
         else:
             all_acls = config_parser.load_acls(self.config.acl_config_file) #, dp_name, switchport)
@@ -263,11 +282,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
             elif '_name_' in rule['rule'] and rule['rule']['_name_'] == 'redir41x':
                 if not inserted:
                     inserted = True
-                    for port_to_apply , new_rules in list(rules.items()):
+                    for port_to_apply, new_rules in list(rules.items()):
                         for new_rule in new_rules:
                             if not self._is_rule_in(new_rule, hashable_port_acl):
                             # only insert the new rule if it is not already in the port_acl (config file)
-                            #if rule is in rules  
                                 new_port_acl.insert(i, new_rule)
                                 i = i + 1
 
@@ -286,11 +304,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 new_port_acl.insert(i, rule)
                 i = i + 1
         if not inserted:
-           inserted = True
-           for new_rule in rules:
-               if not self._is_rule_in(new_rule, hashable_port_acl):
-                   new_port_acl.insert(i, new_rule)
-                   i = i + 1
+            inserted = True
+            for new_rule in rules:
+                if not self._is_rule_in(new_rule, hashable_port_acl):
+                    new_port_acl.insert(i, new_rule)
+                    i = i + 1
 
         all_acls['acls'][aclname] = new_port_acl
         # TODO yaml
@@ -300,7 +318,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         json_data = self.check_if_json()
-        if json_data == None:
+        if json_data is None:
             return
 
         if self.path == self.config.dot1x_auth_path:
@@ -310,9 +328,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self):
         json_data = self.check_if_json()
-        if json_data == None:
+        if json_data is None:
             return
- 
+
         if self.path == self.config.dot1x_auth_path:
             #check json has the right information
             if not ('mac' in json_data and 'user' in json_data):
@@ -335,9 +353,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
             user = json_data['user']
 
             switchname, switchport = self._get_dp_name_and_port(mac)
-            if switchname == '' or switchport == -1 :
+            if switchname == '' or switchport == -1:
                 self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for authed user '{}' on MAC '{}'".format(
-                                    switchname, switchport, user, mac)))
+                    switchname, switchport, user, mac)))
                 #write response
                 message = 'cant auth'
                 # auth server doesnt handle errors at this stage so return 200
@@ -346,19 +364,19 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 self.log_message('%s', message)
                 return
             else:
-                rules = self.rule_gen.get_rules(user, 'port_' + switchname + '_' + str(switchport), mac)
+                rules = self.rule_gen.get_rules(user, 'port_' + switchname + '_' + str(switchport)
+                                                , mac)
             message = 'authenticated new client({}) at MAC: {}\n'.format(
                 user, mac)
             # TODO lock
-            thread_lock.acquire()
+            THREAD_LOCK.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
         self.add_acls(mac, user, rules, switchname, switchport)
         self.swap_temp_file()
         # TODO unlock
         lockfile.unlock(conf_fd)
-        thread_lock.release()
-        os.system('lsof | grep -i "\.yaml"')
+        THREAD_LOCK.release()
         self.send_signal(signal.SIGHUP)
         self.logger.error(config_parser.load_acls(self.config.acl_config_file))
         #write response
@@ -376,19 +394,19 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
         switchname, switchport = self._get_dp_name_and_port(mac)
         # TODO lock
-        thread_lock.acquire()
+        THREAD_LOCK.acquire()
         conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
-       
+
         switchname, switchport = self._get_dp_name_and_port(mac)
-        if switchname == '' or switchport == -1 :
+        if switchname == '' or switchport == -1:
             self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
-                                    switchname, switchport, username, mac)))
+                switchname, switchport, username, mac)))
         else:
             self.remove_acls(mac, username, switchname, switchport)
             self.swap_temp_file()
         # TODO unlock
         lockfile.unlock(conf_fd)
-        thread_lock.release()
+        THREAD_LOCK.release()
 
 
 
@@ -447,8 +465,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     config_filename = args.config
     conf = AuthConfig(config_filename)
-    logger = get_logger(
-            'httpserver', conf.logger_location, logging.DEBUG, 0)
+    logger = get_logger('httpserver', conf.logger_location, logging.DEBUG, 0)
     HTTPHandler.logger = logger
     HTTPHandler.config = conf
     HTTPHandler.rule_gen = rule_generator.RuleGenerator(conf.rules)
