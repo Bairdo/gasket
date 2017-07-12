@@ -5,25 +5,19 @@ RUN \
   apt-get install -qy --no-install-recommends \
     gcc \
     git \
-    libpython2.7-dev \
+    libpython3-all-dev \
     libyaml-dev \
-    python-pip \
-    python3.5 \
+    netbase \
     python3-pip \
-    libpython3.5-dev
 
 COPY ./ /faucet-src/
 
 RUN \
-  pip install --upgrade pip && \
-  pip install setuptools wheel virtualenv --upgrade && \
-  pip install -r /faucet-src/requirements.txt && \
-  pip install /faucet-src
-
-RUN \
   pip3 install --upgrade pip && \
-  pip3 install setuptools  virtualenv --upgrade && \
-  pip3 install pyyaml requests networkx
+  pip3 install setuptools wheel virtualenv --upgrade && \
+  pip3 install -r /faucet-src/requirements.txt && \
+  pip3 install /faucet-src
+
 
 VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/"]
 
