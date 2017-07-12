@@ -24,6 +24,7 @@ import my_lockfile as lockfile
 from auth_config import AuthConfig
 import rule_generator
 
+import auth_app_utils
 
 THREAD_LOCK = threading.Lock()
 
@@ -41,93 +42,6 @@ class Proto(object):
     DHCP_SERVER_PORT = 67
     DNS_PORT = 53
     HTTP_PORT = 80
-
-
-class HashableDict(dict):
-    '''
-        Copied from http://stackoverflow.com/a/1151686
-    '''
-    def __key(self):
-        return tuple((k, self[k]) for k in sorted(self))
-
-    def __hash__(self):
-        return hash(self.__key())
-
-    def __eq__(self, other):
-        return self.__key() == other.__key()
-
-
-def float_to_mac(mac_as_float_str):
-    """Convert a float string to a mac address string
-    Args:
-        mac_as_float_str (str): float represented as a string e.g. "123456.0"
-            This float should be a whole number. (Right of the decimal == 0)
-    Returns:
-        MAC Address as a string. e.g. "00:00:00:01:e2:40"
-    """
-    h = '%012x' % int(mac_as_float_str.split('.')[0])
-    macstr = h[:2] + ':' + h[2:4] + \
-                 ':' + h[4:6] + ':' + h[6:8] + \
-                 ':' + h[8:10] + ':' +  h[10:12]
-    return macstr
-
-
-def dpid_name_to_map(lines):
-    '''Converts a list of lines containing the faucet_config_dp_name,
-       (from prometheus client (faucet)) to a dictionary.
-    :param lines list
-    :returns dictionary
-    '''
-    dpid_to_name = {}
-    for line in lines:
-        # TODO maybe dont use regex?
-        _, _, dpid, _, name, _ = re.split('[{=",]+', line)
-        dpid_to_name[dpid] = name
-    return dpid_to_name
-
-
-def dp_port_mode_to_map(lines):
-    '''Converts a list of lines containing dp_port_mode,
-       (from prometheus client (faucet)) to a dictionary dictionary.
-    :param lines list
-    :returns dictionary
-    '''
-    dpid_port_mode = {}
-    for line in lines:
-        _, _, dpid, _, port, mode_int, _ = re.split(r'\W+', line)
-        if int(mode_int) == 1:
-            mode = 'access'
-        else:
-            mode = None
-        if dpid not in dpid_port_mode:
-            dpid_port_mode[dpid] = {}
-
-        dpid_port_mode[dpid][port] = mode
-    return dpid_port_mode
-
-
-def is_rule_in(rule, list_):
-    """Searches a list of HashableDicts for an item equal to rule.
-    :param rule an acl dict
-    :param list_ a list of HashableDicts
-    :return True if rule is is equal to item in list_, false otherwise
-    """
-    hash_rule = HashableDict(rule)
-    for item in list_:
-        if hash_rule == item:
-            return True
-    return False
-
-
-def get_hashable_list(list_):
-    """Creates a list of HashableDict for a list of dict.
-    :param list_ a list of dicts (standard python version)
-    :return a list of HashableDict
-    """
-    hash_list = []
-    for item in list_:
-        hash_list.append(HashableDict(item))
-    return hash_list
 
 
 class HTTPHandler(BaseHTTPRequestHandler):
@@ -180,15 +94,14 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if line.startswith('dp_port_mode'):
                 prom_dpid_port_mode.append(line)
 
-        dpid_name = dpid_name_to_map(prom_name_dpid)
-        dp_port_mode = dp_port_mode_to_map(prom_dpid_port_mode)
+        dpid_name = auth_app_utils.dpid_name_to_map(prom_name_dpid)
+        dp_port_mode = auth_app_utils.dp_port_mode_to_map(prom_dpid_port_mode)
 
         ret_port = -1
         ret_dp_name = ""
         for line in prom_mac_table:
             labels, float_as_mac = line.split(' ')
-            self.logger.info(("int as mac{}".format(float_to_mac(float_as_mac))))
-            if mac == float_to_mac(float_as_mac):
+            if mac == auth_app_utils.float_to_mac(float_as_mac):
                 # if this is also an access port, we have found the dpid and the port
                 _, _, dpid, _, n, _, port, _, vlan, _ = re.split(r'\W+', labels)
                 if dpid in dp_port_mode and \
@@ -277,7 +190,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.logger.info("portacl")
         self.logger.info((type(port_acl)))
         self.logger.info(port_acl)
-        hashable_port_acl = get_hashable_list(port_acl)
+        hashable_port_acl = auth_app_utils.get_hashable_list(port_acl)
         for rule in port_acl:
 
             if '_name_' in rule['rule'] and rule['rule']['_name_'] == 'd1x':
@@ -288,7 +201,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     inserted = True
                     for port_to_apply, new_rules in list(rules.items()):
                         for new_rule in new_rules:
-                            if not is_rule_in(new_rule, hashable_port_acl):
+                            if not auth_app_utils.is_rule_in(new_rule, hashable_port_acl):
                             # only insert the new rule if it is not already in the port_acl (config file)
                                 new_port_acl.insert(i, new_rule)
                                 i = i + 1
@@ -302,7 +215,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     self.logger.info(("\n\nrules:\n{}".format(rules)))
                     for new_rule in rules['port_' + dp_name + '_' + str(switchport)]:
                         self.logger.info(("\n\nnewrule:\n{}".format(new_rule)))
-                        if not is_rule_in(new_rule, hashable_port_acl):
+                        if not auth_app_utils.is_rule_in(new_rule, hashable_port_acl):
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
                 new_port_acl.insert(i, rule)
@@ -310,7 +223,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         if not inserted:
             inserted = True
             for new_rule in rules:
-                if not is_rule_in(new_rule, hashable_port_acl):
+                if not auth_app_utils.is_rule_in(new_rule, hashable_port_acl):
                     new_port_acl.insert(i, new_rule)
                     i = i + 1
 
