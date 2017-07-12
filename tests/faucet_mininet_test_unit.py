@@ -3451,7 +3451,7 @@ eapol_flags=0
         host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % m, self.tmpdir))
         host.cmd('cp -r /faucet-src %s/' % self.tmpdir)
 
-        host.cmd('python3.5 %s/faucet-src/faucet/HTTPServer.py --config  %s/auth.yaml  > %s/httpserver.txt 2> %s/httpserver.err &'  % (self.tmpdir, self.tmpdir, self.tmpdir, self.tmpdir))
+        host.cmd('python3.5 %s/faucet-src/faucet/auth_app.py --config  %s/auth.yaml  > %s/auth_app.txt 2> %s/auth_app.err &'  % (self.tmpdir, self.tmpdir, self.tmpdir, self.tmpdir))
         print 'authentication controller app started'
         self.pids['auth_server'] = host.lastPid 
 

@@ -30,7 +30,7 @@ The **Authentication server(s)** are Network Function Virtualisation (NFV) style
 
 The **Internet** provides access to the Internet and at this stage DHCP and DNS servers (which are used by the captive portal).
 
-The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/reannz/faucet), and a HTTP 'server' for configuring Faucet across the network.
+The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/reannz/faucet), and a HTTP 'server' (auth_app.py) for configuring Faucet across the network.
 
 The **OpenFlow Switch** is an OpenFlow 1.3 switch we currently use [OpenVSwitch](openvswitch.org).
 In the future we hope to run on [Allied Telesis ATx930](https:/www.alliedtelesis.com/products/x930-series).
@@ -100,7 +100,7 @@ See [TODO](#todo) for more.
 - Hostapd
 - RADIUS Server (Optional, can use the hostapd integrated one)
 - Faucet
-- HTTPServer
+- auth_app
 
 ### Overview
 A user can be in two states authenticated and unauthenticated.
@@ -113,7 +113,7 @@ These ACLs can match on any field that Ryu supports (and therefore Faucet), see 
 Typically these 'authorisation' rules should include the 'dl_src' with the users MAC address to ensure that the rule gets applied to the user, however if desired this is not necessary, **BUT this could mean that unauthenticated users can use the network!** so do so at your own risk.
 
 The hostapd process typically runs on its own server and has a separate (from the switch's dataplane) network connection to the controller.
-This connection is used for HTTP messages to the HTTPServer process when the state of a user changes.
+This connection is used for HTTP messages to the auth_app process when the state of a user changes.
 
 If desired the RADIUS server can be directly connected to the switch (with appropriate ACLs) or through a 'private' network to the hostapd server.
 
@@ -296,8 +296,8 @@ The base directoy contains the file rules.yaml.
 rules.yaml contains the rules to apply when a user successfully logs on.
 
 
-##### HTTPServer.py
-The faucet repository contains HTTPServer.py which is used as the 'proxy' between the authentication servers and faucet.
+##### auth_app.py
+The faucet repository contains auth_app.py which is used as the 'proxy' between the authentication servers and faucet.
 This must run on the same machine as faucet.
 
 auth.yaml is the configuration file and contains annotations on required parts. Note: the structure and content is subject to change.
@@ -307,14 +307,14 @@ auth.yaml is the configuration file and contains annotations on required parts. 
 
 #### Controller
 
-##### Faucet + HTTPServer
+##### Faucet + auth_app
 
-To start faucet and the httpserver use Docker.auth:
+To start faucet and auth_app use Docker.auth:
 ```bash
 docker build -t /reannz/faucet-auth -f Dockerfile.auth .
 docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6653:6653 -p 9244:9244 -p 8080:8080 -ti reannz/faucet-auth
 ```
-Port 6653 is used for OpenFlow, port 9244 is used for Prometheus and 8080 is used by the httpserver - port 9244 may be omitted if you do not need Prometheus.
+Port 6653 is used for OpenFlow, port 9244 is used for Prometheus and 8080 is used by the auth_app - port 9244 may be omitted if you do not need Prometheus.
 
 #### Authentication Server
 
@@ -331,7 +331,7 @@ Not Implemented yet.
 - Captive Portal Webserver
 - RADIUS Server
 - Faucet
-- HTTPServer
+- auth_app
 
 # TODO
 
