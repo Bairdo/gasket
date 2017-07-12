@@ -1,6 +1,8 @@
+"""This is the controller side authentication app.
+It communicates with an authentication server (hostapd, captive portal) via HTTP.
+And with Faucet via changing the Faucet configuration file, and sending it a SIGHUP.
+"""
 # pylint: disable=import-error
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from socketserver import ThreadingMixIn
 
 import argparse
 import cgi
@@ -11,8 +13,10 @@ import re
 import signal
 import threading
 
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+
 import requests
-import yaml
 
 from valve_util import get_logger
 import config_parser
@@ -24,7 +28,7 @@ import rule_generator
 THREAD_LOCK = threading.Lock()
 
 
-class Proto():
+class Proto(object):
     """Class for protocol constants.
     """
     ETHER_ARP = 0x0806
@@ -174,7 +178,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if line.startswith('faucet_config_dp_name'):
                 prom_name_dpid.append(line)
             if line.startswith('dp_port_mode'):
-                # TODO this is not implemented on the faucet side yet.
                 prom_dpid_port_mode.append(line)
 
         dpid_name = dpid_name_to_map(prom_name_dpid)
@@ -216,6 +219,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         # TODO remove rules from any port acl.
         # load faucet.yaml and its included yamls
+        # TODO this method name does not match what it actually does.
         all_acls = config_parser.load_acls(self.config.acl_config_file)
 
         aclname = 'port_' + switchname + '_' + str(switchport)
@@ -311,7 +315,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     i = i + 1
 
         all_acls['acls'][aclname] = new_port_acl
-        # TODO yaml
         self.logger.info('writing the following acls')
         self.logger.info(all_acls)
         config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
@@ -377,13 +380,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
                                                 , mac)
             message = 'authenticated new client({}) at MAC: {}\n'.format(
                 user, mac)
-            # TODO lock
             THREAD_LOCK.acquire()
             conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
         self.add_acls(mac, user, rules, switchname, switchport)
         self.swap_temp_file()
-        # TODO unlock
+
         lockfile.unlock(conf_fd)
         THREAD_LOCK.release()
         self.send_signal(signal.SIGHUP)
@@ -439,12 +441,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         :param signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
         '''
-        with open(self.config.contr_pid_file, 'r') as f:
-            contr_pid = int(f.read())
+        with open(self.config.contr_pid_file, 'r') as pid_file:
+            contr_pid = int(pid_file.read())
             os.kill(contr_pid, signal_type)
             self.logger.info('sending signal {} to pid {}'.format(signal_type, contr_pid))
 
     def check_if_json(self):
+        """Check if HTTP content is json.
+        Returns:
+            json object if json, otherwise None.
+        """
         try:
             ctype, pdict = cgi.parse_header(
                 self.headers.get('content-type'))
@@ -466,6 +472,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
         return json_data
 
     def send_error(self, error):
+        """Sends an 404. and logs error.
+        Args:
+            error: error to log
+        """
+        # TODO do we want to actually send the error message back perhaps?
         self._set_headers(404, 'text/html')
         self.log_message('Error: %s', error)
         self.wfile.write(error.encode(encoding='utf_8'))
@@ -488,6 +499,6 @@ if __name__ == '__main__':
     HTTPHandler.config = conf
     HTTPHandler.rule_gen = rule_generator.RuleGenerator(conf.rules)
     server = ThreadedHTTPServer(('', conf.listen_port), HTTPHandler)
-    logger.info(('starting server {}'.format(conf.listen_port)))
+    logger.info(('starting server %d', conf.listen_port))
     server.serve_forever()
 
