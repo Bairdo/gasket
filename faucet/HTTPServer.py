@@ -102,6 +102,30 @@ def dp_port_mode_to_map(lines):
     return dpid_port_mode
 
 
+def is_rule_in(rule, list_):
+    """Searches a list of HashableDicts for an item equal to rule.
+    :param rule an acl dict
+    :param list_ a list of HashableDicts
+    :return True if rule is is equal to item in list_, false otherwise
+    """
+    hash_rule = HashableDict(rule)
+    for item in list_:
+        if hash_rule == item:
+            return True
+    return False
+
+
+def get_hashable_list(list_):
+    """Creates a list of HashableDict for a list of dict.
+    :param list_ a list of dicts (standard python version)
+    :return a list of HashableDict
+    """
+    hash_list = []
+    for item in list_:
+        hash_list.append(HashableDict(item))
+    return hash_list
+
+
 class HTTPHandler(BaseHTTPRequestHandler):
     '''
     This class receives HTTP messages from the portal about
@@ -146,9 +170,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         for line in prom_txt.splitlines():
             self.logger.info(line)
             if line.startswith('learned_macs'):
-                prom_mac_table.append(l)
+                prom_mac_table.append(line)
             if line.startswith('faucet_config_dp_name'):
-                prom_name_dpid.append(l)
+                prom_name_dpid.append(line)
             if line.startswith('dp_port_mode'):
                 # TODO this is not implemented on the faucet side yet.
                 prom_dpid_port_mode.append(line)
@@ -220,30 +244,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
 
-    def _is_rule_in(self, rule, list_):
-        """Searches a list of HashableDicts for an item equal to rule.
-        :param rule an acl dict
-        :param list_ a list of HashableDicts
-        :return True if rule is is equal to item in list_, false otherwise
-        """
-        hash_rule = HashableDict(rule)
-        for item in list_:
-            if hash_rule == item:
-                return True
-        return False
-
-    def _get_hashable_list(self, list_):
-        """Creates a list of HashableDict for a list of dict.
-        :param list_ a list of dicts (standard python version)
-        :return a list of HashableDict
-        """
-        hash_list = []
-
-        for item in list_:
-            hash_list.append(HashableDict(item))
-
-        return hash_list
-
     def add_acls(self, mac, user, rules, dp_name, switchport):
         """Adds the acls to a port acl that the mac address is associated with,
          in the faucet configuration file.
@@ -273,7 +273,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.logger.info("portacl")
         self.logger.info((type(port_acl)))
         self.logger.info(port_acl)
-        hashable_port_acl = self._get_hashable_list(port_acl)
+        hashable_port_acl = get_hashable_list(port_acl)
         for rule in port_acl:
 
             if '_name_' in rule['rule'] and rule['rule']['_name_'] == 'd1x':
@@ -284,7 +284,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     inserted = True
                     for port_to_apply, new_rules in list(rules.items()):
                         for new_rule in new_rules:
-                            if not self._is_rule_in(new_rule, hashable_port_acl):
+                            if not is_rule_in(new_rule, hashable_port_acl):
                             # only insert the new rule if it is not already in the port_acl (config file)
                                 new_port_acl.insert(i, new_rule)
                                 i = i + 1
@@ -298,7 +298,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     self.logger.info(("\n\nrules:\n{}".format(rules)))
                     for new_rule in rules['port_' + dp_name + '_' + str(switchport)]:
                         self.logger.info(("\n\nnewrule:\n{}".format(new_rule)))
-                        if not self._is_rule_in(new_rule, hashable_port_acl):
+                        if not is_rule_in(new_rule, hashable_port_acl):
                             new_port_acl.insert(i, new_rule)
                             i = i + 1
                 new_port_acl.insert(i, rule)
@@ -306,7 +306,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         if not inserted:
             inserted = True
             for new_rule in rules:
-                if not self._is_rule_in(new_rule, hashable_port_acl):
+                if not is_rule_in(new_rule, hashable_port_acl):
                     new_port_acl.insert(i, new_rule)
                     i = i + 1
 
@@ -317,6 +317,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
 
     def do_POST(self):
+        """Serves HTTP POST requests.
+        Inherited from BaseHttpRequestHandler.
+        """
         json_data = self.check_if_json()
         if json_data is None:
             return
@@ -327,6 +330,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error('Path not found\n')
 
     def do_DELETE(self):
+        """Serves HTTP DELETE requests.
+        Inherited from BaseHttpRequestHandler.
+        """
         json_data = self.check_if_json()
         if json_data is None:
             return
@@ -341,6 +347,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error('Path not found\n')
 
     def authenticate(self, json_data):
+        """Authenticates the user as specifed by json_data by adding ACL rules
+        to the Faucet configuration file. Once added Faucet is signaled via SIGHUP.
+        """
         self.logger.info(("****authenticated: {}".format(json_data)))
         conf_fd = None
         if self.path == self.config.dot1x_auth_path:  #request is for dot1xforwarder
@@ -385,15 +394,22 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.log_message('%s', message)
 
     def swap_temp_file(self):
-        # delete old file
-        # rename .tmp to old file.
+        """Removes the old config file and renames the temporary
+        one to become the original.
+        """
         os.remove(self.config.acl_config_file)
         os.rename(self.config.acl_config_file + '.tmp', self.config.acl_config_file)
 
     def deauthenticate(self, mac, username):
+        """Deauthenticates the mac and username by removing related acl rules
+        from Faucet's config file.
+        Args:
+            mac (str): mac address string to deauth
+            username (str): username to deauth.
+        """
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
         switchname, switchport = self._get_dp_name_and_port(mac)
-        # TODO lock
+
         THREAD_LOCK.acquire()
         conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
@@ -404,12 +420,14 @@ class HTTPHandler(BaseHTTPRequestHandler):
         else:
             self.remove_acls(mac, username, switchname, switchport)
             self.swap_temp_file()
-        # TODO unlock
         lockfile.unlock(conf_fd)
         THREAD_LOCK.release()
-
-
-
+        # TODO probably shouldn't return success if the switch/port cannot be found.
+        # but at this stage auth server (hostapd) can't do anything about it.
+        # Perhaps look into the CoA radius thing, so that process looks like:
+        #   - client 1x success, send to here.
+        #   - can't find switch. return failure.
+        #   - hostapd revokes auth, so now client is aware there was an error.
         self._set_headers(200, 'text/html')
         message = 'deauthenticated client {} at {} \n'.format(username, mac)
         self.wfile.write(message.encode(encoding='utf-8'))
