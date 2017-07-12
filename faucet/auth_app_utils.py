@@ -1,4 +1,4 @@
-"""Utility Classes and functions for authentication_app
+"""Utility Classes and functions for auth_app
 """
 
 import re

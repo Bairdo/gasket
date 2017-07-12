@@ -105,11 +105,15 @@ See [TODO](#todo) for more.
 ### Overview
 A user can be in two states authenticated and unauthenticated.
 When a user is unauthenticated (default state) all of their traffic is redirected to the hostapd server via a destination MAC address rewrite.
-This allows the hostapd process to inform the client that the network is using 802.1X with a EAP-Request message.
+This allows the following:
+1. The hostapd process to inform the client that the network is using 802.1X with a EAP-Request message.
+2. 802.1X traffic destined to the authenticator should only be received by the hostapd process.
+3. One hostpad process to be anywhere on the network.
 When a user sends the EAP-Logoff message  they are unauthenticated from the port.
 
 When a user successfully authenticates Access Control List (ACL) rules get applied.
-These ACLs can match on any field that Ryu supports (and therefore Faucet), see [Ryu documentation](http://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#flow-match-structure).
+These ACLs are identical to Faucet ACL rule syntax, and can therefore perform any Faucet action such as output, mirror, modify VLANs, ... .
+The ACLs can match on any field that Ryu supports (and therefore Faucet), see [Ryu documentation](http://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#flow-match-structure).
 Typically these 'authorisation' rules should include the 'dl_src' with the users MAC address to ensure that the rule gets applied to the user, however if desired this is not necessary, **BUT this could mean that unauthenticated users can use the network!** so do so at your own risk.
 
 The hostapd process typically runs on its own server and has a separate (from the switch's dataplane) network connection to the controller.
@@ -131,17 +135,23 @@ $ git checkout username-fix-2
 
 - Configure the build.
 The provided .config should suffice. However if you wish to modify it, we basically need the wired driver, and you may also want the integrated RADIUS Server.
-- The IP address of the httpserver is hardcoded :( the sed command below will replace '10.0.0.2' with '10.0.13.3' replace '10\.0\.13\.3' with the IP address of your faucet's non controlplane link.
+- The IP address of the auth_app.py is hardcoded :( the sed command below will replace '10.0.0.2' with '10.0.13.3'.
+Replace '10\.0\.13\.3' with the IP address of your faucet's non controlplane link.
+- The port number of the auth_app.py is also hardcoded.
+Replace 12345 with the port for auth_app.py to listen on.
 - Build and install.
 ```bash
-sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eap_server/eap_server.c
-sed -ie  's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c
-make && sudo make install
+sed -ie 's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eap_server/eap_server.c
+sed -ie 's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c
+sed -ie 's/8080/12345/g' hostapd-d1xf/src/eap_server/eap_server.c && \
+sed -ie 's/8080/12345/g' hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
+make
+sudo make install
 ```
 - hostapd/wired.conf provides the configuration file for hostapd.
 
 Example wired.conf if using hostapd's RADIUS server.
-```txt
+```ini
 interface=eth0
 driver=wired
 logger_stdout=-1
@@ -191,7 +201,7 @@ If you are using Windows clients EAP-MSCHAPv2 will need to be enabled.
 
 #### Controller
 ##### Faucet
-- Get the faucet from where you are reading this doc. Note: NOT the official reannz repo at this time
+- Get Faucet
 ```bash
 $ git clone https://github.com/bairdo/faucet.git
 $ git checkout <branch>
@@ -285,22 +295,87 @@ These configuration files are based on the network diagram at the top.
 
 1. The key 'auth_mode' must be set with the value 'access'
 
-2. Each 'acl_in' must be in the form 'port_' + <DATAPATH NAME> + '_' + <PORT NUMBER> e.g. for the above configurations 'port_ovs-hosts_switch_2'.
+2. Each 'acl_in' must be in the form 'port\_' + \<DATAPATH NAME\> + '\_' + \<PORT NUMBER\> e.g. for the above configurations 'port_ovs-hosts_switch_2'.
 
 - 'port_ovs-hosts-switch_1' & 'port_ovs-hosts-switch_2' show the rules that each 802.1X port acl requires.
 - For the rule 'name' field, please do not use 'd1x' or 'redir41x' as rules which match are treated specially internally.
 - Change the mac address '08:00:27:00:03:02' to the mac address of the server that hostap is running on.
 It should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port acls (untested).
 
+
+###### rules.yaml
 The base directoy contains the file rules.yaml.
 rules.yaml contains the rules to apply when a user successfully logs on.
+The values '_user-mac_' and '_user-name_' are filled at runtime, with the logged in username and MAC address of the authenticating device.
 
+
+The keys '_mac_', '_name_' and their value is technically optional, but recomended for most use cases.
+The values can be any string, however they are used to identify who the rules belong to so they can be removed when the user logs off, so if they are not set as below when a logoff occurs the rules may not be removed, OR different ones removed (if match a different username).
+
+```yaml
+users:
+    host111user:
+        port_ovs-hosts-switch_1: # port_acl to apply rules to
+            # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
+            # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
+            - rule:
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_src: _user-mac_
+                dl_type: 0x0800
+                nw_dst: 8.8.4.4
+                actions:
+                    allow: 0
+            - rule:
+                # Faucet Rule
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_src: _user-mac_
+                dl_type: 0x0800
+                actions:
+                    allow: 1
+            - rule:
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_src: _user-mac_
+                dl_type: 0x0806
+                actions:
+                    allow: 1
+```
 
 ##### auth_app.py
 The faucet repository contains auth_app.py which is used as the 'proxy' between the authentication servers and faucet.
-This must run on the same machine as faucet.
+This must run on the same machine as faucet - filesystem locks are used to lock the configuration file and are not available on network shares.
 
-auth.yaml is the configuration file and contains annotations on required parts. Note: the structure and content is subject to change.
+###### auth.yaml
+auth.yaml is the configuration file used by auth_app. Note: the structure and content is subject to change.
+```yaml
+---
+version: 0
+
+logger_location: auth_app.log
+
+listen_port: 8080
+
+faucet:
+    prometheus_port: 9244
+    ip: 127.0.0.1
+
+files:
+    # locations to various files.
+    # contr_pid only contains the Process ID (PID) of the faucet process.
+    controller_pid: contr_pid 
+    faucet_config: faucet.yaml
+    acl_config: faucet.yaml
+
+urls:
+    # HTTP endpoints for auth_app.py
+    dot1x: /authenticate/auth
+
+# rules to be applied for a user once authenticated.
+auth-rules:
+    file: /faucet-src/rules.yaml
+```
 
 
 ### Running
@@ -340,4 +415,8 @@ Not Implemented yet.
 - allow user to have their own rules on the port before our user is authenticated ones and after the 1x to hostapd.
 For example if all traffic from port is not allowed to go to 8.8.8.8 for what ever reason.
 
-- allow the use of 3 modes; 802.1X, Captive Portal, 802.1X with Captive Portal fallback on a port (not necessarily 1X).
+- allow the use of different modes; 802.1X, Captive Portal, 802.1X with Captive Portal fallback on a port (not necessarily 1X), unauthed vlan.
+
+- Captive Portal.
+
+- Allow ACL rules to be applied to any (named) ACL, e.g. logon port 1, but apply rules to port 2 also.
