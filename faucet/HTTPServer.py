@@ -76,8 +76,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
          and returns the 'access port' that the mac address is connected on.
-        :param mac MAC address to find port for.
-        :returns dp name & port number.
+        Args:
+             mac MAC address to find port for.
+        Returns:
+             dp name & port number.
         """
         # query faucets promethues.
         prom_txt = self.scrape_prometheus()
@@ -123,11 +125,12 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def remove_acls(self, mac, name, switchname, switchport, startswith=False):
         """Removes the ACLS for the mac and name from the config file.
         NOTE: only from the port that the mac address is authenticated on, currently.
-        :param mac mac address of authenticated user
-        :param name the 'name' field of the acl rule in faucet.yaml,
-             generally username or captiveportal_*
-        :param startswith Boolean value should name field be compared using string.startswith(),
-             or == equality
+        Args:
+            mac: mac address of authenticated user
+            name: the 'name' field of the acl rule in faucet.yaml,
+                 generally username or captiveportal_*
+            startswith: Boolean value, should name field be compared using string.startswith(),
+                or == equality
         """
 
         # TODO remove rules from any port acl.
@@ -164,9 +167,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def add_acls(self, mac, user, rules, dp_name, switchport):
         """Adds the acls to a port acl that the mac address is associated with,
          in the faucet configuration file.
-        :param mac MAC address of authenticated user
-        :param user username of authenticated user
-        :param rules List of ACL rules to be applied to port that mac is associated with.
+        Args:        
+            mac MAC address of authenticated user
+            user username of authenticated user
+            rules List of ACL rules to be applied to port that mac is associated with.
         """
         self.logger.info("rules")
         self.logger.info(rules)
@@ -351,8 +355,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
     def send_signal(self, signal_type):
         ''' Send a signal to the controller to indicate a change in config file
-
-        :param signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
+        Args:
+            signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
         '''
         with open(self.config.contr_pid_file, 'r') as pid_file:
             contr_pid = int(pid_file.read())
