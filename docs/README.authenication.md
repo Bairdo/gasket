@@ -262,7 +262,7 @@ acls:
                   # This rule must be at the top of the port acl.
                   # It will redirect all 802.1X traffic to the hostap server that
                   #  is running on mac address 08:00:27:00:03:02.
-                  name: d1x
+                  name: __1x-redirect__
                   dl_type: 34958
                   actions:
                         allow: 1
@@ -273,18 +273,19 @@ acls:
                   # It will redirect all traffic to the hostap server that is
                   #  running on mac address 08:00:27:00:03:02.
                   # Used for getting hostap to send EAPOL-request messages, to notify the client to start 802.1X.
-                  name: redir41x
+                  # I believe hostapd will actually only respond to dhcp at this time, but is intent to respond to all, with EAPOL-request so could add a match for only dhcp.
+                  name: __unauth-redirect__
                   actions:
                         allow: 1
                         dl_dst: 08:00:27:00:03:02
       port_ovs-hosts-switch_2:
           - rule:
-                  name: d1x
+                  name: __1x-redirect__
                   dl_type: 34958
                   actions:
                         allow: 1
           - rule:
-                  name: redir41x
+                  name: __unatuh-redirect__
                   actions:
                         allow: 1
                         dl_dst: 08:00:27:00:03:02
