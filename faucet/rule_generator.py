@@ -31,7 +31,7 @@ class RuleGenerator():
             for portacl in list(self.conf["users"][username].keys()):
                 rules[portacl] = []
                 for rule in self.conf["users"][username][portacl]:
-                    r = rule["rule"].
+                    r = rule["rule"]
                     for k, v in list(r.items()):
                         if v == "_user-mac_":
                             r[k] = mac
