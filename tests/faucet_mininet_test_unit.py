@@ -3303,7 +3303,6 @@ class FaucetAuthenticationTest(FaucetTest):
     """Base class for the authentication tests """
 
     RUN_GAUGE = False
-    script_path = "/faucet-src/tests/dot1x_capflow_scripts"
     pids = {}
 
     N_UNTAGGED = 5
@@ -3598,26 +3597,26 @@ vlans:
 acls:
     port_faucet-1_3:
         - rule:
-            _name_: d1x
+            _name_: __1x-redirect__
             actions:
                 allow: 1
                 dl_dst: 70:6f:72:74:61:6c
             dl_type: 34958
         - rule:
-            _name_: redir41x
+            _name_: __unauth-redirect__
             actions:
                 allow: 1
                 output:
                     dl_dst: 70:6f:72:74:61:6c
     port_faucet-1_4:
         - rule:
-            _name_: d1x
+            _name_: __1x-redirect__
             actions:
                 allow: 1
                 dl_dst: 70:6f:72:74:61:6c
             dl_type: 34958
         - rule:
-            _name_: redir41x
+            _name_: __unauth-redirect__
             actions:
                 allow: 1
                 output:
@@ -3625,13 +3624,13 @@ acls:
 
     port_faucet-1_5:
         - rule:
-            _name_: d1x
+            _name_: __1x-redirect__
             actions:
                 allow: 1
                 dl_dst: 70:6f:72:74:61:6c
             dl_type: 34958
         - rule:
-            _name_: redir41x
+            _name_: __unauth-redirect__
             actions:
                 allow: 1
                 output:

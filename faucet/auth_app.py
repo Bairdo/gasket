@@ -197,10 +197,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         hashable_port_acl = auth_app_utils.get_hashable_list(port_acl)
         for rule in port_acl:
 
-            if '_name_' in rule['rule'] and rule['rule']['_name_'] == 'd1x':
+            if '_name_' in rule['rule'] and rule['rule']['_name_'] == '__1x-redirect__':
                 new_port_acl.insert(i, rule)
                 i = i + 1
-            elif '_name_' in rule['rule'] and rule['rule']['_name_'] == 'redir41x':
+            elif '_name_' in rule['rule'] and rule['rule']['_name_'] == '__unauth-redirect__':
                 if not inserted:
                     inserted = True
                     for port_to_apply, new_rules in list(rules.items()):
