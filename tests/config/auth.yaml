@@ -58,6 +58,5 @@ captive-portal:
     retransmission-attempts: 3
 
 # rules to be applied for a user once authenticated.
-#  THIS IS NOT ACTUALLY USED AT THIS TIME.
 auth-rules:
     file: /faucet-src/rules.yaml

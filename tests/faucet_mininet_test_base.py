@@ -79,6 +79,7 @@ class FaucetTestBase(unittest.TestCase):
     env = collections.defaultdict(dict)
     rand_dpids = set()
 
+
     def __init__(self, name, config, root_tmpdir, ports_sock):
         super(FaucetTestBase, self).__init__(name)
         self.config = config
@@ -194,9 +195,7 @@ class FaucetTestBase(unittest.TestCase):
             self.dpid = faucet_mininet_test_util.str_int_dpid(self.dpid)
         else:
             self.topo_class = faucet_mininet_test_topo.FaucetSwitchTopo
-
             self.dpid = self.rand_dpid()
-
             self.of_port, _ = faucet_mininet_test_util.find_free_port(
                 self.ports_sock, self._test_name())
             self.gauge_of_port, _ = faucet_mininet_test_util.find_free_port(
@@ -416,7 +415,6 @@ class FaucetTestBase(unittest.TestCase):
                             func()
                 else:
                     print('tcpdump_helper: %s' % line)
-
         self.assertTrue(tcpdump_started, msg='%s did not start' % tcpdump_cmd)
         return tcpdump_txt
 
@@ -1141,7 +1139,6 @@ dbs:
         if table_id is not None:
             self.wait_nonzero_packet_count_flow(
                 {u'tp_dst': int(port)}, table_id=table_id)
-
 
     def swap_host_macs(self, first_host, second_host):
         """Swap the MAC addresses of two Mininet hosts."""

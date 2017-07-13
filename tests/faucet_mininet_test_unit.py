@@ -733,7 +733,6 @@ class FaucetConfigReloadTest(FaucetTest):
 vlans:
     100:
         description: "untagged"
-
     200:
         description: "untagged"
 """
@@ -787,7 +786,6 @@ acls:
             actions:
                 allow: 1
 """
-
 
     def setUp(self):
         super(FaucetConfigReloadTest, self).setUp()
@@ -862,7 +860,6 @@ acls:
     def test_port_change_vlan(self):
         first_host, second_host = self.net.hosts[:2]
         third_host, fourth_host = self.net.hosts[2:]
-
         self.ping_all_when_learned()
         self.change_port_config(
             self.port_map['port_1'], 'native_vlan', 200, restart=False)
@@ -882,16 +879,13 @@ acls:
         self.ping_all_when_learned()
         first_host, second_host = self.net.hosts[0:2]
         orig_conf = self._get_conf()
-
         self.change_port_config(
             self.port_map['port_1'], 'acl_in', 1, cold_start=False)
         self.wait_until_matching_flow(
             {u'in_port': int(self.port_map['port_1']), u'tp_dst': 5001}, table_id=0)
         self.verify_tp_dst_blocked(5001, first_host, second_host)
         self.verify_tp_dst_notblocked(5002, first_host, second_host)
-
         self._reload_conf(orig_conf, True, cold_start=False)
-
         self.verify_tp_dst_notblocked(
             5001, first_host, second_host, table_id=None)
         self.verify_tp_dst_notblocked(
@@ -899,7 +893,6 @@ acls:
 
     def test_port_change_permanent_learn(self):
         first_host, second_host, third_host = self.net.hosts[0:3]
-
         self.change_port_config(
             self.port_map['port_1'], 'permanent_learn', True, cold_start=False)
         self.ping_all_when_learned()
@@ -1336,7 +1329,6 @@ vlans:
         self.ping_all_when_learned()
 
 
-
 class FaucetSingleUntaggedIPv4ControlPlaneTest(FaucetUntaggedTest):
 
     CONFIG_GLOBAL = """
@@ -1458,7 +1450,6 @@ vlans:
             self.assertTrue(
                 re.search(ra_required, tcpdump_txt),
                 msg='%s: %s (%s)' % (ra_required, tcpdump_txt, tcpdump_filter))
-
 
 
 class FaucetSingleUntaggedIPv6ControlPlaneTest(FaucetUntaggedTest):
@@ -2658,6 +2649,7 @@ class FaucetStringOfDPTest(FaucetTest):
                   n_untagged=0, untagged_vid=100,
                   include=[], include_optional=[], acls={}, acl_in_dp={}):
         """Set up Mininet and Faucet for the given topology."""
+
         self.dpids = [str(self.rand_dpid()) for _ in range(n_dps)]
         self.dpid = self.dpids[0]
         self.CONFIG = self.get_config(
@@ -3311,7 +3303,7 @@ class FaucetAuthenticationTest(FaucetTest):
     """Base class for the authentication tests """
 
     RUN_GAUGE = False
-    script_path = "/faucet-src/tests/dot1x_capflow_scripts" 
+    script_path = "/faucet-src/tests/dot1x_capflow_scripts"
     pids = {}
 
     N_UNTAGGED = 5
@@ -3354,7 +3346,7 @@ phase2="auth=PAP password=password"
 eapol_flags=0
 }''' % (username, username, password)
             host.cmd('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
-        
+ 
     def get_users(self):
         """Get the hosts that are users (ie not the portal or controller hosts)
         Returns:
@@ -3397,10 +3389,9 @@ eapol_flags=0
         self.pids['%s-tcpdump' % host.name] = host.lastPid
 
         start_reload_count = self.get_configure_count()
-        
-        cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf > /dev/null 2>&1 &".format(host.name) 
+
+        cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf > /dev/null 2>&1 &".format(host.name)
         host.cmd(cmd)
-        # TODO possibly replace this sleep with a wpa_cli status poll
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         host.cmd(cmd)
 
@@ -3427,9 +3418,9 @@ eapol_flags=0
         Returns:
             True if download successful. False otherwise."""
         for _ in range(retries):
-            # pylint: disable=no-member 
+            # pylint: disable=no-member
             result = host.cmd("wget --output-document=- --quiet 10.0.0.2:{}/index.txt".format(self.ws_port))
-            if re.search("This is a text file on a webserver",result) is not None:
+            if re.search("This is a text file on a webserver", result) is not None:
                 return True
         return False
 
@@ -3442,18 +3433,18 @@ eapol_flags=0
         with open('/faucet-src/tests/config/auth.yaml', 'r') as f:
             httpconfig = f.read()
 
-        m = {}
-        m['tmpdir'] = self.tmpdir
-        m['promport'] = self.prom_port
-        m['listenport'] = self.auth_server_port
-        m['logger_location'] = self.tmpdir + '/httpserver.log'
+        config_values = {}
+        config_values['tmpdir'] = self.tmpdir
+        config_values['promport'] = self.prom_port
+        config_values['listenport'] = self.auth_server_port
+        config_values['logger_location'] = self.tmpdir + '/httpserver.log'
 
-        host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % m, self.tmpdir))
+        host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
         host.cmd('cp -r /faucet-src %s/' % self.tmpdir)
 
-        host.cmd('python3.5 %s/faucet-src/faucet/auth_app.py --config  %s/auth.yaml  > %s/auth_app.txt 2> %s/auth_app.err &'  % (self.tmpdir, self.tmpdir, self.tmpdir, self.tmpdir))
+        host.cmd('python3.5 {0}/faucet-src/faucet/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
         print 'authentication controller app started'
-        self.pids['auth_server'] = host.lastPid 
+        self.pids['auth_server'] = host.lastPid
 
         tcpdump_args = ' '.join((
             '-s 0',
@@ -3493,11 +3484,11 @@ ieee8021x=1\n
 eap_reauth_period=3600\n
 use_pae_group_addr=0\n
 eap_server=1\n
-eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name , self.tmpdir))
+eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir))
 
         # compile hostapd with the new ip address and port of the authentication controller app.
         host.cmd('cp -r /root/hostapd-d1xf/ {}/hostapd-d1xf'.format(self.tmpdir))
-        host.cmd('''sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
+        host.cmd(r'''sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
 sed -ie  's/10\.0\.0\.2/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
 sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
 sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
@@ -3536,7 +3527,7 @@ make'''.format(contr_num, self.tmpdir, self.auth_server_port))
         host.cmd('tcpdump %s &' % tcpdump_args)
         self.pids['p0-tcpdump'] = host.lastPid
 
-    def makeDHCPconfig(self, filename, intf, gw, dns):
+    def make_dhcp_config(self, filename, intf, gw, dns):
         """Create configuration file for udhcpd.
         Args:
             filename (str): name of config file.
@@ -3544,7 +3535,7 @@ make'''.format(contr_num, self.tmpdir, self.auth_server_port))
             gw (str): ip address of gateway
             dns (str): ip address of dns server
         """
-        DNSTemplate = """
+        dns_template = """
 start       10.0.12.10
 end     10.0.12.250
 option  subnet  255.0.0.0
@@ -3552,17 +3543,17 @@ option  domain  local
 option  lease   300  # seconds
 """
 
-        "Create a DHCP configuration file"
+        # Create a DHCP configuration file
         config = (
             'interface %s' % intf,
-            DNSTemplate,
+            dns_template,
             'option router %s' % gw,
             'option dns %s' % dns,
-            '' )
-        with open( filename, 'w' ) as f:
-            f.write( '\n'.join( config ) )
+            '')
+        with open(filename, 'w') as f:
+            f.write('\n'.join(config))
 
-    def startDHCPserver(self, host, gw, dns ):
+    def start_dhcp_server(self, host, gw, dns):
         """Start DHCP server (udhcp) on host with specified DNS server
         Args:
             host (mininet.host): host to run udhcp server on.
@@ -3570,11 +3561,11 @@ option  lease   300  # seconds
             gw (str): ip address of gateway
             dns (str): ip address of dns server
         """
-        print('* Starting DHCP server on', host, 'at', host.IP(), '\n' )
-        dhcpConfig = '/tmp/%s-udhcpd.conf' % host
-        self.makeDHCPconfig( dhcpConfig, host.defaultIntf(), gw, dns )
-        host.cmd( 'udhcpd -f', dhcpConfig,
-          '> %s/%s-dhcp.log 2>&1  &' % (self.tmpdir, host ))
+        print('* Starting DHCP server on', host, 'at', host.IP(), '\n')
+        dhcp_config = '/tmp/%s-udhcpd.conf' % host
+        self.make_dhcp_config(dhcp_config, host.defaultIntf(), gw, dns)
+        host.cmd('udhcpd -f', dhcp_config,
+                 '> %s/%s-dhcp.log 2>&1  &' % (self.tmpdir, host))
 
         tcpdump_args = ' '.join((
             '-s 0',
@@ -3678,13 +3669,13 @@ acls:
 
         port = 0
         # TODO fix this hack, (hostapd hardcoded portnumber)
-        while port <=9999:
+        while port <= 9999:
             port, _ = faucet_mininet_test_util.find_free_port(
                 self.ports_sock, self._test_name())
 
         self.auth_server_port = port
         self.start_net()
-        self.start_programs() 
+        self.start_programs()
 
     def start_programs(self):
         """Start the authentication controller app, hostapd, dhcp server, 'internet' webserver
@@ -3692,10 +3683,10 @@ acls:
         # pylint: disable=unbalanced-tuple-unpacking
         portal, interweb, h0, h1, h2 = self.net.hosts
         # pylint: disable=no-member
-        lastPid = self.net.controller.lastPid
+        last_pid = self.net.controller.lastPid
         # pylint: disable=no-member
-        self.net.controller.cmd('echo {} > {}/contr_pid'.format(lastPid, self.tmpdir))
-        self.pids['faucet'] = lastPid
+        self.net.controller.cmd('echo {} > {}/contr_pid'.format(last_pid, self.tmpdir))
+        self.pids['faucet'] = last_pid
 
         # pylint: disable=no-member
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
@@ -3718,18 +3709,20 @@ acls:
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
 
-        self.startDHCPserver(interweb, gw='10.0.0.2', dns='8.8.8.8')
+        self.start_dhcp_server(interweb, gw='10.0.0.2', dns='8.8.8.8')
 
         self.run_hostapd(portal)
 
 
-class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitchTest):
-    """Check if authenticated and unauthenticated users can communicate"""
+class FaucetSingleAuthenticationMutliUserLogOnTest(FaucetAuthenticationSingleSwitchTest):
+    """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
 
     def ping_between_hosts(self, users):
         """Ping between the specified host
         Args:
-            users (list<mininet.host>): users to ping between. 0 & 1 should be authenitcated. 2 should be unauthenticated,
+            users (list<mininet.host>): users to ping between.
+                0 & 1 should be authenitcated.
+                2 should be unauthenticated,
         """
         for user in users:
             user.defaultIntf().updateIP()
@@ -3752,7 +3745,7 @@ class FaucetSingleAuthenticationSomeLoggedOnTest(FaucetAuthenticationSingleSwitc
             pass
         else:
             self.fail('{0} {1} should not be able to ping {2} {3}'.format(h1, h1.IP(), h2, h2.IP()))
-        
+ 
         ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
         self.assertAlmostEqual(ploss, 100)
         try:
@@ -3808,16 +3801,16 @@ class FaucetSingleAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitch
     def test_logoff(self):
         """Check that the user cannot go on the internet after logoff"""
         h0 = self.clients[0]
-        interweb = self.net.hosts[1]
         self.logon_dot1x(h0)
 
         self.one_ipv4_ping(h0, '10.0.0.2')
 
         result = self.check_http_connection(h0)
         self.assertTrue(result)
-        
+
         h0.cmd("wpa_cli logoff")
-        # TODO possibly poll wpa_cli status to check that the status has changed? instead of a sleep??
+        # TODO possibly poll wpa_cli status to check that the status has changed?
+        #  instead of a sleep??
         time.sleep(1)
 
         self.fail_ping_ipv4(h0, '10.0.0.2')
