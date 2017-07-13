@@ -3714,7 +3714,7 @@ acls:
         self.run_hostapd(portal)
 
 
-class FaucetSingleAuthenticationMutliUserLogOnTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationMultiUserLogOnTest(FaucetAuthenticationSingleSwitchTest):
     """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
 
     def ping_between_hosts(self, users):
