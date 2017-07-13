@@ -162,7 +162,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         all_acls['acls'][aclname] = updated_port_acl
 
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp')
 
     def add_acls(self, mac, user, rules, dp_name, switchport):
         """Adds the acls to a port acl that the mac address is associated with,
@@ -234,7 +234,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         all_acls['acls'][aclname] = new_port_acl
         self.logger.info('writing the following acls')
         self.logger.info(all_acls)
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp', self.logger)
+        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp')
 
     def do_POST(self):
         """Serves HTTP POST requests.
