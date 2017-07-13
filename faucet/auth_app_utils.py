@@ -35,8 +35,10 @@ def float_to_mac(mac_as_float_str):
 def dpid_name_to_map(lines):
     '''Converts a list of lines containing the faucet_config_dp_name,
        (from prometheus client (faucet)) to a dictionary.
-    :param lines list
-    :returns dictionary
+    Args:
+        lines (list): prometheus lines of 'faucet_config_dp_name'.
+    Returns:
+        dictionary of dpid to name.
     '''
     dpid_to_name = {}
     for line in lines:
@@ -49,8 +51,10 @@ def dpid_name_to_map(lines):
 def dp_port_mode_to_map(lines):
     '''Converts a list of lines containing dp_port_mode,
        (from prometheus client (faucet)) to a dictionary dictionary.
-    :param lines list
-    :returns dictionary
+    Args:
+        lines (list)
+    Returns:
+        dictionary of dpid to port mode string (or None).
     '''
     dpid_port_mode = {}
     for line in lines:
@@ -68,9 +72,11 @@ def dp_port_mode_to_map(lines):
 
 def is_rule_in(rule, list_):
     """Searches a list of HashableDicts for an item equal to rule.
-    :param rule an acl dict
-    :param list_ a list of HashableDicts
-    :return True if rule is is equal to item in list_, false otherwise
+    Args:
+        rule: an acl dict
+        list_:a list of HashableDicts
+    Returns:
+        True if rule is is equal to item in list_, false otherwise
     """
     hash_rule = HashableDict(rule)
     for item in list_:
@@ -81,8 +87,10 @@ def is_rule_in(rule, list_):
 
 def get_hashable_list(list_):
     """Creates a list of HashableDict for a list of dict.
-    :param list_ a list of dicts (standard python version)
-    :return a list of HashableDict
+    Args:
+        list_: a list of dicts (standard python version)
+    Returns:
+        a list of HashableDict
     """
     hash_list = []
     for item in list_:
