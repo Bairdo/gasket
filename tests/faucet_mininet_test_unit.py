@@ -3781,29 +3781,16 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
         self.assertAlmostEqual(ploss, 100)
 
 
-class FaucetSingleAuthenticationDot1XLogonTest(FaucetAuthenticationSingleSwitchTest):
-    """Check if a user can logon successfully using dot1x"""
-
-    def test_dot1xlogon(self):
-        """Log on using dot1x"""
-        h0 = self.clients[0]
-        interweb = self.net.hosts[1]
-        self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
-        result = self.check_http_connection(h0)
-        self.assertTrue(result)
-
-
-class FaucetSingleAuthenticationDot1XLogoffTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationDot1XLogonAndLogoffTest(FaucetAuthenticationSingleSwitchTest):
     """Log on using dot1x and log off"""
 
     def test_logoff(self):
         """Check that the user cannot go on the internet after logoff"""
         h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+
         self.logon_dot1x(h0)
-
-        self.one_ipv4_ping(h0, '10.0.0.2')
-
+        self.one_ipv4_ping(h0, interweb.IP())
         result = self.check_http_connection(h0)
         self.assertTrue(result)
 
