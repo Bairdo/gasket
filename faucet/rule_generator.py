@@ -13,19 +13,17 @@ class RuleGenerator():
     conf = None
 
     def __init__(self, rule_file):
-
         self.reload(rule_file)
-
-       
-
 
     def get_rules(self, username, auth_port_acl, mac):
         """Gets Faucet ACL rules for the specified user.
         Replaces placeholder keys/values as required.
-        :param username: The username to find rules for.
-        :param auth_port_acl: the port acl name of the port 'username' authenticated on.
-        :param mac: mac address of username's machine
-        :returns: Dictionary of port_acl names to list of rules.
+        Args:
+            username: The username to find rules for.
+            auth_port_acl: the port acl name of the port 'username' authenticated on.
+            mac: mac address of username's machine
+        Returns:
+            Dictionary of port_acl names to list of rules.
         """
         rules = dict()
 
@@ -33,7 +31,7 @@ class RuleGenerator():
             for portacl in list(self.conf["users"][username].keys()):
                 rules[portacl] = []
                 for rule in self.conf["users"][username][portacl]:
-                    r = rule["rule"] # should be CommentedMap.
+                    r = rule["rule"].
                     for k, v in list(r.items()):
                         if v == "_user-mac_":
                             r[k] = mac
@@ -43,19 +41,17 @@ class RuleGenerator():
                     d["rule"] = r
                     rules[portacl].append(d)
 
-
                 if portacl == "_authport_":
                     # rename the port acl to the one the user authenticated on.
                     temp = rules[portacl]
                     del rules[portacl]
                     rules[auth_port_acl] = temp
-        print("got rules")
-        print(rules)
         return rules
 
     def reload(self, rule_file):
         """(Re)loads the rule yaml file.
-        :param rule_file: path to file.
+        Args:
+            rule_file: path to file.
         """
         self.yaml_file = rule_file
         self.conf = yaml.load(open(rule_file, "r"))
