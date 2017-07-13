@@ -59,4 +59,4 @@ captive-portal:
 
 # rules to be applied for a user once authenticated.
 auth-rules:
-    file: /faucet-src/rules.yaml
+    file: /faucet-src/tests/config/rules.yaml
