@@ -20,6 +20,7 @@ import requests
 
 from valve_util import get_logger
 import config_parser
+import config_parser_util
 import my_lockfile as lockfile
 from auth_config import AuthConfig
 import rule_generator
@@ -56,6 +57,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
     config = None
     rule_gen = None
     logger = None
+    logname = 'auth_app'
     def _set_headers(self, code, ctype):
         self.send_response(code)
         self.send_header('Content-type', ctype)
@@ -135,7 +137,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         # TODO remove rules from any port acl.
         # load faucet.yaml and its included yamls
-        acls_yaml = config_parser.load_yaml_file(self.config.acl_config_file)
+        acls_yaml = config_parser_util.read_config(self.config.acl_config_file, self.logname)
 
         aclname = 'port_' + switchname + '_' + str(switchport)
         port_acl = acls_yaml['acls'][aclname]
@@ -182,7 +184,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         else:
             # acls could be in a different file from dps e.t.c.
             # and we need to write back the whole file including dps, etc if included.
-            acls_yaml = config_parser.load_yaml_file(self.config.acl_config_file)
+            acls_yaml = config_parser_util.read_config(self.config.acl_config_file, self.logname)
         aclname = 'port_' + dp_name + '_' + str(switchport)
 
         self.logger.info(acls_yaml)
@@ -307,7 +309,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         lockfile.unlock(conf_fd)
         THREAD_LOCK.release()
         self.send_signal(signal.SIGHUP)
-        self.logger.error(config_parser.load_yaml_file(self.config.acl_config_file))
+        self.logger.error(config_parser_util.read_config(self.config.acl_config_file, self.logname))
         #write response
         self._set_headers(200, 'text/html')
         self.wfile.write(message.encode(encoding='utf-8'))
