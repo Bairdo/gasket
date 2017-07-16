@@ -4,8 +4,8 @@
 import re
 
 class HashableDict(dict):
-    '''
-        Copied from http://stackoverflow.com/a/1151686
+    '''Used to compared if rules (dictionaries) are the same.
+    Copied from http://stackoverflow.com/a/1151686
     '''
     def __key(self):
         return tuple((k, self[k]) for k in sorted(self))

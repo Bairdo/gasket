@@ -135,11 +135,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
         # TODO remove rules from any port acl.
         # load faucet.yaml and its included yamls
-        # TODO this method name does not match what it actually does.
-        all_acls = config_parser.load_acls(self.config.acl_config_file)
+        acls_yaml = config_parser.load_yaml_file(self.config.acl_config_file)
 
         aclname = 'port_' + switchname + '_' + str(switchport)
-        port_acl = all_acls['acls'][aclname]
+        port_acl = acls_yaml['acls'][aclname]
         i = 0
         updated_port_acl = []
         for rule in port_acl:
@@ -160,9 +159,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 updated_port_acl.insert(i, rule)
                 i = i + 1
 
-        all_acls['acls'][aclname] = updated_port_acl
+        acls_yaml['acls'][aclname] = updated_port_acl
 
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp')
+        config_parser.write_yaml_file(acls_yaml, self.config.acl_config_file + '.tmp')
 
     def add_acls(self, mac, user, rules, dp_name, switchport):
         """Adds the acls to a port acl that the mac address is associated with,
@@ -181,11 +180,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 dp_name, switchport, user, mac)))
             return
         else:
-            all_acls = config_parser.load_acls(self.config.acl_config_file) #, dp_name, switchport)
+            # acls could be in a different file from dps e.t.c.
+            # and we need to write back the whole file including dps, etc if included.
+            acls_yaml = config_parser.load_yaml_file(self.config.acl_config_file)
         aclname = 'port_' + dp_name + '_' + str(switchport)
 
-        self.logger.info(all_acls)
-        port_acl = all_acls['acls'][aclname]
+        self.logger.info(acls_yaml)
+        port_acl = acls_yaml['acls'][aclname]
 
         i = 0
         # apply ACL for user to the switchport ACL
@@ -231,10 +232,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
                     new_port_acl.insert(i, new_rule)
                     i = i + 1
 
-        all_acls['acls'][aclname] = new_port_acl
+        acls_yaml['acls'][aclname] = new_port_acl
         self.logger.info('writing the following acls')
-        self.logger.info(all_acls)
-        config_parser.write_yaml_file(all_acls, self.config.acl_config_file + '.tmp')
+        self.logger.info(acls_yaml)
+        config_parser.write_yaml_file(acls_yaml, self.config.acl_config_file + '.tmp')
 
     def do_POST(self):
         """Serves HTTP POST requests.
@@ -306,7 +307,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         lockfile.unlock(conf_fd)
         THREAD_LOCK.release()
         self.send_signal(signal.SIGHUP)
-        self.logger.error(config_parser.load_acls(self.config.acl_config_file))
+        self.logger.error(config_parser.load_yaml_file(self.config.acl_config_file))
         #write response
         self._set_headers(200, 'text/html')
         self.wfile.write(message.encode(encoding='utf-8'))
