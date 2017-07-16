@@ -35,7 +35,7 @@ The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet
 The **OpenFlow Switch** is an OpenFlow 1.3 switch we currently use [OpenVSwitch](openvswitch.org).
 In the future we hope to run on [Allied Telesis ATx930](https:/www.alliedtelesis.com/products/x930-series).
 
-The diagram below is an example of what we have tested with, in the future we hope to verify different configurations such as single switch, and multiple switch with multiple Authentication servers at different switches.
+The diagram below is an example of what we have tested with, in the future we hope to verify different configurations such as multiple switches managed by a single authentication server & controller, and multiple switch with multiple Authentication servers at different switches.
 Take note of the link between the Authentication Server and the OpenFlow Controller.
 This allows the authentication traffic to avoid the dataplane of the switch and therefore any end-user traffic, and allow the Controller to run in out-of-band mode.
 
@@ -53,17 +53,6 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
       |                     |                                  |
       |                     |                                  |
 +-----+---------------------+----------------------------------+-----+
-|                                                                    |
-|                                                                    |
-|                        OpenFlow Swtich                             |
-|                                                                    |
-|                                                                    |
-+--------------------------------+-----------------------------------+
-                                 |
-                                 |
-                                 |
-                                 |
-+--------------------------------+-----------------------------------+
 |                                                                    |
 |                                                                    |
 |                           OpenFlow Switch                          |
@@ -202,10 +191,7 @@ If you are using Windows clients EAP-MSCHAPv2 will need to be enabled.
 #### Controller
 ##### Faucet
 - Get Faucet
-```bash
-$ git clone https://github.com/bairdo/faucet.git
-$ git checkout <branch>
-```
+ TODO get docker build...
 
 We recommend starting off with the following configuration:
 
@@ -290,6 +276,7 @@ acls:
                         allow: 1
                         dl_dst: 08:00:27:00:03:02
 ```
+
 These configuration files are based on the network diagram at the top.
 
 - Each 'interface' that is to use 802.1X authentication requires two configurations:
