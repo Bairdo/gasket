@@ -24,4 +24,4 @@ VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/"]
 EXPOSE 6653
 EXPOSE 8080
 
-CMD ryu-manager faucet.faucet & echo $! > /etc/ryu/faucet/contr_pid; python3.5 /faucet-src/faucet/HTTPServer.py --config /faucet-src/auth.yaml
+CMD ryu-manager faucet.faucet & echo $! > /etc/ryu/faucet/contr_pid; python3.5 /faucet-src/faucet/auth_app.py --config /etc/ryu/faucet/auth.yaml
