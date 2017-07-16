@@ -24,34 +24,36 @@ class AuthConfig(object):
         self.dot1x_auth_path = data["urls"]["dot1x"]
         self.idle_path = data["urls"]["idle"]
 
-        servers = data["servers"]
+        if 'servers' in data:
+            servers = data["servers"]
 
-        self.gateways = []
-        for gateway in servers["gateways"]:
-            self.gateways.append(gateway)
+            self.gateways = []
+            for gateway in servers["gateways"]:
+                self.gateways.append(gateway)
 
-        self.captive_portals = []
-        for captive in servers["captive-portals"]:
-            self.captive_portals.append(captive)
+            self.captive_portals = []
+            for captive in servers["captive-portals"]:
+                self.captive_portals.append(captive)
 
-        # these servers are not currently used by this app.
-        self.dot1x_auth_servers = []
-        for d1x_server in servers["dot1x-servers"]:
-            self.dot1x_auth_servers.append(d1x_server)
+            # these servers are not currently used by this app.
+            self.dot1x_auth_servers = []
+            for d1x_server in servers["dot1x-servers"]:
+                self.dot1x_auth_servers.append(d1x_server)
 
-        self.dns_servers = []
-        for dns_server in servers["dns-servers"]:
-            self.dns_servers.append(dns_server)
+            self.dns_servers = []
+            for dns_server in servers["dns-servers"]:
+                self.dns_servers.append(dns_server)
 
-        self.dhcp_servers = []
-        for dhcp_server in servers["dhcp-servers"]:
-            self.dhcp_servers.append(dhcp_server)
+            self.dhcp_servers = []
+            for dhcp_server in servers["dhcp-servers"]:
+                self.dhcp_servers.append(dhcp_server)
 
-        self.wins_servers = []
-        for wins in servers["wins-servers"]:
-            self.wins_servers.append(wins)
+            self.wins_servers = []
+            for wins in servers["wins-servers"]:
+                self.wins_servers.append(wins)
 
-        self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"])
+        if 'captive-portal' in data:
+            self.retransmission_attempts = int(data["captive-portal"]["retransmission-attempts"])
 
         self.rules = data["auth-rules"]["file"]
 
