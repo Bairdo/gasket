@@ -3344,7 +3344,7 @@ phase1="auth=MD5"
 phase2="auth=PAP password=password"
 eapol_flags=0
 }''' % (username, username, password)
-            host.cmd('''echo '{0}' > /etc/wpa_supplicant/{1}.conf'''.format(wpa_conf, host.name))
+            host.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, host.name))
  
     def get_users(self):
         """Get the hosts that are users (ie not the portal or controller hosts)
@@ -3367,30 +3367,41 @@ eapol_flags=0
                 return host
         return None
 
+    def logoff_dot1x(self, host):
+        start_reload_count = self.get_configure_count()
+
+        host.cmd('wpa_cli -i %s-eth0 logoff' % host.name)
+        time.sleep(5)
+        end_reload_count = self.get_configure_count()
+
+        self.assertGreater(end_reload_count, start_reload_count)
+
     def logon_dot1x(self, host):
         """Log on a host using dot1x
         Args:
             host (mininet.host): host to logon.
         """
-
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i %s-eth0' % host.name,
-            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
-            '>/dev/null',
-            '2>/dev/null',
-        ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['%s-tcpdump' % host.name] = host.lastPid
+        for direction in ['in', 'out']:
+            tcpdump_args = ' '.join((
+                '-Q', direction,
+                '-s 0',
+                '-e',
+                '-n',
+                '-U',
+                '-q',
+                '-i %s-eth0' % host.name,
+                '-w %s/%s-eth0-%s.cap' % (self.tmpdir, host.name, direction),
+                '>/dev/null',
+                '2>/dev/null',
+            ))
+            host.cmd('tcpdump %s &' % tcpdump_args)
+            self.pids['%s-%s-tcpdump' % (host.name, direction)] = host.lastPid
 
         start_reload_count = self.get_configure_count()
 
-        cmd = "wpa_supplicant -i{0}-eth0 -Dwired -c/etc/wpa_supplicant/{0}.conf > /dev/null 2>&1 &".format(host.name)
+        cmd = "wpa_supplicant -i{1}-eth0 -Dwired -c{0}/{1}.conf > /dev/null 2>&1 &".format(self.tmpdir, host.name)
         host.cmd(cmd)
+        self.pids['wpa_supplicant-%s' % host.name] = host.lastPid
         cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
         host.cmd(cmd)
 
@@ -3436,7 +3447,7 @@ eapol_flags=0
         config_values['tmpdir'] = self.tmpdir
         config_values['promport'] = self.prom_port
         config_values['listenport'] = self.auth_server_port
-        config_values['logger_location'] = self.tmpdir + '/httpserver.log'
+        config_values['logger_location'] = self.tmpdir + '/auth_app.log'
 
         host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
         host.cmd('cp -r /faucet-src %s/' % self.tmpdir)
@@ -3738,30 +3749,35 @@ class FaucetSingleAuthenticationMultiUserLogOnTest(FaucetAuthenticationSingleSwi
         self.one_ipv4_ping(h1, '10.0.0.2')
 
         #ping between an authenticated host and an unauthenticated host
-        try:
-            self.one_ipv4_ping(h1, h2_ip)
-        except AssertionError:
-            pass
-        else:
-            self.fail('{0} {1} should not be able to ping {2} {3}'.format(h1, h1.IP(), h2, h2.IP()))
- 
+        self.fail_ping_ipv4(h0, h2_ip)
+        self.fail_ping_ipv4(h1, h2_ip)
+
         ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
         self.assertAlmostEqual(ploss, 100)
-        try:
-            self.one_ipv4_ping(h0, h2_ip)
-        except AssertionError:
-            pass
-        else:
-            self.fail('{0} {1} should not be able to ping {2} {3}'.format(h0, h0.IP(), h2, h2.IP()))
+
 
     def test_onlydot1x(self):
-        """Only authenticate through dot1x"""
-        users = self.clients
+        """Only authenticate through dot1x.
+        At first h0 will logon (only h0 can ping), then h1 will logon (both can ping), h1 will then logoff (h0 should still be logged on, h1 logged off)"""
+        h0 = self.clients[0]
+        h1 = self.clients[1]
 
-        self.logon_dot1x(users[0])
-        self.logon_dot1x(users[1])
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, '10.0.0.2')
+
+        h1.setIP('10.0.0.10')
+
+        self.fail_ping_ipv4(h1, '10.0.0.2')
+
+        self.logon_dot1x(h1)
         time.sleep(5)
-        self.ping_between_hosts(users)
+        self.ping_between_hosts(self.clients)
+
+        self.logoff_dot1x(h1)
+
+        self.fail_ping_ipv4(h1, h0.IP())
+        self.fail_ping_ipv4(h1, '10.0.0.2')
+        self.one_ipv4_ping(h0, '10.0.0.2')
 
 
 class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
@@ -3794,10 +3810,9 @@ class FaucetSingleAuthenticationDot1XLogonAndLogoffTest(FaucetAuthenticationSing
         result = self.check_http_connection(h0)
         self.assertTrue(result)
 
-        h0.cmd("wpa_cli logoff")
+        self.logoff_dot1x(h0)
         # TODO possibly poll wpa_cli status to check that the status has changed?
         #  instead of a sleep??
-        time.sleep(1)
 
         self.fail_ping_ipv4(h0, '10.0.0.2')
         result = self.check_http_connection(h0)
