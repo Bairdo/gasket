@@ -3344,7 +3344,7 @@ phase1="auth=MD5"
 phase2="auth=PAP password=password"
 eapol_flags=0
 }''' % (username, username, password)
-            host.cmd('''echo '{0}' > {1}/{2}-eth0.conf'''.format(wpa_conf, self.tmpdir, host.name))
+            host.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, host.defaultIntf()))
  
     def get_users(self):
         """Get the hosts that are users (ie not the portal or controller hosts)
@@ -3367,10 +3367,13 @@ eapol_flags=0
                 return host
         return None
 
-    def logoff_dot1x(self, host):
+    def logoff_dot1x(self, host, intf=None):
+        if intf is None:
+            intf = host.defaultIntf()
+
         start_reload_count = self.get_configure_count()
 
-        host.cmd('wpa_cli -i %s-eth0 logoff' % host.name)
+        host.cmd('wpa_cli -i %s logoff' % intf)
         time.sleep(5)
         end_reload_count = self.get_configure_count()
 
@@ -3380,11 +3383,11 @@ eapol_flags=0
         """Log on a host using dot1x
         Args:
             host (mininet.host): host to logon.
-            intf (str): interface to logon with. if None defaults to <host.name>-eth0
+            intf (str): interface to logon with. if None uses host.defaultIntf()
         """
 
         if intf is None:
-            intf = '%s-eth0' % host.name
+            intf = host.defaultIntf()
 
         for direction in ['in', 'out']:
             tcpdump_args = ' '.join((
@@ -3395,7 +3398,7 @@ eapol_flags=0
                 '-U',
                 '-q',
                 '-i %s' % intf,
-                '-w %s/%s-%s-%s.cap' % (self.tmpdir, host.name, intf, direction),
+                '-w %s/%s-%s.cap' % (self.tmpdir, intf, direction),
                 '>/dev/null',
                 '2>/dev/null',
             ))
@@ -3405,7 +3408,7 @@ eapol_flags=0
         start_reload_count = self.get_configure_count()
 
         cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf > {0}/wpa-{1}.log 2>&1 &".format(self.tmpdir, intf)
-        print(host.cmdPrint(cmd))
+        host.cmd(cmd)
         self.pids['wpa_supplicant-%s-%s' % (host.name, intf)] = host.lastPid
         cmd = "ip addr flush {1} && dhcpcd --timeout 60 {1}".format(host.name, intf)
         host.cmd(cmd)
@@ -3419,11 +3422,11 @@ eapol_flags=0
             host (mininet.host): source host.
             dst (str): destination ip address.
             retries (int): number of attempts.
-            intf (str): interface to ping with, if none defaults to <hostname>-eth0
+            intf (str): interface to ping with, if none uses host.defaultIntf()
         """
         # TODO maybe make this use the one_ipv4_ping from the base class. but catch the assert error.
         if intf is None:
-            intf = '%s-eth0' % host.name
+            intf = host.defaultIntf()
 
         self.require_host_learned(host)
         for _ in range(retries):
@@ -3799,7 +3802,7 @@ class FaucetSingleAuthenticationMultiHostPortTest(FaucetAuthenticationSingleSwit
         h0 = self.clients[0]
         self.mac_intf = '%s-mac%u' % (h0.name, 1)
         self.add_macvlan(h0, self.mac_intf)
-        print(h0.cmdPrint('ip link'))
+
         username = 'host11{0}user'.format(4)
         password = 'host11{0}pass'.format(4)
 
@@ -3844,8 +3847,8 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
         """
         users = self.clients
         for user in users:
-            cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 5 {0}-eth0".format(
-                user.name)
+            cmd = "ip addr flush {0} && dhcpcd --timeout 5 {0}".format(
+                user.defaultIntf())
             user.cmd(cmd)
             user.defaultIntf().updateIP()
 
