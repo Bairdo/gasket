@@ -58,3 +58,8 @@ users:
                 dl_type: 0x0806
                 actions:
                     allow: 1
+
+
+    host114user:
+        _authport_:
+            *allowall

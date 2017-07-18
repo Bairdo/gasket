@@ -3344,7 +3344,7 @@ phase1="auth=MD5"
 phase2="auth=PAP password=password"
 eapol_flags=0
 }''' % (username, username, password)
-            host.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, host.name))
+            host.cmd('''echo '{0}' > {1}/{2}-eth0.conf'''.format(wpa_conf, self.tmpdir, host.name))
  
     def get_users(self):
         """Get the hosts that are users (ie not the portal or controller hosts)
@@ -3376,11 +3376,16 @@ eapol_flags=0
 
         self.assertGreater(end_reload_count, start_reload_count)
 
-    def logon_dot1x(self, host):
+    def logon_dot1x(self, host, intf=None):
         """Log on a host using dot1x
         Args:
             host (mininet.host): host to logon.
+            intf (str): interface to logon with. if None defaults to <host.name>-eth0
         """
+
+        if intf is None:
+            intf = '%s-eth0' % host.name
+
         for direction in ['in', 'out']:
             tcpdump_args = ' '.join((
                 '-Q', direction,
@@ -3389,35 +3394,40 @@ eapol_flags=0
                 '-n',
                 '-U',
                 '-q',
-                '-i %s-eth0' % host.name,
-                '-w %s/%s-eth0-%s.cap' % (self.tmpdir, host.name, direction),
+                '-i %s' % intf,
+                '-w %s/%s-%s-%s.cap' % (self.tmpdir, host.name, intf, direction),
                 '>/dev/null',
                 '2>/dev/null',
             ))
             host.cmd('tcpdump %s &' % tcpdump_args)
-            self.pids['%s-%s-tcpdump' % (host.name, direction)] = host.lastPid
+            self.pids['%s-%s-%s-tcpdump' % (host.name, intf, direction)] = host.lastPid
 
         start_reload_count = self.get_configure_count()
 
-        cmd = "wpa_supplicant -i{1}-eth0 -Dwired -c{0}/{1}.conf > /dev/null 2>&1 &".format(self.tmpdir, host.name)
-        host.cmd(cmd)
-        self.pids['wpa_supplicant-%s' % host.name] = host.lastPid
-        cmd = "ip addr flush {0}-eth0 && dhcpcd --timeout 60 {0}-eth0".format(host.name)
+        cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf > {0}/wpa-{1}.log 2>&1 &".format(self.tmpdir, intf)
+        print(host.cmdPrint(cmd))
+        self.pids['wpa_supplicant-%s-%s' % (host.name, intf)] = host.lastPid
+        cmd = "ip addr flush {1} && dhcpcd --timeout 60 {1}".format(host.name, intf)
         host.cmd(cmd)
 
         end_reload_count = self.get_configure_count()
         self.assertGreater(end_reload_count, start_reload_count)
 
-    def fail_ping_ipv4(self, host, dst, retries=3):
+    def fail_ping_ipv4(self, host, dst, retries=3, intf=None):
         """Try to ping to a destination from a host. This should fail on all the retries
         Args:
             host (mininet.host): source host.
             dst (str): destination ip address.
             retries (int): number of attempts.
+            intf (str): interface to ping with, if none defaults to <hostname>-eth0
         """
+        # TODO maybe make this use the one_ipv4_ping from the base class. but catch the assert error.
+        if intf is None:
+            intf = '%s-eth0' % host.name
+
         self.require_host_learned(host)
         for _ in range(retries):
-            ping_result = host.cmd('ping -c1 %s' % dst)
+            ping_result = host.cmd('ping -c1 -I%s %s' %(intf, dst))
             self.assertIsNone(re.search(self.ONE_GOOD_PING, ping_result), ping_result)
 
     def check_http_connection(self, host, retries=3):
@@ -3778,6 +3788,52 @@ class FaucetSingleAuthenticationMultiUserLogOnTest(FaucetAuthenticationSingleSwi
         self.fail_ping_ipv4(h1, h0.IP())
         self.fail_ping_ipv4(h1, '10.0.0.2')
         self.one_ipv4_ping(h0, '10.0.0.2')
+
+
+class FaucetSingleAuthenticationMultiHostPortTest(FaucetAuthenticationSingleSwitchTest):
+    """Config has multiple authenticating hosts on the same port.
+    """
+    mac_intf = ''
+    def setUp(self):
+        super(FaucetSingleAuthenticationMultiHostPortTest, self).setUp()
+        h0 = self.clients[0]
+        self.mac_intf = '%s-mac%u' % (h0.name, 1)
+        self.add_macvlan(h0, self.mac_intf)
+        print(h0.cmdPrint('ip link'))
+        username = 'host11{0}user'.format(4)
+        password = 'host11{0}pass'.format(4)
+
+        wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
+ctrl_interface_group=0
+eapol_version=2
+ap_scan=0
+network={
+key_mgmt=IEEE8021X
+eap=TTLS MD5
+identity="%s"
+anonymous_identity="%s"
+password="%s"
+phase1="auth=MD5"
+phase2="auth=PAP password=password"
+eapol_flags=0
+}''' % (username, username, password)
+        h0.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, self.mac_intf))
+
+
+    def test_two_hosts_one_port(self):
+        h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP())
+        result = self.check_http_connection(h0)
+        self.assertTrue(result)
+
+        self.fail_ping_ipv4(h0, '10.0.0.2', intf=self.mac_intf)
+
+        self.logon_dot1x(h0, intf=self.mac_intf)
+
+        self.one_ipv4_ping(h0, interweb.IP(), intf=self.mac_intf)
 
 
 class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):

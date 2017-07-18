@@ -25,8 +25,11 @@ class RuleGenerator():
         Returns:
             Dictionary of port_acl names to list of rules.
         """
-        rules = dict()
+        # if we don't reload the values that we will want to swap 
+        # may already be filled if the user has logged on already.
+        self.reload(self.yaml_file)
 
+        rules = dict()
         if username in list(self.conf["users"].keys()):
             for portacl in list(self.conf["users"][username].keys()):
                 rules[portacl] = []
