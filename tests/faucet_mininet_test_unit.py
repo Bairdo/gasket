@@ -3424,12 +3424,12 @@ eapol_flags=0
             retries (int): number of attempts.
             intf (str): interface to ping with, if none uses host.defaultIntf()
         """
-        try:
+        with self.assertRaises(AssertionError) as cm: 
             self.one_ipv4_ping(host, dst, retries, require_host_learned=False, intf=intf)
-        except AssertionError:
-            return
-        else:
-            raise AssertionError('host %s intface %s should not be able to ping %s' % (host, intf, dst))
+
+
+
+        self.assertEqual(1, 1, 'host %s intface %s should not be able to ping %s' % (host, intf, dst))
 
     def check_http_connection(self, host, retries=3):
         """Test the http connectivity by wget-ing a webpage on 10.0.0.2
