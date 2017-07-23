@@ -21,13 +21,10 @@ import requests
 from valve_util import get_logger
 import config_parser
 import config_parser_util
-import my_lockfile as lockfile
 from auth_config import AuthConfig
 import rule_generator
 
 import auth_app_utils
-
-THREAD_LOCK = threading.Lock()
 
 
 class Proto(object):
@@ -300,14 +297,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
                                                 , mac)
             message = 'authenticated new client({}) at MAC: {}\n'.format(
                 user, mac)
-            THREAD_LOCK.acquire()
-            conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
         self.add_acls(mac, user, rules, switchname, switchport)
         self.swap_temp_file()
 
-        lockfile.unlock(conf_fd)
-        THREAD_LOCK.release()
         self.send_signal(signal.SIGHUP)
         self.logger.error(config_parser_util.read_config(self.config.acl_config_file, self.logname))
         #write response
@@ -330,10 +323,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
             username (str): username to deauth.
         """
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
-        switchname, switchport = self._get_dp_name_and_port(mac)
-
-        THREAD_LOCK.acquire()
-        conf_fd = lockfile.lock(self.config.faucet_config_file, os.O_RDWR)
 
         switchname, switchport = self._get_dp_name_and_port(mac)
         if switchname == '' or switchport == -1:
@@ -342,8 +331,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         else:
             self.remove_acls(mac, username, switchname, switchport)
             self.swap_temp_file()
-        lockfile.unlock(conf_fd)
-        THREAD_LOCK.release()
+
+
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.
         # Perhaps look into the CoA radius thing, so that process looks like:
