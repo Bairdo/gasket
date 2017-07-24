@@ -3724,17 +3724,14 @@ acls:
                 name: host1
                 native_vlan: 100
                 acl_in: port_faucet-1_%(port_3)d
-                auth_mode: access
             %(port_4)d:
                 name: host2
                 native_vlan: 100
                 acl_in: port_faucet-1_%(port_4)d
-                auth_mode: access
             %(port_5)d:
                 name: host3
                 native_vlan: 100
                 acl_in: port_faucet-1_%(port_5)d
-                auth_mode: access
 """
     def setUp(self):
         super(FaucetAuthenticationSingleSwitchTest, self).setUp()

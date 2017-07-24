@@ -14,6 +14,15 @@ files:
     faucet_config: %(tmpdir)s/faucet.yaml
     acl_config: %(tmpdir)s/faucet.yaml
 
+dps:
+    faucet-1:
+        interfaces:
+            3:
+                auth_mode: access
+            4:
+                auth_mode: access
+            5:
+                auth_mode: access
 
 # TODO add port for httpserver to listen on.
 urls:

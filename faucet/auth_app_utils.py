@@ -48,28 +48,6 @@ def dpid_name_to_map(lines):
     return dpid_to_name
 
 
-def dp_port_mode_to_map(lines):
-    '''Converts a list of lines containing dp_port_mode,
-       (from prometheus client (faucet)) to a dictionary dictionary.
-    Args:
-        lines (list)
-    Returns:
-        dictionary of dpid to port mode string (or None).
-    '''
-    dpid_port_mode = {}
-    for line in lines:
-        _, _, dpid, _, port, mode_int, _ = re.split(r'\W+', line)
-        if int(mode_int) == 1:
-            mode = 'access'
-        else:
-            mode = None
-        if dpid not in dpid_port_mode:
-            dpid_port_mode[dpid] = {}
-
-        dpid_port_mode[dpid][port] = mode
-    return dpid_port_mode
-
-
 def is_rule_in(rule, list_):
     """Searches a list of HashableDicts for an item equal to rule.
     Args:

@@ -92,11 +92,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 prom_mac_table.append(line)
             if line.startswith('faucet_config_dp_name'):
                 prom_name_dpid.append(line)
-            if line.startswith('dp_port_mode'):
-                prom_dpid_port_mode.append(line)
 
         dpid_name = auth_app_utils.dpid_name_to_map(prom_name_dpid)
-        dp_port_mode = auth_app_utils.dp_port_mode_to_map(prom_dpid_port_mode)
 
         ret_port = -1
         ret_dp_name = ""
@@ -105,11 +102,14 @@ class HTTPHandler(BaseHTTPRequestHandler):
             if mac == auth_app_utils.float_to_mac(float_as_mac):
                 # if this is also an access port, we have found the dpid and the port
                 _, _, dpid, _, n, _, port, _, vlan, _ = re.split(r'\W+', labels)
-                if dpid in dp_port_mode and \
-                        port in dp_port_mode[dpid] and \
-                        dp_port_mode[dpid][port] == 'access':
+                dp_name = dpid_name[dpid]
+                if dp_name in self.config.dp_port_mode and \
+                        'interfaces' in self.config.dp_port_mode[dp_name] and \
+                        int(port) in self.config.dp_port_mode[dp_name]['interfaces'] and \
+                        'auth_mode' in self.config.dp_port_mode[dp_name]['interfaces'][int(port)] and \
+                        self.config.dp_port_mode[dp_name]['interfaces'][int(port)]['auth_mode'] == 'access':
                     ret_port = int(port)
-                    ret_dp_name = dpid_name[dpid]
+                    ret_dp_name = dp_name
                     break
         self.logger.info(("name: {} port: {}".format(ret_dp_name, ret_port)))
         return ret_dp_name, ret_port

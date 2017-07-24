@@ -24,6 +24,8 @@ class AuthConfig(object):
         self.dot1x_auth_path = data["urls"]["dot1x"]
         self.idle_path = data["urls"]["idle"]
 
+        self.dp_port_mode = data["dps"]
+
         if 'servers' in data:
             servers = data["servers"]
 
