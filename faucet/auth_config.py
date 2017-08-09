@@ -20,6 +20,8 @@ class AuthConfig(object):
         self.faucet_config_file = data["files"]["faucet_config"]
         self.acl_config_file = data['files']['acl_config']
 
+        self.base_filename = data['files']['base_config']
+
         self.captive_portal_auth_path = data["urls"]["capflow"]
         self.dot1x_auth_path = data["urls"]["dot1x"]
         self.idle_path = data["urls"]["idle"]
