@@ -32,7 +32,7 @@ users:
 
 
     host111user:
-        port_ovs-hosts-switch_1: # port_acl to apply rules
+        _authport_: # port_acl to apply rules
             # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
             # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
             - rule:

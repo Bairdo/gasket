@@ -160,6 +160,7 @@ class FaucetTestBase(unittest.TestCase):
                 self.CONFIG = self.CONFIG % {'bgp_port': port}
                 self.config_ports[port_name] = port
                 print('allocating port %u for %s' % (port, port_name))
+        self.CONFIG = self.CONFIG % {'tmpdir' : self.tmpdir}
         open(self.faucet_config_path, 'w').write(self.CONFIG)
         self.influx_port, _ = faucet_mininet_test_util.find_free_port(
             self.ports_sock, self._test_name())
