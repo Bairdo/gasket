@@ -7,42 +7,6 @@ import yaml
 
 from rule_generator import RuleGenerator
 
-def main1():
-    with open('acls.yaml') as f:
-        doc = yaml.safe_load(f)
-
-    r1 = {}
-    r1['rule'] = {}
-    r1['rule']['actions'] = {}
-    r1['rule']['actions']['allow'] = 1
-    r1['rule']['dl_src'] = '66:66:66:66:66:66'
-    r1['rule']['user'] = 'mike'
-    r2 = {}
-    r2['rule'] = {}
-    r2['rule']['actions'] = {}
-    r2['rule']['actions']['allow'] = 0
-    r2['rule']['dl_src'] = '66:66:66:66:66:66'
-    r2['rule']['user'] = 'mike'
-    
-    mike = {}
-    mike['port_faucet-1_1'] = [r1, r2]
-
-#    doc['mike'] = mike
-#    doc['acls']['port_faucet-1_1'].extend(mike)
-
-
-    noalias_dumper = yaml.dumper.SafeDumper
-    noalias_dumper.ignore_aliases = lambda self, data: True
-    
-    print(yaml.dump(doc, default_flow_style=False, Dumper=noalias_dumper))
-
-    faucet_yaml = create_faucet_acls(doc, mike)
-    print()
-    print(yaml.dump(faucet_yaml, default_flow_style=False, Dumper=noalias_dumper))
-    doc['mike'] = mike
-    doc['acls']['port_faucet-1_1'].extend(mike)
-    print('with user')
-    print(yaml.dump(doc, default_flow_style=False, Dumper=noalias_dumper))
 
 def main():
     # pylint: disable=unbalanced-tuple-unpacking
@@ -77,12 +41,12 @@ def create_faucet_acls(doc, auth_rules=None):
     final['acls'] = {}
     final_acls = final['acls']
 
-    for acl in doc['acls'].items():
+    for acl in list(doc['acls'].items()):
         seq = []
         acl_name = acl[0]
         for obj in acl[1]:
             if isinstance(obj, dict) and 'rule' in obj:
-                for _, rule in obj.items():
+                for _, rule in list(obj.items()):
                     new_rule = {}
                     new_rule['rule'] = rule
                     if '_mac_' in rule:
@@ -100,7 +64,7 @@ def create_faucet_acls(doc, auth_rules=None):
                 if obj == 'authed-rules':
                     continue
                 else:
-                    print('illegal string ' + obj)
+                    print(('illegal string ' + obj))
 
         final_acls[acl_name] = seq
     return final
@@ -142,7 +106,7 @@ class RuleManager(object):
         logger.warn('ready for adding rules')
         logger.warn(rules)
         logger.warn(dir(rules))
-        for aclname, acllist in rules.items():
+        for aclname, acllist in list(rules.items()):
             logger.warn('adding aclist')
             logger.warn('adding aclist named:' + aclname)
 
@@ -215,7 +179,7 @@ class RuleManager(object):
             removed = True
 
         for acl in base['acls'].keys():
-            for rule_name, rules in base['acls'].items():
+            for rule_name, rules in list(base['acls'].items()):
                 for obj in rules:
                     if isinstance(obj, dict):
                         if 'rule' not in obj:
