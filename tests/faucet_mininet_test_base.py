@@ -53,9 +53,13 @@ class FaucetTestBase(unittest.TestCase):
 
     RUN_GAUGE = True
 
+    PORT_ACL_TABLE = 0
+    VLAN_TABLE = 1
+    VLAN_ACL_TABLE = 2
     ETH_SRC_TABLE = 3
     IPV4_FIB_TABLE = 4
     IPV6_FIB_TABLE = 5
+    VIP_TABLE = 6
     FLOOD_TABLE = 8
     ETH_DST_TABLE = 7
 
@@ -63,6 +67,7 @@ class FaucetTestBase(unittest.TestCase):
     dpid = None
     hardware = 'Open vSwitch'
     hw_switch = False
+    gauge_controller = None
     gauge_of_port = None
     net = None
     of_port = None
@@ -277,7 +282,7 @@ class FaucetTestBase(unittest.TestCase):
                     port=self.of_port,
                     test_name=self._test_name()))
             if self.RUN_GAUGE:
-                gauge_controller = faucet_mininet_test_topo.Gauge(
+                self.gauge_controller = faucet_mininet_test_topo.Gauge(
                     name='gauge', tmpdir=self.tmpdir,
                     env=self.env['gauge'],
                     controller_intf=controller_intf,
@@ -285,11 +290,12 @@ class FaucetTestBase(unittest.TestCase):
                     ctl_cert=self.ctl_cert,
                     ca_certs=self.ca_certs,
                     port=self.gauge_of_port)
-                self.net.addController(gauge_controller)
+                self.net.addController(self.gauge_controller)
             self.net.start()
             if (self._wait_controllers_logging() and
                     self.wait_dp_status(1) and
                     self._wait_until_ofctl_up()):
+                self._config_tableids()
                 return
             self.net.stop()
             time.sleep(1)
@@ -425,7 +431,6 @@ class FaucetTestBase(unittest.TestCase):
     def get_config_header(self, config_global, debug_log, dpid, hardware):
         """Build v2 FAUCET config header."""
         return """
-version: 2
 %s
 dps:
     faucet-1:
@@ -461,7 +466,6 @@ dps:
                          influx_port):
         """Build Gauge config."""
         return """
-version: 2
 faucet_configs:
     - %s
 watchers:
@@ -483,7 +487,23 @@ dbs:
         influx_port: %u
         influx_user: 'faucet'
         influx_pwd: ''
-        influx_timeout: 10
+        influx_timeout: 5
+    couchdb:
+        type: gaugedb
+        gdb_type: nosql
+        nosql_db: couch
+        db_username: couch
+        db_password: 123
+        db_ip: 'localhost'
+        db_port: 5001
+        driver: 'couchdb'
+        views:
+            switch_view: '_design/switches/_view/switch'
+            match_view: '_design/flows/_view/match'
+            tag_view: '_design/tags/_view/tags'
+        switches_doc: 'switches_bak'
+        flows_doc: 'flows_bak'
+        db_update_counter: 2
 """ % (faucet_config_file,
        self.get_gauge_watcher_config(),
        monitor_stats_file,
@@ -617,14 +637,17 @@ dbs:
     def wait_until_controller_flow(self):
         self.wait_until_matching_flow(None, actions=[u'OUTPUT:CONTROLLER'])
 
-    def mac_learned(self, mac, timeout=10):
+    def mac_learned(self, mac, timeout=10, in_port=None):
         """Return True if a MAC has been learned on default DPID."""
+        match = {u'dl_src': u'%s' % mac}
+        if in_port is not None:
+            match[u'in_port'] = in_port
         return self.matching_flow_present(
-            {u'dl_src': u'%s' % mac}, timeout=timeout, table_id=self.ETH_SRC_TABLE)
+            match, timeout=timeout, table_id=self.ETH_SRC_TABLE)
 
-    def host_learned(self, host, timeout=10):
+    def host_learned(self, host, timeout=10, in_port=None):
         """Return True if a host has been learned on default DPID."""
-        return self.mac_learned(host.MAC(), timeout)
+        return self.mac_learned(host.MAC(), timeout, in_port)
 
     def get_host_intf_mac(self, host, intf):
         return host.cmd('cat /sys/class/net/%s/address' % intf).strip()
@@ -647,7 +670,7 @@ dbs:
         """Return first IPv6/netmask for host's default interface."""
         return self.host_ip(host, 'inet6', r'[0-9a-f\:]+\/[0-9]+')
 
-    def require_host_learned(self, host, retries=3):
+    def require_host_learned(self, host, retries=3, in_port=None):
         """Require a host be learned on default DPID."""
         host_ip_net = self.host_ipv4(host)
         ping_cmd = 'ping'
@@ -658,7 +681,7 @@ dbs:
         if broadcast.version == 6:
             ping_cmd = 'ping6'
         for _ in range(retries):
-            if self.host_learned(host, timeout=1):
+            if self.host_learned(host, timeout=1, in_port=in_port):
                 return
             # stimulate host learning with a broadcast ping
             host.cmd('%s -i 0.2 -c 1 -b %s' % (ping_cmd, broadcast))
@@ -739,7 +762,7 @@ dbs:
                 r'faucet_config\S+name=\"flood\"'):
             self.assertTrue(
                 re.search(r'%s\S+\s+[1-9]+' % nonzero_var, prom_out),
-                msg=prom_out)
+                msg='expected %s to be nonzero (%s)' % (nonzero_var, prom_out))
         for notpresent_var in (
                 'of_errors', 'of_dp_disconnections'):
             self.assertIsNone(
@@ -1004,6 +1027,21 @@ dbs:
             time.sleep(1)
         return False
 
+    def _get_tableid(self, name):
+        return self.scrape_prometheus_var(
+            'faucet_config_table_names', {'name': name})
+
+    def _config_tableids(self):
+        self.PORT_ACL_TABLE = self._get_tableid('port_acl')
+        self.VLAN_TABLE = self._get_tableid('vlan')
+        self.VLAN_ACL_TABLE = self._get_tableid('vlan_acl')
+        self.ETH_SRC_TABLE = self._get_tableid('eth_src')
+        self.IPV4_FIB_TABLE = self._get_tableid('ipv4_fib')
+        self.IPV6_FIB_TABLE = self._get_tableid('ipv6_fib')
+        self.VIP_TABLE = self._get_tableid('vip')
+        self.ETH_DST_TABLE = self._get_tableid('eth_dst')
+        self.FLOOD_TABLE = self._get_tableid('flood')
+
     def _dp_ports(self):
         port_count = self.N_TAGGED + self.N_UNTAGGED
         return list(sorted(self.port_map.values()))[:port_count]
@@ -1216,7 +1254,7 @@ dbs:
                 return
         self.assertEquals(0, loss)
 
-    def wait_for_route_as_flow(self, nexthop, prefix, timeout=10,
+    def wait_for_route_as_flow(self, nexthop, prefix, vlan_vid=None, timeout=10,
                                with_group_table=False, nonzero_packets=False):
         """Verify a route has been added as a flow."""
         exp_prefix = u'%s/%s' % (
@@ -1228,6 +1266,8 @@ dbs:
             nw_dst_match = {u'nw_dst': exp_prefix}
             table_id = self.IPV4_FIB_TABLE
         nexthop_action = u'SET_FIELD: {eth_dst:%s}' % nexthop
+        if vlan_vid is not None:
+            nw_dst_match[u'dl_vlan'] = unicode(vlan_vid)
         if with_group_table:
             group_id = self.get_group_id_for_matching_flow(
                 nw_dst_match)
@@ -1254,15 +1294,17 @@ dbs:
         host.cmd(del_cmd)
         self.assertEquals('', host.cmd(add_cmd))
 
+    def _ip_neigh(self, host, ipa, ip_ver):
+        neighbors = host.cmd('ip -%u neighbor show %s' % (ip_ver, ipa))
+        neighbors_fields = neighbors.split()
+        if len(neighbors_fields) >= 5:
+            return neighbors.split()[4]
+        return None
+
     def _verify_host_learned_mac(self, host, ipa, ip_ver, mac, retries):
         for _ in range(retries):
-            neighbors = host.cmd('ip -%u neighbor show' % ip_ver)
-            for neighbor_line in neighbors.splitlines():
-                neighbor_fields = neighbor_line.strip().split(' ')
-                learned_ipa = neighbor_fields[0]
-                learned_mac = neighbor_fields[4]
-                if learned_ipa == str(ipa) and learned_mac == mac:
-                    return
+            if self._ip_neigh(host, ipa, ip_ver) == mac:
+                return
             time.sleep(1)
         self.fail(
             'could not verify %s resolved to %s (%s)' % (ipa, mac, neighbors))
