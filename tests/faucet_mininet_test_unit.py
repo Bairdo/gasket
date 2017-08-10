@@ -7,6 +7,7 @@
 import os
 import re
 import shutil
+import signal
 import threading
 import time
 import unittest
@@ -3988,6 +3989,17 @@ eapol_flags=0
         host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
         host.cmd('cp -r /faucet-src %s/' % self.tmpdir)
 
+
+        host.cmd('echo "%s" > %s/base-acls.yaml' % (self.CONFIG_BASE_ACL, self.tmpdir))
+
+        faucet_acl = self.tmpdir + '/faucet-acl.yaml'
+        base = self.tmpdir + '/base-acls.yaml'
+
+        host.cmd('python3.5 {0}/faucet-src/faucet/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
+
+        os.kill(self.pids['faucet'], signal.SIGHUP)
+        # send signal to faucet here. as we have just generated new acls. and it is already running.
+
         host.cmd('python3.5 {0}/faucet-src/faucet/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
         print 'authentication controller app started'
         self.pids['auth_server'] = host.lastPid
@@ -4141,48 +4153,43 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
 vlans:
     100:
         description: "untagged"
-acls:
+include:
+    - %(tmpdir)s/faucet-acl.yaml
+"""
+
+    CONFIG_BASE_ACL = """
+# these 2 won't be directly in the end file, as their own acl. but included in others.
+redirect_1x: &_redirect_1x
+    - rule:
+        dl_type: 0x888e
+        actions:
+            allow: 1
+            output:
+                dl_dst: 70:6f:72:74:61:6c
+redirect_all: &_redirect_all
+    - rule:
+        actions:
+            allow: 1
+            output:
+                dl_dst: 70:6f:72:74:61:6c 
+
+acls: # acls to keep in the end file.
     port_faucet-1_3:
-        - rule:
-            _name_: __1x-redirect__
-            actions:
-                allow: 1
-                dl_dst: 70:6f:72:74:61:6c
-            dl_type: 34958
-        - rule:
-            _name_: __unauth-redirect__
-            actions:
-                allow: 1
-                output:
-                    dl_dst: 70:6f:72:74:61:6c
+        - *_redirect_1x
+        - authed-rules
+        - *_redirect_all
+
     port_faucet-1_4:
-        - rule:
-            _name_: __1x-redirect__
-            actions:
-                allow: 1
-                dl_dst: 70:6f:72:74:61:6c
-            dl_type: 34958
-        - rule:
-            _name_: __unauth-redirect__
-            actions:
-                allow: 1
-                output:
-                    dl_dst: 70:6f:72:74:61:6c
+        - *_redirect_1x
+        - authed-rules
+        - *_redirect_all
 
     port_faucet-1_5:
-        - rule:
-            _name_: __1x-redirect__
-            actions:
-                allow: 1
-                dl_dst: 70:6f:72:74:61:6c
-            dl_type: 34958
-        - rule:
-            _name_: __unauth-redirect__
-            actions:
-                allow: 1
-                output:
-                    dl_dst: 70:6f:72:74:61:6c
+        - *_redirect_1x
+        - authed-rules
+        - *_redirect_all
 """
+
 
     CONFIG = """
         interfaces:
@@ -4215,6 +4222,13 @@ acls:
         while port <= 9999:
             port, _ = faucet_mininet_test_util.find_free_port(
                 self.ports_sock, self._test_name())
+       
+        # do the base config thing here.
+        open(self.tmpdir + '/faucet-acl.yaml', 'w').write("""acls:
+    port_faucet-1_%(port_3)d:
+    port_faucet-1_%(port_4)d:
+    port_faucet-1_%(port_5)d:
+        """ % self.port_map)
 
         self.auth_server_port = port
         self.start_net()
@@ -4365,12 +4379,36 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
     def test_nologon(self):
         """Get the users to ping each other before anyone has authenticated
         """
+
+
+
+
         users = self.clients
+        i = 20
         for user in users:
+            i = i + 1
+            host = user
+            tcpdump_args = ' '.join((
+                '-s 0',
+                '-e',
+                '-n',
+                '-U',
+                '-q',
+                '-i %s-eth0' % host.name,
+                '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+                '>/dev/null',
+                '2>/dev/null',
+            ))
+            host.cmd('tcpdump %s &' % tcpdump_args)
+            self.pids['i-tcpdump-%s' % host.name] = host.lastPid
+
             cmd = "ip addr flush {0} && dhcpcd --timeout 5 {0}".format(
                 user.defaultIntf())
             user.cmd(cmd)
-            user.defaultIntf().updateIP()
+
+            # TODO check dhcp did not work.
+
+            user.cmd('ip addr add 10.0.0.%d/8 dev %s' % (i, user.defaultIntf()))
 
         ploss = self.net.ping(hosts=users, timeout='5')
         self.assertAlmostEqual(ploss, 100)

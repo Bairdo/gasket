@@ -27,6 +27,8 @@ class RuleGenerator():
         """
         # if we don't reload the values that we will want to swap 
         # may already be filled if the user has logged on already.
+
+        # what about doing a copy or deepcopy? and only do a full reload when file has actually changed?
         self.reload(self.yaml_file)
 
         rules = dict()
