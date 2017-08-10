@@ -52,16 +52,25 @@ RUN \
   git clone -b 2.2.2 https://github.com/mininet/mininet && \
   apt-get update && \
   mininet/util/install.sh -nfv && \
-  apt-get purge -qy pylint && \
-  GOPATH=~/go go get -u github.com/openconfig/gnmi/cmd/gnmi_cli
+  apt-get purge -qy pylint
 
 COPY ./ /faucet-src/
+
+ENV GOPATH=/go
+
+RUN mkdir -p \
+      $GOPATH \
+    && go get -u \
+      github.com/openconfig/reference/telemetry/collector/cli \
+    && go install \
+      github.com/openconfig/reference/telemetry/collector/cli
 
 RUN \
   pip install --upgrade pip && \
   pip install setuptools wheel virtualenv --upgrade && \
   pip install -r /faucet-src/test-requirements.txt && \
   pip install exabgp==3.4.20 && \
+  pip install scapy==2.3.2 && \
   pip3 install setuptools wheel virtualenv --upgrade && \
   pip3 install -r /faucet-src/requirements.txt && \
   pip3 install -r /faucet-src/test-requirements.txt && \
