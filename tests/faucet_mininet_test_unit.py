@@ -4379,12 +4379,36 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
     def test_nologon(self):
         """Get the users to ping each other before anyone has authenticated
         """
+
+
+
+
         users = self.clients
+        i = 20
         for user in users:
+            i = i + 1
+            host = user
+            tcpdump_args = ' '.join((
+                '-s 0',
+                '-e',
+                '-n',
+                '-U',
+                '-q',
+                '-i %s-eth0' % host.name,
+                '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+                '>/dev/null',
+                '2>/dev/null',
+            ))
+            host.cmd('tcpdump %s &' % tcpdump_args)
+            self.pids['i-tcpdump-%s' % host.name] = host.lastPid
+
             cmd = "ip addr flush {0} && dhcpcd --timeout 5 {0}".format(
                 user.defaultIntf())
             user.cmd(cmd)
-            user.defaultIntf().updateIP()
+
+            # TODO check dhcp did not work.
+
+            user.cmd('ip addr add 10.0.0.%d/8 dev %s' % (i, user.defaultIntf()))
 
         ploss = self.net.ping(hosts=users, timeout='5')
         self.assertAlmostEqual(ploss, 100)
