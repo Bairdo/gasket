@@ -209,9 +209,10 @@ class RuleManager(object):
                     elif '_name_' in rule and username == rule['_name_']:
                         remove.append(acl)
                         break
-
+        removed = False
         for aclname in remove:
             del base['aauth'][aclname]
+            removed = True
 
         for acl in base['acls'].keys():
             for rule_name, rules in base['acls'].items():
@@ -223,10 +224,13 @@ class RuleManager(object):
                         if '_mac_' in rule and '_name_' in rule:
                             if mac == rule['_mac_'] and (username == rule['_name_'] or username == '(null)'):
                                 del obj['rule']
+                                removed = True
                         elif '_mac_' in rule and mac == rule['_mac_']:
                             del base['acls'][acl][rule_name]
+                            removed = True
                         elif '_name_' in rule and username == rule['_name_']:
                             del base['acls'][acl][rule_name]
+                            removed = True
 
                     if isinstance(obj, list):
                         for rule in obj:
@@ -234,28 +238,37 @@ class RuleManager(object):
                             if '_mac_' in rule and '_name_' in rule:
                                 if mac == rule['_mac_'] and (username == rule['_name_'] or username == '(null)'):
                                     del rule
+                                    removed = True
                             elif '_mac_' in rule and mac == rule['_mac_']:
                                 del base['acls'][acl][rule_name]
+                                removed = True
                             elif '_name_' in rule and username == rule['_name_']:
                                 del base['acls'][acl][rule_name]
+                                removed = True
+
             base['acls'][acl] = [value for value in base['acls'][acl] if value != {}]
         
-        write_yaml(base, self.base_filename + '.tmp')
-        self.backup_file(self.base_filename)
-        self.swap_temp_file(self.base_filename)
-        return base
+
+        if removed:
+            # only need to write it back if something has actually changed.
+            write_yaml(base, self.base_filename + '.tmp')
+            self.backup_file(self.base_filename)
+            self.swap_temp_file(self.base_filename)
+
+        return base, removed
 
     def deauthenticate(self, username, mac):
         # update base
-        base = self.remove_from_base(username, mac)
-        # update faucet
-        final = create_faucet_acls(base)
-        write_yaml(final, self.faucet_acl_filename + '.tmp', True)
+        base, changed = self.remove_from_base(username, mac)
+        # update faucet only if config has changed
+        if changed:
+            final = create_faucet_acls(base)
+            write_yaml(final, self.faucet_acl_filename + '.tmp', True)
 
-        self.backup_file(self.faucet_acl_filename)
-        self.swap_temp_file(self.faucet_acl_filename)
-        # sighup.
-        self.send_signal(signal.SIGHUP)
+            self.backup_file(self.faucet_acl_filename)
+            self.swap_temp_file(self.faucet_acl_filename)
+            # sighup.
+            self.send_signal(signal.SIGHUP)
 
     def __init__(self, config):
         self.config = config
