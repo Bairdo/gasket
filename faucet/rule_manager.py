@@ -160,7 +160,7 @@ class RuleManager(object):
         remove = []
 
         if 'aauth' in base:
-            for acl in base['aauth'].keys():
+            for acl in list(base['aauth'].keys()):
                 for  r in base['aauth'][acl]:
                     rule = r['rule']
                     if '_mac_' in rule and '_name_' in rule:
@@ -178,7 +178,7 @@ class RuleManager(object):
             del base['aauth'][aclname]
             removed = True
 
-        for acl in base['acls'].keys():
+        for acl in list(base['acls'].keys()):
             for rule_name, rules in list(base['acls'].items()):
                 for obj in rules:
                     if isinstance(obj, dict):
