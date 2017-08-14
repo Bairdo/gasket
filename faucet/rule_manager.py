@@ -193,8 +193,7 @@ class RuleManager(object):
             del base['aauth'][aclname]
             removed = True
 
-        for port_acl_name, port_acl_list in list(base['acls'].items()):
-            for aclname in remove:
+            for port_acl_name, port_acl_list in list(base['acls'].items()):
                 for item in port_acl_list:
                     if isinstance(item, dict):
                         if aclname in item:
