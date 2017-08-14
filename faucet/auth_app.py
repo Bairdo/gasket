@@ -200,7 +200,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
                 switchname, switchport, username, mac)))
         else:
-            self.rule_man.deauthenticate(username, mac)
+            self.rule_man.deauthenticate(username, mac, logger=self.logger)
 
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.

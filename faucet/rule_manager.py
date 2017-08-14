@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import shutil
@@ -25,11 +26,11 @@ def create_base_faucet_acls(input_f, output_f):
     '''
     with open(input_f) as f:
         base = yaml.safe_load(f)
+    logging.basicConfig(filename='rule_man_base.log', level=logging.DEBUG)
+    final = create_faucet_acls(base, logger=logging)
+    write_yaml(final, output_f, True)
 
-    final = create_faucet_acls(base)
-    write_yaml(final, output_f)
-
-def create_faucet_acls(doc, auth_rules=None):
+def create_faucet_acls(doc, auth_rules=None, logger=None):
     '''Creates a yaml object that represents faucet acls.
     Args:
         doc (yaml object): yaml dict. containing the pre-faucet version of the
@@ -54,17 +55,38 @@ def create_faucet_acls(doc, auth_rules=None):
                     if '_name_' in rule:
                         del rule['_name_']
                     seq.append(new_rule)
-            if isinstance(obj, list):
-                for z in obj:
-                    if '_mac_' in z['rule']:
-                        del z['rule']['_mac_']
-                    seq.append(z)
-            if isinstance(obj, str):
+            elif isinstance(obj, dict):
+                for name, l in list(obj.items()):
+                    for rule in l:
+                        if '_mac_' in rule:
+                            del rule['_mac_']
+                        if '_name_' in rule:
+                            del rule['_name_']
+                        seq.append(rule)
+            elif isinstance(obj, list):
+                for y in obj:
+                    if isinstance(y, list):
+                        for z in y:
+                            if '_mac_' in z['rule']:
+                                del z['rule']['_mac_']
+                            seq.append(z)
+                    if isinstance(y, dict):
+                        for _, rule in list(y.items()):
+                            new_rule = {}
+                            new_rule['rule'] = rule
+                            if '_mac_' in rule:
+                                del rule['_mac_']
+                            if '_name_' in rule:
+                                del rule['_name_']
+                            seq.append(new_rule)
+            elif isinstance(obj, str):
                 # this is likey just a 'flag' used to mark position to insert the rules when authed
                 if obj == 'authed-rules':
                     continue
                 else:
                     print(('illegal string ' + obj))
+            else:
+                logger.warn('obj not reconised')
 
         final_acls[acl_name] = seq
     return final
@@ -90,11 +112,8 @@ class RuleManager(object):
             filename (str);
             rules (dict): {port_s1_1 : list of rules}
         '''
-        logger.warn('opening: ' + filename)
         with open(filename) as f:
             base = yaml.safe_load(f)
-
-        logger.warn('loaded: ' + filename)
         # somehow add the rules to the base where ideally the items in the acl are the pointers.
         # but guess it might not matter, just hurts readability.
 
@@ -102,30 +121,24 @@ class RuleManager(object):
         # the port acl. and that the port acl will have the pointer.
         if 'aauth' not in base:
             base['aauth'] = {}
-            logger.warn("aauth key did not exist ")
-        logger.warn('ready for adding rules')
-        logger.warn(rules)
-        logger.warn(dir(rules))
+
+        # TODO make sure the rules don't already exist
         for aclname, acllist in list(rules.items()):
-            logger.warn('adding aclist')
-            logger.warn('adding aclist named:' + aclname)
-
             base['aauth'][aclname + user] = acllist
-            
             base_acl = base['acls'][aclname]
-
             i = base_acl.index('authed-rules')
-            # insert rules above the authed-rules 'flag'. add 1 for below it.
-            base_acl[i:i] = acllist
+            # insert rules above the authed-rules 'flag'. Add 1 for below it. 
+            base_acl[i:i] = [{aclname + user: acllist}] # this may not be included as the reference. but instead inserting each.
+            # TODO check the rules before i do not already contain the rule about to be inserted.
+
 
         # if remove the rule from either the definition or reference, will that remove the other end of the pointer.
         #  because of the way python does the referencing. no it will not.
 
         # 'rotate' filename - filename.bak, filename.bak.1 this is primiarily for logging, to see how users affect the config.
-        logger.warn('write base to tmp')
+
         # write back to filename 
         write_yaml(base, filename + '.tmp')
-        logger.warn('written base to tmp')
         self.backup_file(filename)
         logger.warn('backed up base')
         self.swap_temp_file(filename)
@@ -135,25 +148,23 @@ class RuleManager(object):
     def authenticate(self, username, mac, switch, port, radius_fields=None, logger=None):
         # get rules to apply
         try:
-            rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac)
-            # update base
-            logger.warn(username)
-            logger.warn(rules)
-            base = self.add_to_base_acls(self.base_filename, rules, username, logger=logger)
-            logger.warn(base)
-            # update faucet
-            final = create_faucet_acls(base)
-            logger.warn('new Faucet.')
-            logger.warn(final)
-            write_yaml(final, self.faucet_acl_filename + '.tmp' , True)
-            self.backup_file(self.faucet_acl_filename)
-            self.swap_temp_file(self.faucet_acl_filename)
-            # sighup.
-            self.send_signal(signal.SIGHUP)
+            if not self.is_authenticated(mac, username, switch, port):
+                self.add_to_authed_dict(username, mac, switch, port)
+                rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac)
+                # update base
+                base = self.add_to_base_acls(self.base_filename, rules, username, logger=logger)
+                # update faucet
+                final = create_faucet_acls(base, logger=logger)
+                write_yaml(final, self.faucet_acl_filename + '.tmp' , True)
+                self.backup_file(self.faucet_acl_filename)
+                self.swap_temp_file(self.faucet_acl_filename)
+                # sighup.
+                self.send_signal(signal.SIGHUP)
         except Exception as e:
             logger.critical('except while authenticate')
             logger.exception(e)
-    def remove_from_base(self, username, mac):
+
+    def remove_from_base(self, username, mac, logger=None):
         with open(self.base_filename) as f:
             base = yaml.safe_load(f)
        
@@ -178,40 +189,16 @@ class RuleManager(object):
             del base['aauth'][aclname]
             removed = True
 
-        for acl in list(base['acls'].keys()):
-            for rule_name, rules in list(base['acls'].items()):
-                for obj in rules:
-                    if isinstance(obj, dict):
-                        if 'rule' not in obj:
-                            continue
-                        rule = obj['rule']
-                        if '_mac_' in rule and '_name_' in rule:
-                            if mac == rule['_mac_'] and (username == rule['_name_'] or username == '(null)'):
-                                del obj['rule']
+        for port_acl_name, port_acl_list in list(base['acls'].items()):
+            for aclname in remove:
+                for item in port_acl_list:
+                    if isinstance(item, dict):
+                        if aclname in item:
+                            try:
+                                base['acls'][port_acl_name].remove(item)
                                 removed = True
-                        elif '_mac_' in rule and mac == rule['_mac_']:
-                            del base['acls'][acl][rule_name]
-                            removed = True
-                        elif '_name_' in rule and username == rule['_name_']:
-                            del base['acls'][acl][rule_name]
-                            removed = True
-
-                    if isinstance(obj, list):
-                        for rule in obj:
-                            rule = rule['rule']
-                            if '_mac_' in rule and '_name_' in rule:
-                                if mac == rule['_mac_'] and (username == rule['_name_'] or username == '(null)'):
-                                    del rule
-                                    removed = True
-                            elif '_mac_' in rule and mac == rule['_mac_']:
-                                del base['acls'][acl][rule_name]
-                                removed = True
-                            elif '_name_' in rule and username == rule['_name_']:
-                                del base['acls'][acl][rule_name]
-                                removed = True
-
-            base['acls'][acl] = [value for value in base['acls'][acl] if value != {}]
-        
+                            except Exception as e:
+                                logger.exception(e)
 
         if removed:
             # only need to write it back if something has actually changed.
@@ -221,18 +208,24 @@ class RuleManager(object):
 
         return base, removed
 
-    def deauthenticate(self, username, mac):
-        # update base
-        base, changed = self.remove_from_base(username, mac)
-        # update faucet only if config has changed
-        if changed:
-            final = create_faucet_acls(base)
-            write_yaml(final, self.faucet_acl_filename + '.tmp', True)
+    def deauthenticate(self, username, mac, logger=None):
+        try:
+            if self.is_authenticated(mac, username):
+                self.remove_from_authed_dict(username, mac)
+                # update base
+                base, changed = self.remove_from_base(username, mac, logger=logger)
+                # update faucet only if config has changed
+                if changed:
+                    final = create_faucet_acls(base, logger=logger)
+                    write_yaml(final, self.faucet_acl_filename + '.tmp', True)
 
-            self.backup_file(self.faucet_acl_filename)
-            self.swap_temp_file(self.faucet_acl_filename)
-            # sighup.
-            self.send_signal(signal.SIGHUP)
+                    self.backup_file(self.faucet_acl_filename)
+                    self.swap_temp_file(self.faucet_acl_filename)
+                    # sighup.
+                    self.send_signal(signal.SIGHUP)
+        except Exception as e:
+            logger.critical('except while authenticate')
+            logger.exception(e)
 
     def __init__(self, config):
         self.config = config
@@ -240,7 +233,7 @@ class RuleManager(object):
         self.rule_gen = RuleGenerator(self.config.rules)
         self.base_filename = self.config.base_filename
         self.faucet_acl_filename = self.config.acl_config_file
-
+        self.authed_users = {} # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
 
     def backup_file(self, filename):
         directory = os.path.dirname(filename)
@@ -274,6 +267,59 @@ class RuleManager(object):
         with open(self.config.contr_pid_file, 'r') as pid_file:
             contr_pid = int(pid_file.read())
             os.kill(contr_pid, signal_type)
+
+    def is_authenticated(self, mac, username=None, switch=None, port=None):
+        '''Checks if a username is already authenticated with the MAC address on the switch & port.
+        Args:
+            username (str)
+            mac (str)
+            switch (str)
+            port (str)
+        Returns:
+            True if already authenticated. False otherwise.
+        '''
+        # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
+        if username and username != '(null)':
+            if username in self.authed_users:
+                if mac in self.authed_users[username]:
+                    if switch in self.authed_users[username][mac]:
+                        if port in self.authed_users[username][mac][switch]:
+                            return True
+        else:
+            for user, dic in list(self.authed_users.items()):
+                if mac in list(dic):
+                    return True
+
+        return False
+
+    def add_to_authed_dict(self, username, mac, switch, port):
+        if username not in self.authed_users:
+            self.authed_users[username] = {}
+            self.authed_users[username][mac] = {}
+            self.authed_users[username][mac][switch] = {}
+            self.authed_users[username][mac][switch][port] = 1
+        else:
+            if mac not in self.authed_users[username]:
+                self.authed_users[username][mac] = {}
+                self.authed_users[username][mac][switch] = {}
+                self.authed_users[username][mac][switch][port] = 1
+            else:
+                if switch not in self.authed_users[username][mac]:
+                    self.authed_users[username][mac][switch] = {}
+                    self.authed_users[username][mac][switch][port] = 1
+                else:
+                    if port not in self.authed_users[username][mac][switch]:
+                        self.authed_users[username][mac][switch][port] = 1
+
+
+    def remove_from_authed_dict(self, username, mac):
+        if username and username != '(null)':
+            if username in self.authed_users:
+                del self.authed_users[username][mac]
+        else:
+            for user in list(self.authed_users.keys()):
+                if mac in user:
+                    del user[mac]
 
 def main2():
     base_filename = 'acls.yaml'
