@@ -47,6 +47,7 @@ def create_faucet_acls(doc, auth_rules=None, logger=None):
         acl_name = acl[0]
         for obj in acl[1]:
             if isinstance(obj, dict) and 'rule' in obj:
+                # rule
                 for _, rule in list(obj.items()):
                     new_rule = {}
                     new_rule['rule'] = rule
@@ -56,12 +57,14 @@ def create_faucet_acls(doc, auth_rules=None, logger=None):
                         del rule['_name_']
                     seq.append(new_rule)
             elif isinstance(obj, dict):
+                #alias
                 for name, l in list(obj.items()):
                     for rule in l:
-                        if '_mac_' in rule:
-                            del rule['_mac_']
-                        if '_name_' in rule:
-                            del rule['_name_']
+                        r = rule['rule']
+                        if '_mac_' in r:
+                            del r['_mac_']
+                        if '_name_' in r:
+                            del r['_name_']
                         seq.append(rule)
             elif isinstance(obj, list):
                 for y in obj:
@@ -71,6 +74,7 @@ def create_faucet_acls(doc, auth_rules=None, logger=None):
                                 del z['rule']['_mac_']
                             seq.append(z)
                     if isinstance(y, dict):
+                        # list of dicts
                         for _, rule in list(y.items()):
                             new_rule = {}
                             new_rule['rule'] = rule
