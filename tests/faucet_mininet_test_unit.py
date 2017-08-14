@@ -3942,6 +3942,21 @@ eapol_flags=0
         end_reload_count = self.get_configure_count()
         self.assertGreater(end_reload_count, start_reload_count)
 
+    def relogon_dot1x(self, host, intf=None):
+        """Log on a host using dot1x that has already logged on once.
+        (tcpdump/wpa_supplicant already started, and has an ip address)
+        """
+        if intf is None:
+            intf = host.defaultIntf()
+
+        start_reload_count = self.get_configure_count()
+
+        host.cmd('wpa_cli -i %s logon' % intf)
+        time.sleep(5)
+
+        end_reload_count = self.get_configure_count()
+        self.assertGreater(end_reload_count, start_reload_count)
+
     def fail_ping_ipv4(self, host, dst, retries=3, intf=None):
         """Try to ping to a destination from a host. This should fail on all the retries
         Args:
@@ -3952,9 +3967,6 @@ eapol_flags=0
         """
         with self.assertRaises(AssertionError) as cm: 
             self.one_ipv4_ping(host, dst, retries, require_host_learned=False, intf=intf)
-
-
-
         self.assertEqual(1, 1, 'host %s intface %s should not be able to ping %s' % (host, intf, dst))
 
     def check_http_connection(self, host, retries=3):
@@ -4180,6 +4192,10 @@ acls: # acls to keep in the end file.
         - *_redirect_all
 
     port_faucet-1_4:
+        - rule:
+            dl_dst: '44:44:44:44:44:44'
+            actions:
+                allow: 1
         - *_redirect_1x
         - authed-rules
         - *_redirect_all
@@ -4271,7 +4287,7 @@ acls: # acls to keep in the end file.
         self.run_hostapd(portal)
 
 
-class FaucetSingleAuthenticationMultiUserLogOnTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationMultiHostDiffPortTest(FaucetAuthenticationSingleSwitchTest):
     """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
 
     def ping_between_hosts(self, users):
@@ -4327,12 +4343,12 @@ class FaucetSingleAuthenticationMultiUserLogOnTest(FaucetAuthenticationSingleSwi
         self.one_ipv4_ping(h0, '10.0.0.2')
 
 
-class FaucetSingleAuthenticationMultiHostPortTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationMultiHostPerPortTest(FaucetAuthenticationSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
     """
     mac_intf = ''
     def setUp(self):
-        super(FaucetSingleAuthenticationMultiHostPortTest, self).setUp()
+        super(FaucetSingleAuthenticationMultiHostPerPortTest, self).setUp()
         h0 = self.clients[0]
         self.mac_intf = '%s-mac%u' % (h0.name, 1)
         self.add_macvlan(h0, self.mac_intf)
@@ -4372,6 +4388,15 @@ eapol_flags=0
 
         self.one_ipv4_ping(h0, interweb.IP(), intf=self.mac_intf)
 
+        self.logoff_dot1x(h0)
+        self.fail_ping_ipv4(h0, '10.0.0.2')
+
+        self.relogon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP())
+
+        self.logoff_dot1x(h0)
+        self.fail_ping_ipv4(h0, '10.0.0.2')
+
 
 class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
@@ -4379,10 +4404,6 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
     def test_nologon(self):
         """Get the users to ping each other before anyone has authenticated
         """
-
-
-
-
         users = self.clients
         i = 20
         for user in users:
@@ -4405,9 +4426,9 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
             cmd = "ip addr flush {0} && dhcpcd --timeout 5 {0}".format(
                 user.defaultIntf())
             user.cmd(cmd)
-
             # TODO check dhcp did not work.
 
+            # give ip address so ping 'could' work (it won't).
             user.cmd('ip addr add 10.0.0.%d/8 dev %s' % (i, user.defaultIntf()))
 
         ploss = self.net.ping(hosts=users, timeout='5')

@@ -122,22 +122,16 @@ class RuleManager(object):
         # but guess it might not matter, just hurts readability.
 
         # this is NOT a spelling mistake. this ensures that the auth rules are defined before the use in
-        # the port acl. and that the port acl will have the pointer.
+        # the port acl. and that the port acl will have the pointer. At the end of the day it doesn't matter.
         if 'aauth' not in base:
             base['aauth'] = {}
 
-        # TODO make sure the rules don't already exist
         for aclname, acllist in list(rules.items()):
             base['aauth'][aclname + user] = acllist
             base_acl = base['acls'][aclname]
             i = base_acl.index('authed-rules')
             # insert rules above the authed-rules 'flag'. Add 1 for below it. 
             base_acl[i:i] = [{aclname + user: acllist}] # this may not be included as the reference. but instead inserting each.
-            # TODO check the rules before i do not already contain the rule about to be inserted.
-
-
-        # if remove the rule from either the definition or reference, will that remove the other end of the pointer.
-        #  because of the way python does the referencing. no it will not.
 
         # 'rotate' filename - filename.bak, filename.bak.1 this is primiarily for logging, to see how users affect the config.
 
@@ -243,11 +237,10 @@ class RuleManager(object):
         if directory == '':
             directory = '.'
 
-        filenames = os.listdir(directory)
-
-        string = ''.join(filenames)
+        filenames = ''.join(os.listdir(directory))
+        search_str = os.path.basename(filename) + '.bak'
         
-        matches = re.findall(filename + '.bak', string)
+        matches = re.findall(search_str, filenames)
 
         i = str(len(matches) + 1)
 
@@ -292,7 +285,6 @@ class RuleManager(object):
             for user, dic in list(self.authed_users.items()):
                 if mac in list(dic):
                     return True
-
         return False
 
     def add_to_authed_dict(self, username, mac, switch, port):
@@ -320,9 +312,12 @@ class RuleManager(object):
             if username in self.authed_users:
                 del self.authed_users[username][mac]
         else:
-            for user in list(self.authed_users.keys()):
-                if mac in user:
-                    del user[mac]
+            remove_users = []
+            for user, usermac in list(self.authed_users.items()):
+                if mac in usermac:
+                    remove_users.append(user)
+            for user in remove_users:
+                del self.authed_users[user][mac]
 
 def main2():
     base_filename = 'acls.yaml'
