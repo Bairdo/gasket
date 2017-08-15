@@ -190,8 +190,6 @@ If you are using Windows clients EAP-MSCHAPv2 will need to be enabled.
 
 #### Controller
 ##### Faucet
-- Get Faucet
- TODO get docker build...
 
 We recommend starting off with the following configuration:
 
@@ -414,9 +412,10 @@ faucet:
 files:
     # locations to various files.
     # contr_pid only contains the Process ID (PID) of the Faucet process.
-    controller_pid: contr_pid 
-    faucet_config: faucet.yaml
-    acl_config: faucet.yaml
+    controller_pid: /etc/faucet/ryu/contr_pid 
+    faucet_config: /etc/ryu/faucet/faucet.yaml
+    acl_config: /etc/ryu/faucet/faucet-acls.yaml
+    base_config: /etc/ryu/faucet/base-acls.yaml
 
 urls:
     # HTTP endpoints for auth_app.py
@@ -425,6 +424,19 @@ urls:
 # rules to be applied for a user once authenticated.
 auth-rules:
     file: /faucet-src/rules.yaml
+
+# Each port that is to use 802.1X must have 'auth_mode' set to 'access'.
+# This is used to identify which port is directly connected to the machine authenticating.
+dps:
+    faucet-1:
+        interfaces:
+            1:
+                auth_mode: access
+            2:
+                auth_mode: access
+            3:
+                auth_mode: access
+
 ```
 
 
