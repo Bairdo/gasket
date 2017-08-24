@@ -4506,7 +4506,7 @@ class FaucetSingleAuthenticationMultiHostPerPortTest(FaucetAuthenticationSingleS
         ip_result = h.cmd('ip netns exec %s %s' % (netns, cmd))
         return re.findall('[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+', ip_result)[0]
 
-
+@unittest.skip('broken.')
 class FaucetSingleAuthenticationTwoHostsPerPortTest(FaucetSingleAuthenticationMultiHostPerPortTest):
 
     max_vlan_hosts = 2
@@ -4589,7 +4589,7 @@ class FaucetSingleAuthenticationTenHostsTest(FaucetAuthenticationSingleSwitchTes
         # log all on
         # log all off.
 
-
+@unittest.skip('broken')
 class FaucetSingleAuthenticationTenHostsPerPortTest(FaucetSingleAuthenticationMultiHostPerPortTest):
 
     max_vlan_hosts = 10
