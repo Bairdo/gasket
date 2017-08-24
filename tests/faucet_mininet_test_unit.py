@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import threading
 import time
 import unittest
@@ -26,6 +27,22 @@ import faucet_mininet_test_util
 import faucet_mininet_test_topo
 
 from datetime import datetime
+
+class QuietHTTPServer(HTTPServer):
+
+    def handle_error(self, _request, _client_address):
+        return
+
+
+class PostHandler(SimpleHTTPRequestHandler):
+
+    def _log_post(self, influx_log):
+        content_len = int(self.headers.getheader('content-length', 0))
+        content = self.rfile.read(content_len).strip()
+        if content:
+            open(influx_log, 'a').write(content + '\n')
+
+
 class FaucetTest(faucet_mininet_test_base.FaucetTestBase):
 
     pass
@@ -302,7 +319,15 @@ class FaucetUntaggedTcpIPv6IperfTest(FaucetUntaggedTest):
 class FaucetSanityTest(FaucetUntaggedTest):
     """Sanity test - make sure test environment is correct before running all tess."""
 
-    pass
+    def test_portmap(self):
+        first_host, second_host, third_host, fourth_host = self.net.hosts
+        for host, in_port in (
+                (first_host, 'port_1'),
+                (second_host, 'port_2'),
+                (third_host, 'port_3'),
+                (fourth_host, 'port_4')):
+            print 'verifying host/port mapping for %s' % in_port
+            self.require_host_learned(host, in_port=self.port_map[in_port])
 
 
 class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
@@ -327,16 +352,20 @@ class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
         db: 'influx'
 """
 
-    def _wait_error_shipping(self, timeout=10):
+    def _wait_error_shipping(self, timeout=None):
+        if timeout is None:
+            timeout = self.INFLUX_TIMEOUT
+        gauge_log = self.env['gauge']['GAUGE_LOG']
         for _ in range(timeout):
-            log_content = open(self.env['gauge']['GAUGE_LOG']).read()
+            log_content = open(gauge_log).read()
             if re.search('error shipping', log_content):
                 return
             time.sleep(1)
-        self.fail('Influx error not noted in gauge log: %s' % log_content)
+        self.fail('Influx error not noted in %s: %s' % (gauge_log, log_content))
 
     def _verify_influx_log(self, influx_log):
         self.assertTrue(os.path.exists(influx_log))
+        observed_vars = set()
         for point_line in open(influx_log).readlines():
             point_fields = point_line.strip().split()
             self.assertEquals(3, len(point_fields), msg=point_fields)
@@ -345,6 +374,7 @@ class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
             value = float(value_field.split('=')[1])
             ts_name_fields = ts_name.split(',')
             self.assertGreater(len(ts_name_fields), 1)
+            observed_vars.add(ts_name_fields[0])
             label_values = {}
             for label_value in ts_name_fields[1:]:
                 label, value = label_value.split('=')
@@ -354,28 +384,39 @@ class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
                 if 'vlan_vid' in label_values:
                     self.assertEquals(
                         int(label_values['vlan']), int(value) ^ 0x1000)
+        self.verify_no_exception(self.env['gauge']['GAUGE_EXCEPTION_LOG'])
+        self.assertEquals(set([
+            'dropped_in', 'dropped_out', 'bytes_out', 'flow_packet_count',
+            'errors_in', 'bytes_in', 'flow_byte_count', 'port_state_reason',
+            'packets_in', 'packets_out']), observed_vars)
+
+    def _wait_influx_log(self, influx_log):
+        for _ in range(self.INFLUX_TIMEOUT * 3):
+            if os.path.exists(influx_log):
+                return
+            time.sleep(1)
+        return
 
     def test_untagged(self):
-
         influx_log = os.path.join(self.tmpdir, 'influx.log')
 
-        class PostHandler(SimpleHTTPRequestHandler):
+        class InfluxPostHandler(PostHandler):
 
             def do_POST(self):
-                content_len = int(self.headers.getheader('content-length', 0))
-                content = self.rfile.read(content_len)
-                open(influx_log, 'a').write(content)
+                self._log_post(influx_log)
                 return self.send_response(204)
 
-        server = HTTPServer(('', self.influx_port), PostHandler)
+
+        server = QuietHTTPServer(
+            ('127.0.0.1', self.influx_port), InfluxPostHandler)
         thread = threading.Thread(target=server.serve_forever)
         thread.daemon = True
         thread.start()
         self.ping_all_when_learned()
-        for _ in range(3):
-            if os.path.exists(influx_log):
-                break
-            time.sleep(2)
+        self.wait_gauge_up()
+        self.hup_gauge()
+        self.flap_all_switch_ports()
+        self._wait_influx_log(influx_log)
         server.shutdown()
         self._verify_influx_log(influx_log)
 
@@ -451,27 +492,26 @@ class FaucetUntaggedInfluxTooSlowTest(FaucetUntaggedInfluxTest):
 """
 
     def test_untagged(self):
-
         influx_log = os.path.join(self.tmpdir, 'influx.log')
 
-        class PostHandler(SimpleHTTPRequestHandler):
+        class InfluxPostHandler(PostHandler):
+
+            INFLUX_TIMEOUT = self.INFLUX_TIMEOUT
 
             def do_POST(self):
-                content_len = int(self.headers.getheader('content-length', 0))
-                content = self.rfile.read(content_len)
-                open(influx_log, 'a').write(content)
-                time.sleep(10)
+                self._log_post(influx_log)
+                time.sleep(self.INFLUX_TIMEOUT * 2)
                 return self.send_response(500)
 
-        server = HTTPServer(('', self.influx_port), PostHandler)
+
+        server = QuietHTTPServer(
+            ('127.0.0.1', self.influx_port), InfluxPostHandler)
         thread = threading.Thread(target=server.serve_forever)
         thread.daemon = True
         thread.start()
         self.ping_all_when_learned()
-        for _ in range(3):
-            if os.path.exists(influx_log):
-                break
-            time.sleep(2)
+        self.wait_gauge_up()
+        self._wait_influx_log(influx_log)
         server.shutdown()
         self.assertTrue(os.path.exists(influx_log))
         self._wait_error_shipping()
@@ -1161,24 +1201,16 @@ vlans:
                 description: "b4"
 """
 
-    exabgp_conf = """
-group test {
-  router-id 2.2.2.2;
-  neighbor 127.0.0.1 {
-    local-address 127.0.0.1;
-    connect %(bgp_port)d;
-    peer-as 1;
-    local-as 2;
+    exabgp_peer_conf = """
     static {
       route 0.0.0.0/0 next-hop 10.0.0.1 local-preference 100;
-   }
- }
-}
+    }
 """
     exabgp_log = None
 
     def pre_start_net(self):
-        self.exabgp_log = self.start_exabgp(self.exabgp_conf)
+        exabgp_conf = self.get_exabgp_conf('127.0.0.1', self.exabgp_peer_conf)
+        self.exabgp_log = self.start_exabgp(exabgp_conf)
 
     def test_untagged(self):
         """Test IPv4 routing, and BGP routes received."""
@@ -1236,14 +1268,7 @@ vlans:
                 description: "b4"
 """
 
-    exabgp_conf = """
-group test {
-  router-id 2.2.2.2;
-  neighbor 127.0.0.1 {
-    local-address 127.0.0.1;
-    connect %(bgp_port)d;
-    peer-as 1;
-    local-as 2;
+    exabgp_peer_conf = """
     static {
       route 10.0.1.0/24 next-hop 10.0.0.1 local-preference 100;
       route 10.0.2.0/24 next-hop 10.0.0.2 local-preference 100;
@@ -1251,13 +1276,12 @@ group test {
       route 10.0.4.0/24 next-hop 10.0.0.254;
       route 10.0.5.0/24 next-hop 10.10.0.1;
    }
- }
-}
 """
     exabgp_log = None
 
     def pre_start_net(self):
-        self.exabgp_log = self.start_exabgp(self.exabgp_conf)
+        exabgp_conf = self.get_exabgp_conf('127.0.0.1', self.exabgp_peer_conf)
+        self.exabgp_log = self.start_exabgp(exabgp_conf)
 
     def test_untagged(self):
         """Test IPv4 routing, and BGP routes received."""
@@ -1325,27 +1349,11 @@ vlans:
                 description: "b4"
 """
 
-    exabgp_conf = """
-group test {
-  process test {
-    encoder json;
-    neighbor-changes;
-    receive-routes;
-    run /bin/cat;
-  }
-  router-id 2.2.2.2;
-  neighbor 127.0.0.1 {
-    local-address 127.0.0.1;
-    connect %(bgp_port)d;
-    peer-as 1;
-    local-as 2;
-  }
-}
-"""
     exabgp_log = None
 
     def pre_start_net(self):
-        self.exabgp_log = self.start_exabgp(self.exabgp_conf)
+        exabgp_conf = self.get_exabgp_conf('127.0.0.1')
+        self.exabgp_log = self.start_exabgp(exabgp_conf)
 
     def test_untagged(self):
         """Test IPv4 routing, and BGP routes sent."""
@@ -1821,13 +1829,6 @@ acls:
             actions:
                 allow: 0
         - rule:
-            dl_type: 0x800
-            nw_proto: 6
-            # Match packets > 1023
-            tp_dst: 1024/1024
-            actions:
-                allow: 0
-        - rule:
             actions:
                 allow: 1
 """
@@ -1848,12 +1849,6 @@ acls:
                 description: "b4"
 """
 
-    def test_port_gt1023_blocked(self):
-        self.ping_all_when_learned()
-        first_host, second_host = self.net.hosts[0:2]
-        self.verify_tp_dst_blocked(1024, first_host, second_host, mask=1024)
-        self.verify_tp_dst_notblocked(1023, first_host, second_host, table_id=None)
-
     def test_port5001_blocked(self):
         self.ping_all_when_learned()
         first_host, second_host = self.net.hosts[0:2]
@@ -1863,6 +1858,45 @@ acls:
         self.ping_all_when_learned()
         first_host, second_host = self.net.hosts[0:2]
         self.verify_tp_dst_notblocked(5002, first_host, second_host)
+
+
+class FaucetUntaggedACLTcpMaskTest(FaucetUntaggedACLTest):
+
+    CONFIG_GLOBAL = """
+vlans:
+    100:
+        description: "untagged"
+acls:
+    1:
+        - rule:
+            dl_type: 0x800
+            nw_proto: 6
+            tp_dst: 5002
+            actions:
+                allow: 1
+        - rule:
+            dl_type: 0x800
+            nw_proto: 6
+            tp_dst: 5001
+            actions:
+                allow: 0
+        - rule:
+            dl_type: 0x800
+            nw_proto: 6
+            # Match packets > 1023
+            tp_dst: 1024/1024
+            actions:
+                allow: 0
+        - rule:
+            actions:
+                allow: 1
+"""
+
+    def test_port_gt1023_blocked(self):
+        self.ping_all_when_learned()
+        first_host, second_host = self.net.hosts[0:2]
+        self.verify_tp_dst_blocked(1024, first_host, second_host, mask=1024)
+        self.verify_tp_dst_notblocked(1023, first_host, second_host, table_id=None)
 
 
 class FaucetUntaggedVLANACLTest(FaucetUntaggedTest):
@@ -2363,7 +2397,7 @@ acls:
             vlan_vid: 100
             ip_proto: 58
             icmpv6_type: 135
-            ipv6_nd_target: "fc00::1:2/112"
+            ipv6_nd_target: "fc00::1:2"
             actions:
                 output:
                     port: b2
@@ -2401,8 +2435,7 @@ vlans:
         self.add_host_ipv6_address(second_host, 'fc00::1:2/112')
         self.one_ipv6_ping(first_host, 'fc00::1:2')
         self.wait_nonzero_packet_count_flow(
-            {u'ipv6_nd_target': u'fc00::1:0/ffff:ffff:ffff:ffff:ffff:ffff:ffff:0'},
-            table_id=self.PORT_ACL_TABLE)
+            {u'ipv6_nd_target': u'fc00::1:2'}, table_id=self.PORT_ACL_TABLE)
 
 
 class FaucetTaggedIPv4RouteTest(FaucetTaggedTest):
@@ -2875,25 +2908,17 @@ vlans:
                 description: "b4"
 """
 
-    exabgp_conf = """
-group test {
-  router-id 2.2.2.2;
-  neighbor ::1 {
-    local-address ::1;
-    connect %(bgp_port)d;
-    peer-as 1;
-    local-as 2;
+    exabgp_peer_conf = """
     static {
       route ::/0 next-hop fc00::1:1 local-preference 100;
     }
-  }
-}
 """
 
     exabgp_log = None
 
     def pre_start_net(self):
-        self.exabgp_log = self.start_exabgp(self.exabgp_conf)
+        exabgp_conf = self.get_exabgp_conf('::1', self.exabgp_peer_conf)
+        self.exabgp_log = self.start_exabgp(exabgp_conf)
 
     def test_untagged(self):
         first_host, second_host = self.net.hosts[:2]
@@ -2947,14 +2972,7 @@ vlans:
                 description: "b4"
 """
 
-    exabgp_conf = """
-group test {
-  router-id 2.2.2.2;
-  neighbor ::1 {
-    local-address ::1;
-    connect %(bgp_port)d;
-    peer-as 1;
-    local-as 2;
+    exabgp_peer_conf = """
     static {
       route fc00::10:1/112 next-hop fc00::1:1 local-preference 100;
       route fc00::20:1/112 next-hop fc00::1:2 local-preference 100;
@@ -2962,13 +2980,12 @@ group test {
       route fc00::40:1/112 next-hop fc00::1:254;
       route fc00::50:1/112 next-hop fc00::2:2;
     }
-  }
-}
 """
     exabgp_log = None
 
     def pre_start_net(self):
-        self.exabgp_log = self.start_exabgp(self.exabgp_conf)
+        exabgp_conf = self.get_exabgp_conf('::1', self.exabgp_peer_conf)
+        self.exabgp_log = self.start_exabgp(exabgp_conf)
 
     def test_untagged(self):
         first_host, second_host = self.net.hosts[:2]
@@ -3085,27 +3102,11 @@ vlans:
                 description: "b4"
 """
 
-    exabgp_conf = """
-group test {
-  process test {
-    encoder json;
-    neighbor-changes;
-    receive-routes;
-    run /bin/cat;
-  }
-  router-id 2.2.2.2;
-  neighbor ::1 {
-    local-address ::1;
-    connect %(bgp_port)d;
-    peer-as 1;
-    local-as 2;
-  }
-}
-"""
     exabgp_log = None
 
     def pre_start_net(self):
-        self.exabgp_log = self.start_exabgp(self.exabgp_conf)
+        exabgp_conf = self.get_exabgp_conf('::1')
+        self.exabgp_log = self.start_exabgp(exabgp_conf)
 
     def test_untagged(self):
         self.verify_ipv6_routing_mesh()

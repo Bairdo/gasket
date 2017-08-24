@@ -3,18 +3,21 @@ FROM osrg/ryu
 RUN \
   apt-get update && \
   apt-get install -qy --no-install-recommends software-properties-common && \
-  add-apt-repository -y ppa:longsleep/golang-backports && \
-  apt-get update
+  add-apt-repository ppa:saiarcot895/myppa && \
+  apt-get update && \
+  echo debconf apt-fast/maxdownloads string 16 | debconf-set-selections && \
+  echo debconf apt-fast/dlflag boolean true | debconf-set-selections && \
+  echo debconf apt-fast/aptmanager string apt-get | debconf-set-selections && \
+  apt-get -y install apt-fast
 
 RUN \
-  apt-get install -qy --no-install-recommends \
+  apt-fast install -qy --no-install-recommends \
     bc \
     build-essential \
     dhcpcd5 \
     fping \
     gcc \
     git \
-    golang-go \
     influxdb \
     iperf \
     iputils-ping \
@@ -28,6 +31,7 @@ RUN \
     net-tools \
     netcat-openbsd \
     openssl \
+    parallel \
     psmisc \
     python-pip \
     python3-pip \
@@ -46,32 +50,45 @@ RUN \
 "host111user"   MD5     "host111pass"\n\
 "host112user"   MD5     "host112pass"\n\
 "host113user"   MD5     "host113pass"\n\
-"host114user"   MD5     "host114pass"\n' > hostapd.eap_user
+"host114user"   MD5     "host114pass"\n\
+"host115user"   MD5     "host115pass"\n\
+"host116user"   MD5     "host116pass"\n\
+"host117user"   MD5     "host117pass"\n\
+"host118user"   MD5     "host118pass"\n\
+"host119user"   MD5     "host119pass"\n\
+"host1110user"   MD5     "host1110pass"\n' > hostapd.eap_user
+###
+### TODO: pytype may be slightly stale due to Docker caching.
+### Specify versions as we do for mininet if possible.
+###
 
 RUN \
-  git clone -b 2.2.2 https://github.com/mininet/mininet && \
-  apt-get update && \
-  mininet/util/install.sh -nfv && \
-  apt-get purge -qy pylint
+  /bin/echo -e "https://github.com/mininet/mininet\nhttps://github.com/google/pytype.git" |parallel --bar git clone
+
+RUN \
+  cd mininet && git checkout 2.2.2 && cd .. && \
+  perl -pi -e "s/apt-get/apt-fast/g" mininet/util/install.sh && \
+  mininet/util/install.sh -nfv
+
+RUN \
+  apt-fast purge -qy pylint && \
+  pip install --upgrade pip && \
+  pip install setuptools wheel virtualenv --upgrade && \
+  pip install multiprocessing && \
+  pip install scapy==2.3.2 && \
+  pip3 install setuptools wheel virtualenv --upgrade
+
+RUN \
+  cd pytype && git submodule init && git submodule update && python2 setup.py install && cd ..
+
+###
+### To maximize Docker caching, try to keep invariant dependencies above this line.
+###
 
 COPY ./ /faucet-src/
 
-ENV GOPATH=/go
-
-RUN mkdir -p \
-      $GOPATH \
-    && go get -u \
-      github.com/openconfig/reference/telemetry/collector/cli \
-    && go install \
-      github.com/openconfig/reference/telemetry/collector/cli
-
 RUN \
-  pip install --upgrade pip && \
-  pip install setuptools wheel virtualenv --upgrade && \
   pip install -r /faucet-src/test-requirements.txt && \
-  pip install exabgp==3.4.20 && \
-  pip install scapy==2.3.2 && \
-  pip3 install setuptools wheel virtualenv --upgrade && \
   pip3 install -r /faucet-src/requirements.txt && \
   pip3 install -r /faucet-src/test-requirements.txt && \
   pip3 install /faucet-src
