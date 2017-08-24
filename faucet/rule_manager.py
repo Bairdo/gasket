@@ -6,6 +6,7 @@ import re
 import shutil
 import signal
 import sys
+# pytype: disable=pyi-error
 import yaml
 
 from rule_generator import RuleGenerator
