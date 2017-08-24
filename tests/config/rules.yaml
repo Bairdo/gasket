@@ -59,7 +59,30 @@ users:
                 actions:
                     allow: 1
 
-
+    host112user:
+        _authport_:
+            *allowall
+    host113user:
+        _authport_:
+            *allowall
     host114user:
+        _authport_:
+            *allowall
+    host115user:
+        _authport_:
+            *allowall
+    host116user:
+        _authport_:
+            *allowall
+    host117user:
+        _authport_:
+            *allowall
+    host118user:
+        _authport_:
+            *allowall
+    host119user:
+        _authport_:
+            *allowall
+    host1110user:
         _authport_:
             *allowall

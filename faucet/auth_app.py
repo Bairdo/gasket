@@ -181,6 +181,13 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.rule_man.authenticate(user, mac, switchname, switchport, logger=self.logger)
 
         self.logger.error(config_parser_util.read_config(self.config.acl_config_file, self.logname))
+
+        # TODO probably shouldn't return success if the switch/port cannot be found.
+        # but at this stage auth server (hostapd) can't do anything about it.
+        # Perhaps look into the CoA radius thing, so that process looks like:
+        #   - client 1x success, send to here.
+        #   - can't find switch. return failure.
+        #   - hostapd revokes auth, so now client is aware there was an error.
         #write response
         self._set_headers(200, 'text/html')
         self.wfile.write(message.encode(encoding='utf-8'))
@@ -195,19 +202,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
 
-        switchname, switchport = self._get_dp_name_and_port(mac)
-        if switchname == '' or switchport == -1:
-            self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
-                switchname, switchport, username, mac)))
-        else:
-            self.rule_man.deauthenticate(username, mac, logger=self.logger)
+        self.rule_man.deauthenticate(username, mac, logger=self.logger)
 
-        # TODO probably shouldn't return success if the switch/port cannot be found.
-        # but at this stage auth server (hostapd) can't do anything about it.
-        # Perhaps look into the CoA radius thing, so that process looks like:
-        #   - client 1x success, send to here.
-        #   - can't find switch. return failure.
-        #   - hostapd revokes auth, so now client is aware there was an error.
         self._set_headers(200, 'text/html')
         message = 'deauthenticated client {} at {} \n'.format(username, mac)
         self.wfile.write(message.encode(encoding='utf-8'))

@@ -24,6 +24,20 @@ dps:
                 auth_mode: access
             5:
                 auth_mode: access
+            6:
+                auth_mode: access
+            7:
+                auth_mode: access
+            8:
+                auth_mode: access
+            9:
+                auth_mode: access
+            10:
+                auth_mode: access
+            11:
+                auth_mode: access
+            12:
+                auth_mode: access
 
 # TODO add port for httpserver to listen on.
 urls:
