@@ -4,6 +4,7 @@ yaml keys "_authport_*, and values "_usermac_" are currently used for replacing 
 
 TODO maybe make this an interface for yaml or db generator subclasses.
 """
+# pytype: disable=pyi-error
 import yaml
 
 
