@@ -17,7 +17,7 @@ import time
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
-
+# pytype: disable=pyi-error
 import requests
 
 from valve_util import get_logger
