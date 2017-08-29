@@ -85,3 +85,34 @@ captive-portal:
 auth-rules:
     file: /faucet-src/tests/config/rules.yaml
 
+interface-to-switch-and-port:
+    %(portal)s-eth0.3:
+        switchname: faucet-1
+        port: 3
+    %(portal)s-eth0.4:
+        switchname: faucet-1
+        port: 4
+    %(portal)s-eth0.5:
+        switchname: faucet-1
+        port: 5
+    %(portal)s-eth0.6:
+        switchname: faucet-1
+        port: 6
+    %(portal)s-eth0.7:
+        switchname: faucet-1
+        port: 7
+    %(portal)s-eth0.8:
+        switchname: faucet-1
+        port: 8
+    %(portal)s-eth0.9:
+        switchname: faucet-1
+        port: 9
+    %(portal)s-eth0.10:
+        switchname: faucet-1
+        port: 10
+    %(portal)s-eth0.11:
+        switchname: faucet-1
+        port: 11
+    %(portal)s-eth0.12:
+        switchname: faucet-1
+        port: 12
