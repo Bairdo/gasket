@@ -73,6 +73,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 prom_vars.append(prom_line)
         return '\n'.join(prom_vars)
 
+    def _get_dp_name_and_port_from_intf(self, intf):
+        d = self.config.intf_to_switch_port[intf]
+        return d['switchname'], d['port']
+
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
          and returns the 'access port' that the mac address is connected on.
@@ -126,7 +130,14 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
             if self.path == self.config.dot1x_auth_path:
                 self.authenticate(json_data)
+            elif self.path == '/idle':
+                self.logger.info('POST on /idle. Not supported')
+                message = "idle not supported"
+                self._set_headers(200, 'text/html')
+                self.wfile.write(message.encode(encoding='utf-8'))
+                self.log_message('%s', message)
             else:
+                self.logger.info('POST on unkown path: %s' % self.path)
                 self.send_error('Path not found\n')
         except Exception as e:
             self.logger.exception(e)
@@ -161,8 +172,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
             #valid request format so new user has authenticated
             mac = json_data['mac']
             user = json_data['user']
-
-            switchname, switchport = self._get_dp_name_and_port(mac)
+            intf = json_data['interface']
+            switchname, switchport = self._get_dp_name_and_port_from_intf(intf)
+            #switchname, switchport = self._get_dp_name_and_port(mac)
 
             if switchname == '' or switchport == -1:
                 self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for authed user '{}' on MAC '{}'".format(

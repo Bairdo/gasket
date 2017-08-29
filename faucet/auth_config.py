@@ -62,4 +62,6 @@ class AuthConfig(object):
 
         self.rules = data["auth-rules"]["file"]
 
+        self.intf_to_switch_port = data['interface-to-switch-and-port']
+
 
