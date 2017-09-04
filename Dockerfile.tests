@@ -18,6 +18,7 @@ RUN \
     fping \
     gcc \
     git \
+    haveged \
     influxdb \
     iperf \
     iputils-ping \
@@ -42,21 +43,13 @@ RUN \
     wpasupplicant
 
 RUN \
+  update-rc.d haveged defaults
+
+RUN \
   git clone https://github.com/Bairdo/hostapd-d1xf.git && \
   cd hostapd-d1xf/hostapd && \
-  git checkout Bairdo-patch-1 && \
-  printf '"user"          MD5     "password"\n\
-"host110user"   MD5     "host110pass"\n\
-"host111user"   MD5     "host111pass"\n\
-"host112user"   MD5     "host112pass"\n\
-"host113user"   MD5     "host113pass"\n\
-"host114user"   MD5     "host114pass"\n\
-"host115user"   MD5     "host115pass"\n\
-"host116user"   MD5     "host116pass"\n\
-"host117user"   MD5     "host117pass"\n\
-"host118user"   MD5     "host118pass"\n\
-"host119user"   MD5     "host119pass"\n\
-"host1110user"   MD5     "host1110pass"\n' > hostapd.eap_user
+  git checkout username-fix-3
+
 ###
 ### TODO: pytype may be slightly stale due to Docker caching.
 ### Specify versions as we do for mininet if possible.
