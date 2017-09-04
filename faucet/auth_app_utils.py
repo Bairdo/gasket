@@ -1,7 +1,8 @@
 """Utility Classes and functions for auth_app
 """
-
+# pytype: disable=pyi-error
 import re
+import requests
 
 class HashableDict(dict):
     '''Used to compared if rules (dictionaries) are the same.
@@ -75,3 +76,13 @@ def get_hashable_list(list_):
         hash_list.append(HashableDict(item))
     return hash_list
 
+def scrape_prometheus(prom_url):
+    """Query prometheus specified by config. Removes comment lines.
+    Returns:
+        string containing all prometheus variables without comments.
+    """
+    prom_vars = []
+    for prom_line in requests.get(prom_url).text.split('\n'):
+        if not prom_line.startswith('#'):
+            prom_vars.append(prom_line)
+    return '\n'.join(prom_vars)

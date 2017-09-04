@@ -11,14 +11,12 @@ import json
 import logging
 import os
 import re
-import signal
 import threading
 import time
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 # pytype: disable=pyi-error
-import requests
 
 from valve_util import get_logger
 import config_parser
@@ -61,18 +59,6 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', ctype)
         self.end_headers()
 
-    def scrape_prometheus(self):
-        """Query prometheus specified by config. Removes comment lines.
-        Returns:
-            string containing all prometheus variables without comments.
-        """
-        prom_url = self.config.prom_url
-        prom_vars = []
-        for prom_line in requests.get(prom_url).text.split('\n'):
-            if not prom_line.startswith('#'):
-                prom_vars.append(prom_line)
-        return '\n'.join(prom_vars)
-
     def _get_dp_name_and_port_from_intf(self, intf):
         d = self.config.intf_to_switch_port[intf]
         return d['switchname'], d['port']
@@ -86,7 +72,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
              dp name & port number.
         """
         # query faucets promethues.
-        prom_txt = self.scrape_prometheus()
+        prom_txt = auth_app_utils.scrape_prometheus(self.config.prom_url)
 
         prom_mac_table = []
         prom_name_dpid = []
@@ -141,6 +127,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
                 self.send_error('Path not found\n')
         except Exception as e:
             self.logger.exception(e)
+
     def do_DELETE(self):
         """Serves HTTP DELETE requests.
         Inherited from BaseHttpRequestHandler.
@@ -190,7 +177,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         message = 'authenticated new client({}) at MAC: {}\n'.format(
             user, mac)
 
-        self.rule_man.authenticate(user, mac, switchname, switchport, logger=self.logger)
+        success = self.rule_man.authenticate(user, mac, switchname, switchport, logger=self.logger)
 
         self.logger.error(config_parser_util.read_config(self.config.acl_config_file, self.logname))
 
@@ -201,9 +188,10 @@ class HTTPHandler(BaseHTTPRequestHandler):
         #   - can't find switch. return failure.
         #   - hostapd revokes auth, so now client is aware there was an error.
         #write response
-        self._set_headers(200, 'text/html')
-        self.wfile.write(message.encode(encoding='utf-8'))
-        self.log_message('%s', message)
+        if success or not success:
+            self._set_headers(200, 'text/html')
+            self.wfile.write(message.encode(encoding='utf-8'))
+            self.log_message('%s', message)
 
     def deauthenticate(self, mac, username):
         """Deauthenticates the mac and username by removing related acl rules
@@ -214,12 +202,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
 
-        self.rule_man.deauthenticate(username, mac, logger=self.logger)
-
-        self._set_headers(200, 'text/html')
-        message = 'deauthenticated client {} at {} \n'.format(username, mac)
-        self.wfile.write(message.encode(encoding='utf-8'))
-        self.log_message('%s', message)
+        success = self.rule_man.deauthenticate(username, mac, logger=self.logger)
+        # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
+        # will likley think it has logged off, so is there anything we can do from hostapd to
+        # say they have not actually logged off.
+        # EAP LOGOFF is a one way message (not ack=ed)
+        if success or not success:
+            self._set_headers(200, 'text/html')
+            message = 'deauthenticated client {} at {} \n'.format(username, mac)
+            self.wfile.write(message.encode(encoding='utf-8'))
+            self.log_message('%s', message)
 
     def check_if_json(self):
         """Check if HTTP content is json.
@@ -237,7 +229,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error('Data is not a JSON object\n')
             return None
         content_length = int(self.headers.get('content-length'))
-        data = self.rfile.read(content_length).decode('utf-8')
+        try:
+            data = self.rfile.read(content_length).decode('utf-8')
+        except UnicodeDecodeError:
+            data = self.rfile.read(content_length)
+            self.logger.warn('UnicodeDecodeError %s' % data)
         try:
             json_data = json.loads(data)
         except ValueError:
