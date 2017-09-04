@@ -4,6 +4,9 @@ service openvswitch-switch start
 
 ovs-vsctl show || exit 1
 
+echo "========== Starting haveged ====================="
+haveged
+
 cd /faucet-src/tests
 
 echo "========== Running faucet unit tests =========="
