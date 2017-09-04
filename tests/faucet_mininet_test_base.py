@@ -75,7 +75,7 @@ class FaucetTestBase(unittest.TestCase):
     ctl_privkey = None
     ctl_cert = None
     ca_certs = None
-    port_map = {'port_1': 1, 'port_2': 2, 'port_3': 3, 'port_4': 4, 'port_5': 5, 'port_6': 6, 'port_7': 7, 'port_8': 8, 'port_9': 9, 'port_10': 10, 'port_11': 11, 'port_12': 12}
+    port_map = {'port_1': 1, 'port_2': 2, 'port_3': 3, 'port_4': 4}
     switch_map = {}
     tmpdir = None
     net = None

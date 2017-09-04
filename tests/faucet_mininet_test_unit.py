@@ -5,6 +5,7 @@
 # pylint: disable=missing-docstring
 
 import os
+import random
 import re
 import shutil
 import signal
@@ -3866,8 +3867,8 @@ class FaucetAuthenticationTest(FaucetTest):
         """
         i = 0
         for host in hosts:
-            username = 'host11{0}user'.format(i)
-            password = 'host11{0}pass'.format(i)
+            username = 'hostuser{}'.format(i)
+            password = 'hostpass{}'.format(i)
             i += 1
 
             wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
@@ -3907,19 +3908,20 @@ eapol_flags=0
                 return host
         return None
 
-    def logoff_dot1x(self, host, intf=None):
+    def logoff_dot1x(self, host, intf=None, wait=True):
         if intf is None:
             intf = host.defaultIntf()
 
         start_reload_count = self.get_configure_count()
 
         host.cmd('wpa_cli -i %s logoff' % intf)
-        time.sleep(5)
-        end_reload_count = self.get_configure_count()
+        if wait:
+            time.sleep(5)
+            end_reload_count = self.get_configure_count()
 
-        self.assertGreater(end_reload_count, start_reload_count)
+            self.assertGreater(end_reload_count, start_reload_count)
 
-    def logon_dot1x(self, host, intf=None, netns=None):
+    def logon_dot1x(self, host, intf=None, netns=None, wait=True):
         """Log on a host using dot1x
         Args:
             host (mininet.host): host to logon.
@@ -3960,17 +3962,25 @@ eapol_flags=0
 
         # TODO make this loop a function so can be used by relogin.
         # TODO also probably add a more specific regex, and to be able to handle different conditions. e.g. authenticating.
-        new_status = host.cmd('wpa_cli -i %s status' % intf)
+
+        new_status = self.wpa_cli_status(host, intf)
         for i in range(20):
-            if re.findall('AUTHENTICATED', new_status):
-                new_status = host.cmd('wpa_cli -i %s status' % intf)
+            if new_status == 'CONNECTING':
+                if not wait:
+                    print('not waiting')
+                    break
+            elif new_status == 'HELD':
+                print('logging attemot failed. trying again')
+                host.cmdPrint('wpa_cli -i %s logon' % intf)
+            elif 'AUTHENTICATED' != new_status:
                 break
             time.sleep(1)
             print('login attempt failed. trying again.')
             new_status = host.cmd('wpa_cli -i %s status' % intf)
             print(new_status)
-
-        
+        background_dhcpcd = ''
+        if wait:
+            background_dhcpcd = '&'
         cmds = ["ip addr flush %s" % intf, "dhcpcd --timeout 60 %s" % intf]
         for cmd in cmds:
             if netns is None:
@@ -3979,9 +3989,21 @@ eapol_flags=0
                 host.cmdPrint('ip netns exec %s %s' % (netns, cmd))
 
         host.defaultIntf().updateIP()
+        if wait:
+            end_reload_count = self.get_configure_count()
+            self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
 
-        end_reload_count = self.get_configure_count()
-        self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
+    def wpa_cli_status(self, host, intf=None):
+        if intf is None:
+            intf = host.defautlIntf()
+        status = host.cmd('wpa_cli -i %s status' % intf)
+        
+        pattern = 'Supplicant PAE state=\S*'
+        for l in status.split('\n'):
+            match = re.search(pattern, l)
+            if match:
+                return match.group(0).split('=')[1]
+
 
     def relogon_dot1x(self, host, intf=None, wait=True):
         """Log on a host using dot1x that has already logged on once.
@@ -3992,31 +4014,46 @@ eapol_flags=0
         start_reload_count = self.get_configure_count()
         old_status = host.cmd('wpa_cli -i %s status' % intf)
         host.cmdPrint('wpa_cli -i %s logon > %s/wpa_cli-%s.log 2>&1' % (intf, self.tmpdir, host.name))
-        if wait:
-            time.sleep(10)
-        new_status = host.cmd('wpa_cli -i %s status' % intf)
-        for i in range(5):
-            if not re.findall('AUTHENTICATED', new_status):
+
+        new_status = self.wpa_cli_status(host, intf)
+        for i in range(40):
+            if new_status == 'CONNECTING':
+                if not wait:
+                    break
+                time.sleep(1)
+            elif new_status == 'AUTHENTICATED':
+                time.sleep(5)
+                break
+            elif new_status == 'AUTHENTICATING':
+                time.sleep(1)
+            else:
                 time.sleep(1)
                 print('relogin attempt failed. trying again.')
                 host.cmdPrint('wpa_cli -i %s logon' % intf)
-            new_status = host.cmd('wpa_cli -i %s status' % intf)
+
+            new_status = self.wpa_cli_status(host, intf)
             print(new_status)
 
-        end_reload_count = self.get_configure_count()
-        self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.\nOld Status: %s' % (host, intf, host.MAC(), new_status, old_status))
+        print('relogon took %d loops' % i)
+        if wait:
+            end_reload_count = self.get_configure_count()
+            self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.\nOld Status: %s' % (host, intf, host.MAC(), new_status, old_status))
 
-    def fail_ping_ipv4(self, host, dst, retries=3, intf=None, netns=None):
-        """Try to ping to a destination from a host. This should fail on all the retries
+    def fail_ping_ipv4(self, host, dst, retries=1, intf=None, netns=None):
+        """Try to ping to a destination from a host.
         Args:
             host (mininet.host): source host.
             dst (str): destination ip address.
             retries (int): number of attempts.
             intf (str): interface to ping with, if none uses host.defaultIntf()
         """
-        with self.assertRaises(AssertionError) as cm: 
-            self.one_ipv4_ping(host, dst, retries, require_host_learned=False, intf=intf, netns=netns)
-        self.assertEqual(1, 1, 'host %s intface %s should not be able to ping %s' % (host, intf, dst))
+        for i in range(retries):
+            try:
+                self.one_ipv4_ping(host, dst, retries=1, require_host_learned=False, intf=intf, netns=netns)
+            except AssertionError:
+                return
+            time.sleep(1)
+        self.fail('host %s + interface %s should not be able to ping %s' % (host.name, intf, dst))
 
     def check_http_connection(self, host, retries=3):
         """Test the http connectivity by wget-ing a webpage on 10.0.0.2
@@ -4082,6 +4119,14 @@ eapol_flags=0
 
         print 'Controller started.'
 
+    def create_hostapd_users_file(self, num_hosts):
+        conf = ''
+        for i in range(num_hosts):
+            conf = '''%s\n"hostuser%d"   MD5     "hostpass%d"''' % (conf, i, i)
+
+        with open('%s/hostapd-d1xf/hostapd/hostapd.eap_user' % self.tmpdir, 'w+') as f:
+            f.write(conf)
+
     def run_hostapd(self, host):
         """Compiles and starts the hostapd process.
         Args:
@@ -4091,6 +4136,7 @@ eapol_flags=0
 
         # TODO fix this hack, (collisions also possible)
         # pylint: disable=no-member
+
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
 
         print 'Compiling hostapd ....'
@@ -4105,7 +4151,7 @@ ieee8021x=1\n
 eap_reauth_period=3600\n
 use_pae_group_addr=0\n
 eap_server=1\n
-eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-v{2}-wired.conf'''.format(host.name, self.tmpdir, vlan_id))
+eap_user_file={1}/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-v{2}-wired.conf'''.format(host.name, self.tmpdir, vlan_id))
             hostapd_config_cmd = hostapd_config_cmd + ' {0}/{1}-v{2}-wired.conf'.format(self.tmpdir, host.name, vlan_id)
 
             host.cmdPrint('ip link add link {0}-eth0 name {0}-eth0.{1} type vlan id {1}'.format(host.name, vlan_id))
@@ -4117,11 +4163,15 @@ eap_user_file=/root/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-v{2}-wire
 sed -ie  's/127\.0\.0\.1/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
 sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
 sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
+sed -ie 's/free(identity)/\/\/free(identity)/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
+sed -ie 's/free(identity)/\/\/free(identity)/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
 cd {1}/hostapd-d1xf/hostapd && \
 make'''.format(contr_num, self.tmpdir, self.auth_server_port))
         print 'Starting hostapd ....'
-        # start hostapd
         
+        self.create_hostapd_users_file(self.max_hosts)       
+        
+        # start hostapd
         host.cmd('{0}/hostapd-d1xf/hostapd/hostapd -d {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
         self.pids['hostapd'] = host.lastPid
 
@@ -4224,277 +4274,12 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
     clients = []
     N_UNTAGGED = 5
     N_TAGGED = 0
-    CONFIG_GLOBAL = """
-vlans:
-    100:
-        description: "untagged"
-    1:
-    2:
-    3:
-    4:
-    5:
-    6:
-    7:
-    8:
-    9:
-    10:
-    11:
-    12:
-include:
-    - %(tmpdir)s/faucet-acl.yaml
-"""
+    max_hosts = 3
+    CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
+    CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
+    CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED + N_TAGGED)
 
-    CONFIG_BASE_ACL = """
-acls:
-  port_faucet-1_1:
-  - rule:
-      actions:
-        output:
-          port: 3
-          pop_vlans: 1
-      vlan_vid: 3
-  - rule:
-      actions:
-        output:
-          port: 4
-          pop_vlans: 1
-      vlan_vid: 4
-  - rule:
-      actions:
-        output:
-          port: 5
-          pop_vlans: 1
-      vlan_vid: 5
-  - rule:
-      actions:
-        output:
-          port: 6
-          pop_vlans: 1
-      vlan_vid: 6
-  - rule:
-      actions:
-        output:
-          port: 7
-          pop_vlans: 1
-      vlan_vid: 7
-  - rule:
-      actions:
-        output:
-          port: 8
-          pop_vlans: 1
-      vlan_vid: 8
-  - rule:
-      actions:
-        output:
-          port: 9
-          pop_vlans: 1
-      vlan_vid: 9
-  - rule:
-      actions:
-        output:
-          port: 10
-          pop_vlans: 1
-      vlan_vid: 10
-  - rule:
-      actions:
-        output:
-          port: 11
-          pop_vlans: 1
-      vlan_vid: 11
-  - rule:
-      actions:
-        output:
-          port: 12
-          pop_vlans: 1
-      vlan_vid: 12
-  - rule:
-      actions:
-        allow: 1
-
-  port_faucet-1_3:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 3
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 3
-  port_faucet-1_4:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 4
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 4
-  port_faucet-1_5:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 5
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 5
-  port_faucet-1_6:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 6
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 6
-  port_faucet-1_7:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 7
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 7
-  port_faucet-1_8:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 8
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 8
-  port_faucet-1_9:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 9
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 9
-  port_faucet-1_10:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 10
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 10
-  port_faucet-1_11:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 11
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 11
-  port_faucet-1_12:
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 12
-      dl_type: 34958
-  - authed-rules
-  - rule:
-      actions:
-        output:
-          port: 1
-          vlan_vid: 12
-"""
-
-
-    CONFIG = """
-        interfaces:
-            %(port_1)d:
-                name: portal
-                tagged_vlans: [1,2,3,4,5,6,7,8,9,10,11,12]
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_1)d
-            %(port_2)d:
-                name: gateway
-                native_vlan: 100
-            %(port_3)d:
-                name: host1
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_3)d
-            %(port_4)d:
-                name: host2
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_4)d
-            %(port_5)d:
-                name: host3
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_5)d
-            %(port_6)d:
-                name: host4
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_6)d
-            %(port_7)d:
-                name: host5
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_7)d
-            %(port_8)d:
-                name: host6
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_8)d
-            %(port_9)d:
-                name: host7
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_9)d
-            %(port_10)d:
-                name: host8
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_10)d
-            %(port_11)d:
-                name: host9
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_11)d
-            %(port_12)d:
-                name: host10
-                native_vlan: 100
-                acl_in: port_faucet-1_%(port_12)d
-"""
     def setUp(self):
         super(FaucetAuthenticationSingleSwitchTest, self).setUp()
         self.topo = self.topo_class(
@@ -4507,19 +4292,7 @@ acls:
                 self.ports_sock, self._test_name())
        
         # do the base config thing here.
-        open(self.tmpdir + '/faucet-acl.yaml', 'w').write("""acls:
-    port_faucet-1_%(port_1)d:
-    port_faucet-1_%(port_3)d:
-    port_faucet-1_%(port_4)d:
-    port_faucet-1_%(port_5)d:
-    port_faucet-1_%(port_6)d:
-    port_faucet-1_%(port_7)d:
-    port_faucet-1_%(port_8)d:
-    port_faucet-1_%(port_9)d: 
-    port_faucet-1_%(port_10)d:
-    port_faucet-1_%(port_11)d:
-    port_faucet-1_%(port_12)d:
-        """ % self.port_map)
+        open(self.tmpdir + '/faucet-acl.yaml', 'w').write(faucet_mininet_test_util.gen_faucet_acl(self.max_hosts) % self.port_map)
 
         self.auth_server_port = port
         self.start_net()
@@ -4639,8 +4412,8 @@ class FaucetSingleAuthenticationMultiHostPerPortTest(FaucetAuthenticationSingleS
 
             h0.cmd('ip netns exec %s ip link set %s up' % (netns, mac_intf))
 
-            username = 'host11{0}user'.format(i)
-            password = 'host11{0}pass'.format(i)
+            username = 'hostuser{}'.format(i)
+            password = 'hostpass{}'.format(i)
 
             wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
     ctrl_interface_group=0
@@ -4706,13 +4479,10 @@ class FaucetSingleAuthenticationTwoHostsPerPortTest(FaucetSingleAuthenticationMu
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-class FaucetSingleAuthenticationTenHostsTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetSingleAuthenticationMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
 
-    N_UNTAGGED = 12
-    max_hosts = N_UNTAGGED - 2
-
-    def test_ten_hosts_sequential(self):
-        """Log 10 different users on on the different ports sequentially (each should complete before the next starts).
+    def test_multi_hosts_sequential(self):
+        """Log X different users on on the different ports sequentially (each should complete before the next starts).
         Then Log them all off. Then back on again.
         """
         interweb = self.net.hosts[1]
@@ -4747,22 +4517,122 @@ class FaucetSingleAuthenticationTenHostsTest(FaucetAuthenticationSingleSwitchTes
                 print('try ping again')
         self.assertTrue(passed)
 
-    def ten_hosts_one_port_parallel(self):
-        h0 = self.clients[0]
+    def test_multi_hosts_parallel(self):
+        """Log X different users on on different ports in parallel.
+        Then log them all off, and back on again. Each stage completes before the next.
+        """
         interweb = self.net.hosts[1]
 
         # setup.
         # start tcpdump. (move this from logon to setup host.)
         # start wpa_supplicant
 
-        # log all on
-        # log all off.
+        # log all on.
+        for h in self.clients:
+            self.logon_dot1x(h, wait=False)
+        for h in self.clients:
+            h.defaultIntf().updateIP()
+            self.one_ipv4_ping(h, interweb.IP(), retries=5)
+        # log all off.       
+        for h in self.clients:
+            self.logoff_dot1x(h, wait=False)
+        for h in self.clients:
+            self.fail_ping_ipv4(h, interweb.IP(), retries=5)
+        # log all back on again
+        for h in self.clients:
+            self.relogon_dot1x(h, wait=False)
+        for h in self.clients:
+            h.defaultIntf().updateIP()
+            self.one_ipv4_ping(h, interweb.IP(), retries=5)
+
+    def multi_hosts_random_parallel(self):
+        """Log X different users on and off randomly on different ports in parallel.
+        """
+        # How do we check if the host has successfully logged on or not?
+        host_status = {}
+        for i in range(5):
+            for h in self.clients:
+                status = self.wpa_cli_status(h)
+                r = random.random() 
+                if status == 'AUTHENTICATED':
+                    # should we logoff?
+                    if r <= 0.5:
+                        self.logoff_dot1x(h, wait=False)
+                        host_status[h.name] = 'logoff'
+                elif status == 'LOGOFF':
+                    # should we logon?
+                    if r <= 0.5:
+                        self.relogon_dot1x(h, wait=False)
+                        host_status[h.name] = 'logon'
+                elif status == 'CONNECTING':
+                    pass
+                elif status == None:
+                    # first time?
+                    if r <= 0.5:
+                        self.logon_dot1x(h, wait=False)
+                        host_status[h.name] = 'logon'
+                else:
+                    # do not know how to handle the status.
+                    self.assertIsNotNone(status)
+                    self.assertIsNone(status)
+            if i == 1 or i == 3 or i == 4:
+                for h in self.clients:
+                    # dhcp completed?
+                    h.defualtIntf().updateIP()
+                    if host_status[h.name] == 'logon':
+                        # this in effect gives >5 seconds for the logon to occur
+                        self.one_ipv4_ping(h, interweb.IP(), retries=5)
+                    elif host_status[h.name] == 'logoff':
+                        # this has the effect of giving >5 seconds for logoff to occur.
+                        self.fail_ping_ipv4(h, interweb.IP(), retries=5)
+
+
+class FaucetSingleAuthenticationTenHostsTest(FaucetSingleAuthenticationMultiHostsTest):
+    N_UNTAGGED = 12
+    max_hosts = N_UNTAGGED - 2
+
+    CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
+    CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
+
+    port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
+
+
+class FaucetSingleAuthenticationTwentyHostsTest(FaucetSingleAuthenticationMultiHostsTest):
+    N_UNTAGGED = 22
+    max_hosts = N_UNTAGGED - 2
+
+    CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
+    CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
+
+    port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
+
+
+class FaucetSingleAuthentication14HostsTest(FaucetSingleAuthenticationMultiHostsTest):
+    N_UNTAGGED = 16
+    max_hosts = N_UNTAGGED - 2
+
+    CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
+    CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
+
+    port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
 class FaucetSingleAuthenticationTenHostsPerPortTest(FaucetSingleAuthenticationMultiHostPerPortTest):
 
     max_vlan_hosts = 10
-    max_hosts = 10
+
+    N_UNTAGGED = 12
+    max_hosts = N_UNTAGGED - 2
+
+    CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
+    CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
+
+    port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
+
 
     def test_ten_hosts_one_port_sequential(self):
         """Log 10 different users on on the same port (using macvlans) sequentially (each should complete before the next starts).
@@ -4954,7 +4824,7 @@ class FaucetSingleAuthenticationDuplicateLogonsTest(FaucetAuthenticationSingleSw
 
             if matches[0] == 'deauthenticated' and matches[1] == 'authenticated' and matches[2] == 'deauthenticated':
                 self.assertFalse(True)
-        count = self.count_username_and_mac(h0.MAC(), 'host110user')
+        count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         self.assertEqual(count, 2)
 
         with open('%s/base-acls.yaml' % self.tmpdir, 'r') as f:
@@ -4976,15 +4846,15 @@ class FaucetSingleAuthenticationDuplicateLogonsTest(FaucetAuthenticationSingleSw
 
         h1.setMAC(h0.MAC())
 
-        h1.cmd('sed -i -e s/host111user/host110user/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
-        h1.cmd('sed -i -e s/host111pass/host110pass/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
+        h1.cmd('sed -i -e s/hostuser1/hostuser0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
+        h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
         self.logon_dot1x(h1)
         self.one_ipv4_ping(h1, interweb.IP())
 
         # TODO 
         # self.one_ipv4_ping(h0, interweb.IP())
-        count = self.count_username_and_mac(h0.MAC(), 'host110user')
+        count = self.count_username_and_mac(h0.MAC(), 'hostuser1')
         self.assertGreaterEqual(count, 2)
 
     def test_same_username_diff_mac_logon_twice_diff_port(self):
@@ -4996,13 +4866,13 @@ class FaucetSingleAuthenticationDuplicateLogonsTest(FaucetAuthenticationSingleSw
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP())
 
-        h1.cmd('sed -i -e s/host111user/host110user/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
-        h1.cmd('sed -i -e s/host111pass/host110pass/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
+        h1.cmd('sed -i -e s/hostuser1/hostuser0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
+        h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
         self.logon_dot1x(h1)
         self.one_ipv4_ping(h1, interweb.IP())
 
-        h0_count = self.count_username_and_mac(h0.MAC(), 'host110user')
-        h1_count = self.count_username_and_mac(h1.MAC(), 'host110user')
+        h0_count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
+        h1_count = self.count_username_and_mac(h1.MAC(), 'hostuser0')
         self.assertEqual(h0_count, 2)
         self.assertEqual(h1_count, 2)
