@@ -17,7 +17,7 @@ import time
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
-
+# pytype: disable=pyi-error
 import requests
 
 from valve_util import get_logger
@@ -195,12 +195,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
 
-        switchname, switchport = self._get_dp_name_and_port(mac)
-        if switchname == '' or switchport == -1:
-            self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot remove acls for deauthed user '{}' on MAC '{}'".format(
-                switchname, switchport, username, mac)))
-        else:
-            self.rule_man.deauthenticate(username, mac, logger=self.logger)
+        self.rule_man.deauthenticate(username, mac, logger=self.logger)
 
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.

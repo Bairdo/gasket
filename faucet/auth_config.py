@@ -1,4 +1,5 @@
 """Configuration parser for authentication controller app."""
+# pytype: disable=pyi-error
 import yaml
 
 class AuthConfig(object):

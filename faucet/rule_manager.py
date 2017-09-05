@@ -1,5 +1,5 @@
 """Handles the construction of the Faucet ACL configuration from the authentication application."""
-
+# pytype: disable=pyi-error
 import logging
 import os
 import re
