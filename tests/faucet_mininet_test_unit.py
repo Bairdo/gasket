@@ -4248,13 +4248,13 @@ make'''.format(contr_num, self.tmpdir, self.auth_server_port))
             '-n',
             '-U',
             '-q',
-            '-i %s-eth1' % portal.name,
-            '-w %s/%s-eth1.cap' % (self.tmpdir, portal.name),
+            '-i %s-eth1' % host.name,
+            '-w %s/%s-eth1.cap' % (self.tmpdir, host.name),
             '>/dev/null',
             '2>/dev/null',
         ))
-        portal.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['p1-tcpdump'] = portal.lastPid
+        host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['p1-tcpdump'] = host.lastPid
 
         tcpdump_args = ' '.join((
             '-s 0',
