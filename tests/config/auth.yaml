@@ -24,6 +24,36 @@ dps:
                 auth_mode: access
             5:
                 auth_mode: access
+            6:
+                auth_mode: access
+            7:
+                auth_mode: access
+            8:
+                auth_mode: access
+            9:
+                auth_mode: access
+            10:
+                auth_mode: access
+            11:
+                auth_mode: access
+            12:
+                auth_mode: access
+            13:
+                auth_mode: access
+            14:
+                auth_mode: access
+            15:
+                auth_mode: access
+            16:
+                auth_mode: access
+            17:
+                auth_mode: access
+            18:
+                auth_mode: access
+            19:
+                auth_mode: access
+            20:
+                auth_mode: access
 
 # TODO add port for httpserver to listen on.
 urls:
@@ -70,4 +100,66 @@ captive-portal:
 # rules to be applied for a user once authenticated.
 auth-rules:
     file: /faucet-src/tests/config/rules.yaml
+
+interface-to-switch-and-port:
+    %(portal)s-eth0.3:
+        switchname: faucet-1
+        port: 3
+    %(portal)s-eth0.4:
+        switchname: faucet-1
+        port: 4
+    %(portal)s-eth0.5:
+        switchname: faucet-1
+        port: 5
+    %(portal)s-eth0.6:
+        switchname: faucet-1
+        port: 6
+    %(portal)s-eth0.7:
+        switchname: faucet-1
+        port: 7
+    %(portal)s-eth0.8:
+        switchname: faucet-1
+        port: 8
+    %(portal)s-eth0.9:
+        switchname: faucet-1
+        port: 9
+    %(portal)s-eth0.10:
+        switchname: faucet-1
+        port: 10
+    %(portal)s-eth0.11:
+        switchname: faucet-1
+        port: 11
+    %(portal)s-eth0.12:
+        switchname: faucet-1
+        port: 12
+    %(portal)s-eth0.13:
+        switchname: faucet-1
+        port: 13
+    %(portal)s-eth0.14:
+        switchname: faucet-1
+        port: 14
+    %(portal)s-eth0.15:
+        switchname: faucet-1
+        port: 15
+    %(portal)s-eth0.16:
+        switchname: faucet-1
+        port: 16
+    %(portal)s-eth0.17:
+        switchname: faucet-1
+        port: 17
+    %(portal)s-eth0.18:
+        switchname: faucet-1
+        port: 18
+    %(portal)s-eth0.19:
+        switchname: faucet-1
+        port: 19
+    %(portal)s-eth0.20:
+        switchname: faucet-1
+        port: 20
+    %(portal)s-eth0.21:
+        switchname: faucet-1
+        port: 21
+    %(portal)s-eth0.22:
+        switchname: faucet-1
+        port: 22
 

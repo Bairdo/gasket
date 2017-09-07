@@ -6,10 +6,12 @@ import re
 import shutil
 import signal
 import sys
+import time
+# pytype: disable=pyi-error
 import yaml
 
 from rule_generator import RuleGenerator
-
+import auth_app_utils
 
 def main():
     """Create a default base config and the initial Faucet ACL yaml file,
@@ -55,6 +57,7 @@ def create_faucet_acls(doc, auth_rules=None, logger=None):
             if isinstance(obj, dict) and 'rule' in obj:
                 # rule
                 for _, rule in list(obj.items()):
+                    # TODO is this a pointless for loop? instead do rule = obj['rule']
                     new_rule = {}
                     new_rule['rule'] = rule
                     if '_mac_' in rule:
@@ -134,7 +137,7 @@ class RuleManager(object):
         self.faucet_acl_filename = self.config.acl_config_file
         self.authed_users = {} # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
     
-    def add_to_base_acls(self, filename, rules, user, logger=None):
+    def add_to_base_acls(self, filename, rules, user, mac, logger=None):
         '''Adds rules to the base acl file (and writes).
         Args:
             filename (str);
@@ -152,11 +155,11 @@ class RuleManager(object):
             base['aauth'] = {}
 
         for aclname, acllist in list(rules.items()):
-            base['aauth'][aclname + user] = acllist
+            base['aauth'][aclname + user + mac] = acllist
             base_acl = base['acls'][aclname]
             i = base_acl.index('authed-rules')
             # insert rules above the authed-rules 'flag'. Add 1 for below it. 
-            base_acl[i:i] = [{aclname + user: acllist}] # this may not be included as the reference. but instead inserting each.
+            base_acl[i:i] = [{aclname + user + mac: acllist}] # this may not be included as the reference. but instead inserting each.
 
         # 'rotate' filename - filename.bak, filename.bak.1 this is primiarily for logging, to see how users affect the config.
 
@@ -175,20 +178,41 @@ class RuleManager(object):
             mac (str): MAC address
             switch (str): Switch that authentication occured on
             port (str): the 'access port' as configured in 'auth.yaml'
+        Returns: 
+            True if rules are found and faucet reloads or already authenticated. False otherwise.
         """
         # get rules to apply
         if not self.is_authenticated(mac, username, switch, port):
             self.add_to_authed_dict(username, mac, switch, port)
             rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac)
             # update base
-            base = self.add_to_base_acls(self.base_filename, rules, username, logger=logger)
+            base = self.add_to_base_acls(self.base_filename, rules, username, mac, logger=logger)
             # update faucet
             final = create_faucet_acls(base, logger=logger)
             write_yaml(final, self.faucet_acl_filename + '.tmp' , True)
             self.backup_file(self.faucet_acl_filename)
             self.swap_temp_file(self.faucet_acl_filename)
             # sighup.
+            start_count = self.get_faucet_reload_count()
             self.send_signal(signal.SIGHUP)
+            logger.info('auth signal sent.')
+            for i in range(400):
+                end_count = self.get_faucet_reload_count()
+                if end_count > start_count:
+                    logger.info('auth - faucet has reloaded.')
+                    return True
+                time.sleep(0.05)
+                logger.info('auth - waiting for faucet to process sighup config reload. %d' % i)
+            logger.error('auth - faucet did not process sighup within 30 seconds. 0.05 * 400')
+            return False
+        return True
+
+    def get_faucet_reload_count(self):
+        txt = auth_app_utils.scrape_prometheus(self.config.prom_url)
+        for l in txt.splitlines():
+            if l.startswith('faucet_config_reload_requests'):
+                return int(float(l.split()[1]))
+        return 0
 
     def remove_from_base(self, username, mac, logger=None):
         """Removes rules that have matching mac= _mac_ and username=_name_
@@ -200,23 +224,32 @@ class RuleManager(object):
         """
         with open(self.base_filename) as f:
             base = yaml.safe_load(f)
-       
+        
+        logger.info(base)
         remove = []
 
         if 'aauth' in base:
             for acl in list(base['aauth'].keys()):
+                logger.debug('aauth acl')
+                logger.debug(acl)
                 for  r in base['aauth'][acl]:
                     rule = r['rule']
                     if '_mac_' in rule and '_name_' in rule:
+                        logger.debug('mac and name exist')
                         if mac == rule['_mac_'] and (username == rule['_name_'] or username == '(null)'):
+                            logger.debug('removing based on name and mac')
                             remove.append(acl)
                             break
                     elif '_mac_' in rule and mac == rule['_mac_']:
+                        logger.debug('removing based on mac')
                         remove.append(acl)
                         break
                     elif '_name_' in rule and username == rule['_name_']:
+                        logger.warning('removing based on name')
                         remove.append(acl)
                         break
+        logger.info('remove from auth')
+        logger.info(remove)
         removed = False
         for aclname in remove:
             del base['aauth'][aclname]
@@ -238,6 +271,8 @@ class RuleManager(object):
             self.backup_file(self.base_filename)
             self.swap_temp_file(self.base_filename)
 
+        logger.info('updated base')
+        logger.info(base)
         return base, removed
 
     def deauthenticate(self, username, mac, logger=None):
@@ -245,20 +280,36 @@ class RuleManager(object):
         Args:
             username (str): may be None or '(null)' which is treated as None.
             mac (str): MAC address
+        Returns:
+            True if a client that is authed has rules removed, or if client is not authed. other wise false (faucet fails to reload)
         """
         if self.is_authenticated(mac, username):
-            self.remove_from_authed_dict(username, mac)
+            logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
+            self.remove_from_authed_dict(username, mac, logger)
             # update base
             base, changed = self.remove_from_base(username, mac, logger=logger)
             # update faucet only if config has changed
             if changed:
+                logger.info('base has changed. removing from faucet')
                 final = create_faucet_acls(base, logger=logger)
                 write_yaml(final, self.faucet_acl_filename + '.tmp', True)
 
                 self.backup_file(self.faucet_acl_filename)
                 self.swap_temp_file(self.faucet_acl_filename)
                 # sighup.
+                start_count = self.get_faucet_reload_count()
                 self.send_signal(signal.SIGHUP)
+                logger.info('deauth signal sent')
+                for i in range(400):
+                    end_count = self.get_faucet_reload_count()
+                    if end_count > start_count:
+                        logger.info('deauth - faucet has reloaded.')
+                        return True
+                    time.sleep(0.05)
+                    logger.info('deauth - waiting for faucet to process sighup config reload on. %d' % i)
+                logger.error('deauth - faucet did not process sighup within 400 * 0.05 seconds.')
+                return False
+        return True
 
     def backup_file(self, filename):
         """Backup a file. appends '.bak#' to filename.
@@ -346,7 +397,7 @@ class RuleManager(object):
                     if port not in self.authed_users[username][mac][switch]:
                         self.authed_users[username][mac][switch][port] = 1
 
-    def remove_from_authed_dict(self, username, mac):
+    def remove_from_authed_dict(self, username, mac, logger):
         """Remove the mac from the authed_users dictionary.
         If username is None or '(null)' as is the case with some deauthentications,
         the mac is removed from all users.
@@ -356,6 +407,7 @@ class RuleManager(object):
         """
         if username and username != '(null)':
             if username in self.authed_users:
+                logger.info('removing user %s' % username)
                 del self.authed_users[username][mac]
         else:
             remove_users = []
@@ -363,6 +415,7 @@ class RuleManager(object):
                 if mac in usermac:
                     remove_users.append(user)
             for user in remove_users:
+                logger.info('removing user %s. wildcard mac' % username)
                 del self.authed_users[user][mac]
 
 

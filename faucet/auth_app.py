@@ -11,14 +11,11 @@ import json
 import logging
 import os
 import re
-import signal
 import threading
 import time
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
-# pytype: disable=pyi-error
-import requests
 
 from valve_util import get_logger
 import config_parser
@@ -61,17 +58,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
         self.send_header('Content-type', ctype)
         self.end_headers()
 
-    def scrape_prometheus(self):
-        """Query prometheus specified by config. Removes comment lines.
-        Returns:
-            string containing all prometheus variables without comments.
-        """
-        prom_url = self.config.prom_url
-        prom_vars = []
-        for prom_line in requests.get(prom_url).text.split('\n'):
-            if not prom_line.startswith('#'):
-                prom_vars.append(prom_line)
-        return '\n'.join(prom_vars)
+    def _get_dp_name_and_port_from_intf(self, intf):
+        d = self.config.intf_to_switch_port[intf]
+        return d['switchname'], d['port']
 
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
@@ -82,7 +71,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
              dp name & port number.
         """
         # query faucets promethues.
-        prom_txt = self.scrape_prometheus()
+        prom_txt = auth_app_utils.scrape_prometheus(self.config.prom_url)
 
         prom_mac_table = []
         prom_name_dpid = []
@@ -126,10 +115,18 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
             if self.path == self.config.dot1x_auth_path:
                 self.authenticate(json_data)
+            elif self.path == '/idle':
+                self.logger.info('POST on /idle. Not supported')
+                message = "idle not supported"
+                self._set_headers(200, 'text/html')
+                self.wfile.write(message.encode(encoding='utf-8'))
+                self.log_message('%s', message)
             else:
+                self.logger.info('POST on unkown path: %s' % self.path)
                 self.send_error('Path not found\n')
         except Exception as e:
             self.logger.exception(e)
+
     def do_DELETE(self):
         """Serves HTTP DELETE requests.
         Inherited from BaseHttpRequestHandler.
@@ -161,8 +158,9 @@ class HTTPHandler(BaseHTTPRequestHandler):
             #valid request format so new user has authenticated
             mac = json_data['mac']
             user = json_data['user']
-
-            switchname, switchport = self._get_dp_name_and_port(mac)
+            intf = json_data['interface']
+            switchname, switchport = self._get_dp_name_and_port_from_intf(intf)
+            #switchname, switchport = self._get_dp_name_and_port(mac)
 
             if switchname == '' or switchport == -1:
                 self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for authed user '{}' on MAC '{}'".format(
@@ -178,13 +176,21 @@ class HTTPHandler(BaseHTTPRequestHandler):
         message = 'authenticated new client({}) at MAC: {}\n'.format(
             user, mac)
 
-        self.rule_man.authenticate(user, mac, switchname, switchport, logger=self.logger)
+        success = self.rule_man.authenticate(user, mac, switchname, switchport, logger=self.logger)
 
         self.logger.error(config_parser_util.read_config(self.config.acl_config_file, self.logname))
+
+        # TODO probably shouldn't return success if the switch/port cannot be found.
+        # but at this stage auth server (hostapd) can't do anything about it.
+        # Perhaps look into the CoA radius thing, so that process looks like:
+        #   - client 1x success, send to here.
+        #   - can't find switch. return failure.
+        #   - hostapd revokes auth, so now client is aware there was an error.
         #write response
-        self._set_headers(200, 'text/html')
-        self.wfile.write(message.encode(encoding='utf-8'))
-        self.log_message('%s', message)
+        if success or not success:
+            self._set_headers(200, 'text/html')
+            self.wfile.write(message.encode(encoding='utf-8'))
+            self.log_message('%s', message)
 
     def deauthenticate(self, mac, username):
         """Deauthenticates the mac and username by removing related acl rules
@@ -195,18 +201,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """
         self.logger.info('---deauthenticated: {} {}'.format(mac, username))
 
-        self.rule_man.deauthenticate(username, mac, logger=self.logger)
-
-        # TODO probably shouldn't return success if the switch/port cannot be found.
-        # but at this stage auth server (hostapd) can't do anything about it.
-        # Perhaps look into the CoA radius thing, so that process looks like:
-        #   - client 1x success, send to here.
-        #   - can't find switch. return failure.
-        #   - hostapd revokes auth, so now client is aware there was an error.
-        self._set_headers(200, 'text/html')
-        message = 'deauthenticated client {} at {} \n'.format(username, mac)
-        self.wfile.write(message.encode(encoding='utf-8'))
-        self.log_message('%s', message)
+        success = self.rule_man.deauthenticate(username, mac, logger=self.logger)
+        # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
+        # will likley think it has logged off, so is there anything we can do from hostapd to
+        # say they have not actually logged off.
+        # EAP LOGOFF is a one way message (not ack=ed)
+        if success or not success:
+            self._set_headers(200, 'text/html')
+            message = 'deauthenticated client {} at {} \n'.format(username, mac)
+            self.wfile.write(message.encode(encoding='utf-8'))
+            self.log_message('%s', message)
 
     def check_if_json(self):
         """Check if HTTP content is json.
@@ -224,7 +228,11 @@ class HTTPHandler(BaseHTTPRequestHandler):
             self.send_error('Data is not a JSON object\n')
             return None
         content_length = int(self.headers.get('content-length'))
-        data = self.rfile.read(content_length).decode('utf-8')
+        try:
+            data = self.rfile.read(content_length).decode('utf-8')
+        except UnicodeDecodeError:
+            data = self.rfile.read(content_length)
+            self.logger.warn('UnicodeDecodeError %s' % data)
         try:
             json_data = json.loads(data)
         except ValueError:

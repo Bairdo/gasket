@@ -129,3 +129,133 @@ def timeout_cmd(cmd, timeout):
 
 def timeout_soft_cmd(cmd, timeout):
     return 'timeout %us stdbuf -o0 -e0 %s' % (timeout, cmd)
+
+
+def gen_config_global(num_vlans):
+    """Generate the str for the CONFIG_GLOBAL variable
+    Args:
+        num_vlans (int): number of vlans on the portal port.
+    Returns:
+        str for CONFIG_GLOBAL
+    """
+    conf = """vlans:
+    100:
+        description: "untagged"
+    1:"""
+    for i in range(3, num_vlans + 3):
+        conf = '%s\n    %d:' % (conf, i)
+    conf = '%s\n%s' % (conf, """include:
+    - {tmpdir}/faucet-acl.yaml""")
+
+    return conf
+
+
+def gen_config(num_vlans):
+    """Generate the str for the CONFIG variable.
+    Args:
+        num_vlans (int): number of vlans on the portal port.
+    Returns:
+        str for CONFIG
+    """
+    p1_vlans = '1'
+    for i in range(3, num_vlans + 3):
+        p1_vlans = '%s,%d' % (p1_vlans, i)
+    conf = """
+        interfaces:
+            %(port_1)d:
+                name: portal
+                tagged_vlans: [{0}]
+                native_vlan: 100
+                acl_in: port_faucet-1_%(port_1)d
+            %(port_2)d:
+                name: gateway
+                native_vlan: 100""".format(p1_vlans)
+
+    for i in range(3, num_vlans + 3):
+        conf = """{0}
+            %(port_{1})d:
+                name: host{1}
+                native_vlan: 100
+                acl_in: port_faucet-1_%(port_{1})d""".format(conf, i)
+    return conf
+
+
+def gen_base_config(num_vlans):
+    """Generate the base acl file usd by auth_app.
+    Args:
+        num_vlans (int): number of vlans on the portal port.
+    Returns:
+        str of base acl.
+    """
+    conf = """acls:
+  port_faucet-1_1:"""
+
+    for i in range(3, num_vlans + 3):
+        rule = """
+  - rule:
+      actions:
+        output:
+          port: %d
+          pop_vlans: 1
+      vlan_vid: %d""" % (i, i)
+
+        conf = """{0}
+{1}""".format(conf, rule)
+
+
+    for i in range(3, num_vlans + 3):
+        port_acl = """
+  port_faucet-1_{0}:
+  - rule:
+      actions:
+        output:
+          port: 1
+          vlan_vid: {0}
+      dl_type: 34958
+  - authed-rules
+  - rule:
+      actions:
+        output:
+          port: 1
+          vlan_vid: {0}""".format(i)
+
+        conf = "{0}\n{1}""".format(conf, port_acl)
+
+    return conf
+
+
+def gen_faucet_acl(num_hosts):
+    """Creates a string for faucet acls. each acl will be empty.
+    But satisfies the requirement for each ports acl_in to be known.
+    Args:
+        num_hosts (int): number of ports to create acl for.
+    Returns:
+        (str)
+    """
+    conf = """acls:
+    port_faucet-1_%(port_1)d:
+        - rule:
+            actions:
+                allow: 1"""
+    for i in range(3, num_hosts + 3):
+        conf = """{0}
+    port_faucet-1_%(port_{1})d:
+        - rule:
+            actions:
+                allow: 0""".format(conf, i)
+
+    return conf
+
+
+def gen_port_map(num_ports):
+    """Create the port_map dict with the number of ports.
+    Args:
+        num_ports (int): number of ports on faucet-1 switch.
+    Returns:
+        dict {'port_1': 1, 'port_2': 2,...}
+    """
+    port_map = {}
+    for i in range(1, num_ports + 1):
+        port_map['port_%d' % i] = i
+    return port_map
+

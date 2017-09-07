@@ -24,14 +24,14 @@ rules:
 
 users:
     
-    host110user:
+    hostuser0:
         _authport_: # port_acl to apply rules
             # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
             # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
             *allowall
 
 
-    host111user:
+    hostuser1:
         _authport_: # port_acl to apply rules
             # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
             # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
@@ -58,8 +58,66 @@ users:
                 dl_type: 0x0806
                 actions:
                     allow: 1
-
-
-    host114user:
+    hostuser2:
+        _authport_:
+            *allowall
+    hostuser3:
+        _authport_:
+            *allowall
+    hostuser4:
+        _authport_:
+            *allowall
+    hostuser5:
+        _authport_:
+            *allowall
+    hostuser6:
+        _authport_:
+            *allowall
+    hostuser7:
+        _authport_:
+            *allowall
+    hostuser8:
+        _authport_:
+            *allowall
+    hostuser9:
+        _authport_:
+            *allowall
+    hostuser10:
+        _authport_:
+            *allowall
+    hostuser11:
+        _authport_:
+            *allowall
+    hostuser12:
+        _authport_:
+            *allowall
+    hostuser13:
+        _authport_:
+            *allowall
+    hostuser14:
+        _authport_:
+            *allowall
+    hostuser15:
+        _authport_:
+            *allowall
+    hostuser16:
+        _authport_:
+            *allowall
+    hostuser17:
+        _authport_:
+            *allowall
+    hostuser18:
+        _authport_:
+            *allowall
+    hostuser19:
+        _authport_:
+            *allowall
+    hostuser20:
+        _authport_:
+            *allowall
+    hostuser21:
+        _authport_:
+            *allowall
+    hostuser22:
         _authport_:
             *allowall

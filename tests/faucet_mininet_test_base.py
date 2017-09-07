@@ -77,7 +77,7 @@ class FaucetTestBase(unittest.TestCase):
     ctl_privkey = None
     ctl_cert = None
     ca_certs = None
-    port_map = {'port_1': 1, 'port_2': 2, 'port_3': 3, 'port_4': 4, 'port_5': 5}
+    port_map = {'port_1': 1, 'port_2': 2, 'port_3': 3, 'port_4': 4}
     switch_map = {}
     tmpdir = None
     net = None
@@ -112,7 +112,6 @@ class FaucetTestBase(unittest.TestCase):
     def _set_prom_port(self, name='faucet'):
         self._set_var(name, 'FAUCET_PROMETHEUS_PORT', str(self.prom_port))
         self._set_var(name, 'FAUCET_PROMETHEUS_ADDR', faucet_mininet_test_util.LOCALHOST)
-
 
     def _set_static_vars(self):
         self._set_var_path('faucet', 'FAUCET_CONFIG', 'faucet.yaml')
@@ -1215,17 +1214,20 @@ dbs:
             self.require_host_learned(host)
         for _ in range(retries):
             ping_result = host.cmd(ping_cmd)
+            print(ping_result)
             if re.search(self.ONE_GOOD_PING, ping_result):
                 return
         self.assertTrue(
             re.search(self.ONE_GOOD_PING, ping_result),
             msg='%s: %s' % (ping_cmd, ping_result))
 
-    def one_ipv4_ping(self, host, dst, retries=3, require_host_learned=True, intf=None):
+    def one_ipv4_ping(self, host, dst, retries=3, require_host_learned=True, intf=None, netns=None):
         """Ping an IPv4 destination from a host."""
         if intf is None:
             intf = host.defaultIntf()
         ping_cmd = 'ping -c1 -I%s %s' % (intf, dst)
+        if netns is not None:
+            ping_cmd = 'ip netns exec %s %s' % (netns, ping_cmd)
         return self._one_ip_ping(host, ping_cmd, retries, require_host_learned)
 
     def one_ipv4_controller_ping(self, host):

@@ -22,6 +22,10 @@ echo "========== Starting OVS ========================="
 service openvswitch-switch start
 ovs-vsctl show || exit 1
 
+
+echo "========== Starting haveged ====================="
+haveged
+
 # enable fast reuse of ports.
 sysctl -w net.netfilter.nf_conntrack_tcp_timeout_time_wait=10
 sysctl -w net.ipv4.tcp_fin_timeout=10
