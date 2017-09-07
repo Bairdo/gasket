@@ -1,5 +1,7 @@
 FROM osrg/ryu
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN \
   apt-get update && \
   apt-get install -qy --no-install-recommends software-properties-common && \
@@ -8,7 +10,7 @@ RUN \
   echo debconf apt-fast/maxdownloads string 16 | debconf-set-selections && \
   echo debconf apt-fast/dlflag boolean true | debconf-set-selections && \
   echo debconf apt-fast/aptmanager string apt-get | debconf-set-selections && \
-  apt-get -y install apt-fast
+  apt-get -yq install apt-fast
 
 RUN \
   apt-fast install -qy --no-install-recommends \
@@ -28,6 +30,7 @@ RUN \
     libpython3-dev \
     libssl-dev \
     libyaml-dev \
+    lsof \
     ndisc6 \
     net-tools \
     netcat-openbsd \
@@ -38,6 +41,7 @@ RUN \
     python3-pip \
     sudo \
     tcpdump \
+    tshark \
     udhcpd \
     vlan \
     wpasupplicant
@@ -45,18 +49,19 @@ RUN \
 RUN \
   update-rc.d haveged defaults
 
-RUN \
-  git clone https://github.com/Bairdo/hostapd-d1xf.git && \
-  cd hostapd-d1xf/hostapd && \
-  git checkout username-fix-3
-
 ###
 ### TODO: pytype may be slightly stale due to Docker caching.
 ### Specify versions as we do for mininet if possible.
 ###
 
 RUN \
+  git config --global url.https://github.com/.insteadOf git://github.com/ && \
   /bin/echo -e "https://github.com/mininet/mininet\nhttps://github.com/google/pytype.git" |parallel --bar git clone
+
+RUN \
+  git clone https://github.com/Bairdo/hostapd-d1xf.git && \
+  cd hostapd-d1xf/hostapd && \
+  git checkout username-fix-3
 
 RUN \
   cd mininet && git checkout 2.2.2 && cd .. && \
