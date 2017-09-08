@@ -4180,7 +4180,7 @@ eapol_flags=0
                     break
                 time.sleep(1)
             elif new_status == 'AUTHENTICATED':
-                time.sleep(5)
+                time.sleep(10)
                 break
             elif new_status == 'AUTHENTICATING':
                 time.sleep(1)
@@ -4302,8 +4302,8 @@ eapol_flags=0
         print 'Compiling hostapd ....'
         # create the hostapd config files
         hostapd_config_cmd = ''
-        for vlan_id in range(3, 3 + self.max_hosts):
-            host.cmd('''echo "interface={0}-eth0.{2}\n
+#        for vlan_id in range(3, 3 + self.max_hosts):
+        host.cmd('''echo "interface={0}-eth0\n
 driver=wired\n
 logger_stdout=-1\n
 logger_stdout_level=0\n
@@ -4311,11 +4311,11 @@ ieee8021x=1\n
 eap_reauth_period=3600\n
 use_pae_group_addr=0\n
 eap_server=1\n
-eap_user_file={1}/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-v{2}-wired.conf'''.format(host.name, self.tmpdir, vlan_id))
-            hostapd_config_cmd = hostapd_config_cmd + ' {0}/{1}-v{2}-wired.conf'.format(self.tmpdir, host.name, vlan_id)
+eap_user_file={1}/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir))
+        hostapd_config_cmd = hostapd_config_cmd + ' {0}/{1}-wired.conf'.format(self.tmpdir, host.name)
 
-            host.cmdPrint('ip link add link {0}-eth0 name {0}-eth0.{1} type vlan id {1}'.format(host.name, vlan_id))
-            host.cmd('ip link set {0}-eth0.{1} up'.format(host.name, vlan_id))
+#            host.cmdPrint('ip link add link {0}-eth0 name {0}-eth0.{1} type vlan id {1}'.format(host.name, vlan_id))
+#            host.cmd('ip link set {0}-eth0.{1} up'.format(host.name, vlan_id))
 
         # compile hostapd with the new ip address and port of the authentication controller app.
         host.cmd('cp -r /root/hostapd-d1xf/ {}/hostapd-d1xf'.format(self.tmpdir))

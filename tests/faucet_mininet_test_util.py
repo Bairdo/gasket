@@ -141,11 +141,9 @@ def gen_config_global(num_vlans):
     conf = """vlans:
     100:
         description: "untagged"
-    1:"""
-    for i in range(3, num_vlans + 3):
-        conf = '%s\n    %d:' % (conf, i)
-    conf = '%s\n%s' % (conf, """include:
-    - {tmpdir}/faucet-acl.yaml""")
+    1:
+include:
+    - {tmpdir}/faucet-acl.yaml"""
 
     return conf
 
@@ -157,19 +155,14 @@ def gen_config(num_vlans):
     Returns:
         str for CONFIG
     """
-    p1_vlans = '1'
-    for i in range(3, num_vlans + 3):
-        p1_vlans = '%s,%d' % (p1_vlans, i)
     conf = """
         interfaces:
             %(port_1)d:
                 name: portal
-                tagged_vlans: [{0}]
                 native_vlan: 100
-                acl_in: port_faucet-1_%(port_1)d
             %(port_2)d:
                 name: gateway
-                native_vlan: 100""".format(p1_vlans)
+                native_vlan: 100"""
 
     for i in range(3, num_vlans + 3):
         conf = """{0}
@@ -187,37 +180,23 @@ def gen_base_config(num_vlans):
     Returns:
         str of base acl.
     """
-    conf = """acls:
-  port_faucet-1_1:"""
-
-    for i in range(3, num_vlans + 3):
-        rule = """
-  - rule:
-      actions:
-        output:
-          port: %d
-          pop_vlans: 1
-      vlan_vid: %d""" % (i, i)
-
-        conf = """{0}
-{1}""".format(conf, rule)
-
+    conf = """acls:"""
 
     for i in range(3, num_vlans + 3):
         port_acl = """
   port_faucet-1_{0}:
   - rule:
+      dl_type: 0x888e
       actions:
+        allow: 1
         output:
-          port: 1
-          vlan_vid: {0}
-      dl_type: 34958
+          dl_dst: 70:6f:72:74:61:6c
   - authed-rules
   - rule:
       actions:
+        allow: 1
         output:
-          port: 1
-          vlan_vid: {0}""".format(i)
+          dl_dst: 70:6f:72:74:61:6c""".format(i)
 
         conf = "{0}\n{1}""".format(conf, port_acl)
 
@@ -232,11 +211,7 @@ def gen_faucet_acl(num_hosts):
     Returns:
         (str)
     """
-    conf = """acls:
-    port_faucet-1_%(port_1)d:
-        - rule:
-            actions:
-                allow: 1"""
+    conf = """acls:"""
     for i in range(3, num_hosts + 3):
         conf = """{0}
     port_faucet-1_%(port_{1})d:
