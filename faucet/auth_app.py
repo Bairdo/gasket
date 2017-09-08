@@ -159,8 +159,8 @@ class HTTPHandler(BaseHTTPRequestHandler):
             mac = json_data['mac']
             user = json_data['user']
             intf = json_data['interface']
-            switchname, switchport = self._get_dp_name_and_port_from_intf(intf)
-            #switchname, switchport = self._get_dp_name_and_port(mac)
+            #switchname, switchport = self._get_dp_name_and_port_from_intf(intf)
+            switchname, switchport = self._get_dp_name_and_port(mac)
 
             if switchname == '' or switchport == -1:
                 self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for authed user '{}' on MAC '{}'".format(
