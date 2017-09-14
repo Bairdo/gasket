@@ -11,7 +11,7 @@ class AuthConfig(object):
 
         self.version = data['version']
         self.logger_location = data['logger_location']
-        self.listen_port = int(data['listen_port'])
+
 
         self.prom_port = int(data['faucet']['prometheus_port'])
         self.faucet_ip = data['faucet']['ip']
@@ -22,10 +22,6 @@ class AuthConfig(object):
         self.acl_config_file = data['files']['acl_config']
 
         self.base_filename = data['files']['base_config']
-
-        self.captive_portal_auth_path = data["urls"]["capflow"]
-        self.dot1x_auth_path = data["urls"]["dot1x"]
-        self.idle_path = data["urls"]["idle"]
 
         self.dp_port_mode = data["dps"]
 
@@ -62,6 +58,4 @@ class AuthConfig(object):
 
         self.rules = data["auth-rules"]["file"]
 
-        self.intf_to_switch_port = data['interface-to-switch-and-port']
-
-
+        self.hostapd_socket_path = data['hostapd']['socket_path']

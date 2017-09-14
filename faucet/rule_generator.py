@@ -12,9 +12,11 @@ class RuleGenerator():
 
     yaml_file = ""
     conf = None
+    logger = None
 
-    def __init__(self, rule_file):
+    def __init__(self, rule_file, logger):
         self.reload(rule_file)
+        self.logger = logger
 
     def get_rules(self, username, auth_port_acl, mac):
         """Gets Faucet ACL rules for the specified user.
@@ -52,6 +54,9 @@ class RuleGenerator():
                     temp = rules[portacl]
                     del rules[portacl]
                     rules[auth_port_acl] = temp
+        else:
+            self.logger.warn('user %s cannot be found in rule_file: %s' %(username, self.yaml_file))
+            return None
         return rules
 
     def reload(self, rule_file):

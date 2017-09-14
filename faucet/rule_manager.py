@@ -129,10 +129,12 @@ class RuleManager(object):
     application.
     """
 
-    def __init__(self, config):
-        self.config = config
+    logger = None
 
-        self.rule_gen = RuleGenerator(self.config.rules)
+    def __init__(self, config, logger):
+        self.config = config
+        self.logger = logger
+        self.rule_gen = RuleGenerator(self.config.rules, self.logger)
         self.base_filename = self.config.base_filename
         self.faucet_acl_filename = self.config.acl_config_file
         self.authed_users = {} # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
@@ -166,12 +168,12 @@ class RuleManager(object):
         # write back to filename 
         write_yaml(base, filename + '.tmp')
         self.backup_file(filename)
-        logger.warn('backed up base')
+        self.logger.warn('backed up base')
         self.swap_temp_file(filename)
-        logger.warn('swapped tmp for base')
+        self.logger.warn('swapped tmp for base')
         return base
 
-    def authenticate(self, username, mac, switch, port, radius_fields=None, logger=None):
+    def authenticate(self, username, mac, switch, port, radius_fields=None):
         """Authenticates a username and MAC address on a switch and port.
         Args:
             username (str)
@@ -185,25 +187,28 @@ class RuleManager(object):
         if not self.is_authenticated(mac, username, switch, port):
             self.add_to_authed_dict(username, mac, switch, port)
             rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac)
+            if rules is None:
+                self.logger.warn('cannot authenticate user: %s, mac: %s no rules found.' % (username, mac))
+                return False
             # update base
-            base = self.add_to_base_acls(self.base_filename, rules, username, mac, logger=logger)
+            base = self.add_to_base_acls(self.base_filename, rules, username, mac)
             # update faucet
-            final = create_faucet_acls(base, logger=logger)
+            final = create_faucet_acls(base, self.logger)
             write_yaml(final, self.faucet_acl_filename + '.tmp' , True)
             self.backup_file(self.faucet_acl_filename)
             self.swap_temp_file(self.faucet_acl_filename)
             # sighup.
             start_count = self.get_faucet_reload_count()
             self.send_signal(signal.SIGHUP)
-            logger.info('auth signal sent.')
+            self.logger.info('auth signal sent.')
             for i in range(400):
                 end_count = self.get_faucet_reload_count()
                 if end_count > start_count:
-                    logger.info('auth - faucet has reloaded.')
+                    self.logger.info('auth - faucet has reloaded.')
                     return True
                 time.sleep(0.05)
-                logger.info('auth - waiting for faucet to process sighup config reload. %d' % i)
-            logger.error('auth - faucet did not process sighup within 30 seconds. 0.05 * 400')
+                self.logger.info('auth - waiting for faucet to process sighup config reload. %d' % i)
+            self.logger.error('auth - faucet did not process sighup within 30 seconds. 0.05 * 400')
             return False
         return True
 
@@ -214,7 +219,7 @@ class RuleManager(object):
                 return int(float(l.split()[1]))
         return 0
 
-    def remove_from_base(self, username, mac, logger=None):
+    def remove_from_base(self, username, mac):
         """Removes rules that have matching mac= _mac_ and username=_name_
         If both _mac_ and _name_ exist in the rule, both must match
         If only one of _mac_ or _name_ is exist, only one must match.
@@ -225,31 +230,31 @@ class RuleManager(object):
         with open(self.base_filename) as f:
             base = yaml.safe_load(f)
         
-        logger.info(base)
+        self.logger.info(base)
         remove = []
 
         if 'aauth' in base:
             for acl in list(base['aauth'].keys()):
-                logger.debug('aauth acl')
-                logger.debug(acl)
+                self.logger.debug('aauth acl')
+                self.logger.debug(acl)
                 for  r in base['aauth'][acl]:
                     rule = r['rule']
                     if '_mac_' in rule and '_name_' in rule:
-                        logger.debug('mac and name exist')
-                        if mac == rule['_mac_'] and (username == rule['_name_'] or username == '(null)'):
-                            logger.debug('removing based on name and mac')
+                        self.logger.debug('mac and name exist')
+                        if mac == rule['_mac_'] and (username is None or username == rule['_name_']):
+                            self.logger.debug('removing based on name and mac')
                             remove.append(acl)
                             break
                     elif '_mac_' in rule and mac == rule['_mac_']:
-                        logger.debug('removing based on mac')
+                        self.logger.debug('removing based on mac')
                         remove.append(acl)
                         break
                     elif '_name_' in rule and username == rule['_name_']:
-                        logger.warning('removing based on name')
+                        self.logger.warning('removing based on name')
                         remove.append(acl)
                         break
-        logger.info('remove from auth')
-        logger.info(remove)
+        self.logger.info('remove from auth')
+        self.logger.info(remove)
         removed = False
         for aclname in remove:
             del base['aauth'][aclname]
@@ -263,7 +268,7 @@ class RuleManager(object):
                                 base['acls'][port_acl_name].remove(item)
                                 removed = True
                             except Exception as e:
-                                logger.exception(e)
+                                self.logger.exception(e)
 
         if removed:
             # only need to write it back if something has actually changed.
@@ -271,11 +276,11 @@ class RuleManager(object):
             self.backup_file(self.base_filename)
             self.swap_temp_file(self.base_filename)
 
-        logger.info('updated base')
-        logger.info(base)
+        self.logger.info('updated base')
+        self.logger.info(base)
         return base, removed
 
-    def deauthenticate(self, username, mac, logger=None):
+    def deauthenticate(self, username, mac):
         """Deauthenticates a username or MAC address.
         Args:
             username (str): may be None or '(null)' which is treated as None.
@@ -284,14 +289,14 @@ class RuleManager(object):
             True if a client that is authed has rules removed, or if client is not authed. other wise false (faucet fails to reload)
         """
         if self.is_authenticated(mac, username):
-            logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
-            self.remove_from_authed_dict(username, mac, logger)
+            self.logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
+            self.remove_from_authed_dict(username, mac)
             # update base
-            base, changed = self.remove_from_base(username, mac, logger=logger)
+            base, changed = self.remove_from_base(username, mac)
             # update faucet only if config has changed
             if changed:
-                logger.info('base has changed. removing from faucet')
-                final = create_faucet_acls(base, logger=logger)
+                self.logger.info('base has changed. removing from faucet')
+                final = create_faucet_acls(base, self.logger)
                 write_yaml(final, self.faucet_acl_filename + '.tmp', True)
 
                 self.backup_file(self.faucet_acl_filename)
@@ -299,15 +304,15 @@ class RuleManager(object):
                 # sighup.
                 start_count = self.get_faucet_reload_count()
                 self.send_signal(signal.SIGHUP)
-                logger.info('deauth signal sent')
+                self.logger.info('deauth signal sent')
                 for i in range(400):
                     end_count = self.get_faucet_reload_count()
                     if end_count > start_count:
-                        logger.info('deauth - faucet has reloaded.')
+                        self.logger.info('deauth - faucet has reloaded.')
                         return True
                     time.sleep(0.05)
-                    logger.info('deauth - waiting for faucet to process sighup config reload on. %d' % i)
-                logger.error('deauth - faucet did not process sighup within 400 * 0.05 seconds.')
+                    self.logger.info('deauth - waiting for faucet to process sighup config reload on. %d' % i)
+                self.logger.error('deauth - faucet did not process sighup within 400 * 0.05 seconds.')
                 return False
         return True
 
@@ -397,7 +402,7 @@ class RuleManager(object):
                     if port not in self.authed_users[username][mac][switch]:
                         self.authed_users[username][mac][switch][port] = 1
 
-    def remove_from_authed_dict(self, username, mac, logger):
+    def remove_from_authed_dict(self, username, mac):
         """Remove the mac from the authed_users dictionary.
         If username is None or '(null)' as is the case with some deauthentications,
         the mac is removed from all users.
@@ -407,7 +412,7 @@ class RuleManager(object):
         """
         if username and username != '(null)':
             if username in self.authed_users:
-                logger.info('removing user %s' % username)
+                self.logger.info('removing user %s' % username)
                 del self.authed_users[username][mac]
         else:
             remove_users = []
@@ -415,7 +420,7 @@ class RuleManager(object):
                 if mac in usermac:
                     remove_users.append(user)
             for user in remove_users:
-                logger.info('removing user %s. wildcard mac' % username)
+                self.logger.info('removing user %s. wildcard mac' % username)
                 del self.authed_users[user][mac]
 
 
