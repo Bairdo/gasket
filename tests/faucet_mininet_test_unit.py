@@ -328,15 +328,16 @@ class FaucetUntaggedPrometheusGaugeTest(FaucetUntaggedTest):
 
     def test_untagged(self):
         self.wait_dp_status(1, controller='gauge')
-        labels = {'port_name': '1', 'dp_id': '0x%x' % long(self.dpid)}
+        self.assertIsNotNone(self.scrape_prometheus_var(
+            'faucet_pbr_version', any_labels=True, controller='gauge', retries=3))
+        labels = {'port_name': '1'}
         last_p1_bytes_in = 0
         for _ in range(2):
             updated_counters = False
             for _ in range(self.DB_TIMEOUT * 3):
                 self.ping_all_when_learned()
                 p1_bytes_in = self.scrape_prometheus_var(
-                    'of_port_rx_bytes', labels=labels, controller='gauge',
-                    dpid=False)
+                    'of_port_rx_bytes', labels=labels, controller='gauge', retries=3)
                 if p1_bytes_in is not None and p1_bytes_in > last_p1_bytes_in:
                     updated_counters = True
                     last_p1_bytes_in = p1_bytes_in
@@ -626,6 +627,87 @@ acls:
             second_host, first_host.IP(), require_host_learned=False)
 
 
+class FaucetNailedFailoverForwardingTest(FaucetNailedForwardingTest):
+
+    CONFIG_GLOBAL = """
+vlans:
+    100:
+        description: "untagged"
+acls:
+    1:
+        - rule:
+            dl_dst: "0e:00:00:00:02:02"
+            actions:
+                output:
+                    failover:
+                        group_id: 1001
+                        ports: [b2, b3]
+        - rule:
+            dl_type: 0x806
+            dl_dst: "ff:ff:ff:ff:ff:ff"
+            arp_tpa: "10.0.0.2"
+            actions:
+                output:
+                    failover:
+                        group_id: 1002
+                        ports: [b2, b3]
+        - rule:
+            actions:
+                allow: 0
+    2:
+        - rule:
+            dl_dst: "0e:00:00:00:01:01"
+            actions:
+                output:
+                    port: b1
+        - rule:
+            dl_type: 0x806
+            dl_dst: "ff:ff:ff:ff:ff:ff"
+            arp_tpa: "10.0.0.1"
+            actions:
+                output:
+                    port: b1
+        - rule:
+            actions:
+                allow: 0
+    3:
+        - rule:
+            dl_dst: "0e:00:00:00:01:01"
+            actions:
+                output:
+                    port: b1
+        - rule:
+            dl_type: 0x806
+            dl_dst: "ff:ff:ff:ff:ff:ff"
+            arp_tpa: "10.0.0.1"
+            actions:
+                output:
+                    port: b1
+        - rule:
+            actions:
+                allow: 0
+    4:
+        - rule:
+            actions:
+                allow: 0
+"""
+
+    def test_untagged(self):
+        first_host, second_host, third_host = self.net.hosts[0:3]
+        first_host.setMAC('0e:00:00:00:01:01')
+        second_host.setMAC('0e:00:00:00:02:02')
+        third_host.setMAC('0e:00:00:00:02:02')
+        third_host.setIP(second_host.IP())
+        self.one_ipv4_ping(
+            first_host, second_host.IP(), require_host_learned=False)
+        self.one_ipv4_ping(
+            second_host, first_host.IP(), require_host_learned=False)
+        self.set_port_down(self.port_map['port_2'])
+        self.one_ipv4_ping(
+            first_host, third_host.IP(), require_host_learned=False)
+        self.one_ipv4_ping(
+            third_host, first_host.IP(), require_host_learned=False)
+
 
 class FaucetUntaggedLLDPBlockedTest(FaucetUntaggedTest):
 
@@ -901,12 +983,14 @@ vlans:
         return True
 
     def verify_hosts_learned(self, first_host, mac_ips, hosts):
+        fping_out = None
         for _ in range(3):
-            first_host.cmd('fping -c3 %s' % ' '.join(mac_ips))
+            fping_out = first_host.cmd(faucet_mininet_test_util.timeout_cmd(
+                'fping -i1 -p1 -c3 %s' % ' '.join(mac_ips), 5))
             if self.hosts_learned(hosts):
                 return
             time.sleep(1)
-        self.fail('%s cannot be learned' % mac_ips)
+        self.fail('%s cannot be learned (%s)' % (mac_ips, fping_out))
 
     def test_untagged(self):
         first_host, second_host = self.net.hosts[:2]
@@ -1101,7 +1185,8 @@ acls:
     def _get_conf(self):
         return yaml.load(open(self.faucet_config_path, 'r').read())
 
-    def _reload_conf(self, conf, restart, cold_start, change_expected=True):
+    def _reload_conf(self, conf, restart, cold_start,
+                     change_expected=True, host_cache=None):
         open(self.faucet_config_path, 'w').write(yaml.dump(conf))
         if restart:
             var = 'faucet_config_reload_warm'
@@ -1109,9 +1194,21 @@ acls:
                 var = 'faucet_config_reload_cold'
             old_count = int(
                 self.scrape_prometheus_var(var, dpid=True, default=0))
+            old_mac_table = self.scrape_prometheus_var(
+                'learned_macs', labels={'vlan': host_cache}, multiple=True)
             self.verify_hup_faucet()
             new_count = int(
                 self.scrape_prometheus_var(var, dpid=True, default=0))
+            new_mac_table = self.scrape_prometheus_var(
+                'learned_macs', labels={'vlan': host_cache}, multiple=True)
+            if host_cache:
+                self.assertFalse(
+                    cold_start, msg='host cache is not maintained with cold start')
+                self.assertTrue(
+                    new_mac_table, msg='no host cache for vlan %u' % host_cache)
+                self.assertEqual(
+                    old_mac_table, new_mac_table,
+                    msg='host cache for vlan %u not same over reload' % host_cache)
             if change_expected:
                 self.assertEqual(
                     old_count + 1, new_count,
@@ -1188,7 +1285,7 @@ acls:
             table_id=self.PORT_ACL_TABLE)
         self.verify_tp_dst_blocked(5001, first_host, second_host)
         self.verify_tp_dst_notblocked(5002, first_host, second_host)
-        self._reload_conf(orig_conf, True, cold_start=False)
+        self._reload_conf(orig_conf, True, cold_start=False, host_cache=100)
         self.verify_tp_dst_notblocked(
             5001, first_host, second_host, table_id=None)
         self.verify_tp_dst_notblocked(

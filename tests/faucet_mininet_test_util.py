@@ -16,7 +16,13 @@ MIN_PORT_AGE = max(int(open(
     '/proc/sys/net/netfilter/nf_conntrack_tcp_timeout_time_wait').read()) / 2, 30)
 
 
+def flat_test_name(_id):
+    """Return short form test name from TestCase ID."""
+    return '-'.join(_id.split('.')[1:])
+
+
 def tcp_listening_cmd(port, ipv=4, state='LISTEN'):
+    """Return a command line for lsof for PIDs with specified TCP state."""
     return 'lsof -b -P -n -t -sTCP:%s -i %u -a -i tcp:%u' % (state, ipv, port)
 
 
@@ -34,6 +40,7 @@ def str_int_dpid(str_dpid):
 
 
 def receive_sock_line(sock):
+    """Receive a \n terminated line from a socket."""
     buf = ''
     while buf.find('\n') <= -1:
         buf = buf + sock.recv(1024)
@@ -41,6 +48,7 @@ def receive_sock_line(sock):
 
 
 def tcp_listening(port):
+    """Return True if any process listening on a port."""
     DEVNULL = open(os.devnull, 'w')
     return subprocess.call(
         tcp_listening_cmd(port).split(), stdout=DEVNULL, stderr=DEVNULL, close_fds=True) == 0
@@ -56,6 +64,7 @@ def find_free_port(ports_socket, name):
 
 
 def return_free_ports(ports_socket, name):
+    """Notify test server that all ports under name are released."""
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect(ports_socket)
     sock.sendall('PUT,%s\n' % name)
@@ -99,9 +108,6 @@ def serve_ports(ports_socket, start_free_ports, min_free_ports):
     sock.listen(1)
 
     while True:
-        if len(ports_q) < min_free_ports:
-            queue_free_ports(len(ports_q) + 1)
-
         connection, _ = sock.accept()
         command, name = receive_sock_line(connection).split(',')
         if command == 'PUT':
@@ -110,6 +116,8 @@ def serve_ports(ports_socket, start_free_ports, min_free_ports):
                 port_age[port] = time.time()
             del ports_by_name[name]
         else:
+            if len(ports_q) < min_free_ports:
+                queue_free_ports(len(ports_q) + 1)
             while True:
                 port = ports_q.popleft()
                 if time.time() - port_age[port] > MIN_PORT_AGE:
@@ -124,10 +132,12 @@ def serve_ports(ports_socket, start_free_ports, min_free_ports):
 
 
 def timeout_cmd(cmd, timeout):
+    """Return a command line prefaced with a timeout wrappers and stdout/err unbuffered."""
     return 'timeout -sKILL %us stdbuf -o0 -e0 %s' % (timeout, cmd)
 
 
 def timeout_soft_cmd(cmd, timeout):
+    """Same as timeout_cmd buf using SIGTERM on timeout."""
     return 'timeout %us stdbuf -o0 -e0 %s' % (timeout, cmd)
 
 
