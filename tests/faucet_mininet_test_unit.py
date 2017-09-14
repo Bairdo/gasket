@@ -4396,7 +4396,6 @@ eapol_flags=0
 
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
 
-        print 'Compiling hostapd ....'
         # create the hostapd config files
         hostapd_config_cmd = ''
 #        for vlan_id in range(3, 3 + self.max_hosts):
@@ -4415,21 +4414,14 @@ eap_user_file={1}/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'
 #            host.cmd('ip link set {0}-eth0.{1} up'.format(host.name, vlan_id))
 
         # compile hostapd with the new ip address and port of the authentication controller app.
-        host.cmd('cp -r /root/hostapd-d1xf/ {}/hostapd-d1xf'.format(self.tmpdir))
-        host.cmd(r'''sed -ie  's/127\.0\.0\.1/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
-sed -ie  's/127\.0\.0\.1/192\.168\.{0}\.3/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
-sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
-sed -ie 's/8080/{2}/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
-sed -ie 's/free(identity)/\/\/free(identity)/g' {1}/hostapd-d1xf/src/eap_server/eap_server.c && \
-sed -ie 's/free(identity)/\/\/free(identity)/g' {1}/hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
-cd {1}/hostapd-d1xf/hostapd && \
-make'''.format(contr_num, self.tmpdir, self.auth_server_port))
+
+
         print 'Starting hostapd ....'
         
         self.create_hostapd_users_file(self.max_hosts)       
         
         # start hostapd
-        host.cmd('{0}/hostapd-d1xf/hostapd/hostapd -d {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
+        host.cmd('hostapd -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
         self.pids['hostapd'] = host.lastPid
 
         tcpdump_args = ' '.join((
