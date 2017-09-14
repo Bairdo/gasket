@@ -51,11 +51,6 @@ RUN \
     vlan \
     wpasupplicant
 
-###
-### TODO: pytype may be slightly stale due to Docker caching.
-### Specify versions as we do for mininet if possible.
-###
-
 RUN \
   update-rc.d haveged defaults
 
