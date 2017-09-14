@@ -39,12 +39,11 @@ def create_base_faucet_acls(input_f, output_f):
     write_yaml(final, output_f, True)
 
 
-def create_faucet_acls(doc, auth_rules=None, logger=None):
+def create_faucet_acls(doc, logger):
     """Creates a yaml object that represents faucet acls.
     Args:
         doc (yaml object): yaml dict. containing the pre-faucet version of the
                             acls.
-        auth_rules (dict): {aclname : list of rule} dictionary containing lists of faucet acl rules to insert. (Optional)
     Returns: yaml object {'acls': ...}
     """
     final = {}

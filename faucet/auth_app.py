@@ -83,9 +83,6 @@ class AuthApp(object):
     def auth_callback(self):
         pass
 
-    def _get_dp_name_and_port_from_intf(self, intf):
-        d = self.config.intf_to_switch_port[intf]
-        return d['switchname'], d['port']
 
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
@@ -135,7 +132,6 @@ class AuthApp(object):
         """
         self.logger.info(("****authenticated: {} {}".format(mac, user)))
 
-        #switchname, switchport = self._get_dp_name_and_port_from_intf(intf)
         switchname, switchport = self._get_dp_name_and_port(mac)
 
         if switchname == '' or switchport == -1:
