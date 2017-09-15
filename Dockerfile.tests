@@ -66,7 +66,8 @@ RUN \
 RUN \
   git clone https://github.com/Bairdo/hostapd-d1xf.git && \
   cd hostapd-d1xf/hostapd && \
-  git checkout username-fix-3
+  git checkout hostapd-master && \
+  make && make install
 
 RUN \
   cd mininet && git checkout 2.2.2 && cd .. && \

@@ -8,7 +8,12 @@ RUN \
     libpython3-all-dev \
     libyaml-dev \
     netbase \
-    python3-pip
+    python3-pip \
+    tcpdump \
+    wget \
+    build-essential \
+    libssl-dev \
+    freeradius
 
 COPY ./ /faucet-src/
 
@@ -18,10 +23,22 @@ RUN \
   pip3 install -r /faucet-src/requirements.txt && \
   pip3 install /faucet-src
 
-
-VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/"]
+VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/", "/etc/hostapd"]
 
 EXPOSE 6653
-EXPOSE 8080
 
-CMD python3 /faucet-src/faucet/rule_manager.py /etc/ryu/faucet/base-acls.yaml /etc/ryu/faucet/faucet-acls.yaml &&  ryu-manager faucet.faucet & echo $! > /etc/ryu/faucet/contr_pid; python3.5 /faucet-src/faucet/auth_app.py --config /etc/ryu/faucet/auth.yaml
+#
+# this hostapd contains a minor fix for when running the internal radius server.
+#
+
+RUN \
+  git clone https://github.com/Bairdo/hostapd-d1xf.git && \
+  cd hostapd-d1xf/hostapd && \
+  git checkout hostapd-master && \
+  make && make install
+
+#RUN \
+#  wget https://w1.fi/releases/hostapd-2.6.tar.gz && \
+#  tar -xf hostapd-2.6.tar.gz
+
+CMD ["/faucet-src/docker/runauth.sh"]
