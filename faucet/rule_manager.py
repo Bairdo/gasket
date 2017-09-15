@@ -404,7 +404,7 @@ class RuleManager(object):
     def remove_from_authed_dict(self, username, mac):
         """Remove the mac from the authed_users dictionary.
         If username is None or '(null)' as is the case with some deauthentications,
-        the mac is removed from all users.
+        the mac is removed regardless of the user.
         Args:
             username (str): may be None or '(null)'.
             mac (str): MAC address,
@@ -419,7 +419,7 @@ class RuleManager(object):
                 if mac in usermac:
                     remove_users.append(user)
             for user in remove_users:
-                self.logger.info('removing user %s. wildcard mac' % username)
+                self.logger.info('removing mac %s. wildcard user' % mac)
                 del self.authed_users[user][mac]
 
 
