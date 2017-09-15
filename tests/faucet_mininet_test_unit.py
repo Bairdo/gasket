@@ -29,6 +29,8 @@ import faucet_mininet_test_topo
 
 from datetime import datetime
 
+from mininet.cli import CLI
+
 class QuietHTTPServer(HTTPServer):
 
     allow_reuse_address = True
@@ -4107,6 +4109,7 @@ class FaucetAuthenticationTest(FaucetTest):
 
     def tearDown(self):
         if self.net is not None:
+            os.system('ps a')
             host = self.net.hosts[0]
             print "about to kill everything"
             for name, pid in self.pids.iteritems():
@@ -4245,7 +4248,12 @@ eapol_flags=0
 
         host.defaultIntf().updateIP()
         if wait:
-            end_reload_count = self.get_configure_count()
+            end_reload_count = 0
+            for i in range(20):
+                end_reload_count = self.get_configure_count()
+                if end_reload_count > start_reload_count:
+                    break
+                time.sleep(0.5)
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
 
     def wpa_cli_status(self, host, intf=None):
@@ -4339,9 +4347,9 @@ eapol_flags=0
         config_values['listenport'] = self.auth_server_port
         config_values['logger_location'] = self.tmpdir + '/auth_app.log'
         config_values['portal'] = self.net.hosts[0].name
+        config_values['intf'] = self.net.hosts[0].defaultIntf().name
         host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
         host.cmd('cp -r /faucet-src %s/' % self.tmpdir)
-
 
         host.cmd('echo "%s" > %s/base-acls.yaml' % (self.CONFIG_BASE_ACL, self.tmpdir))
 
@@ -4381,7 +4389,7 @@ eapol_flags=0
         for i in range(num_hosts):
             conf = '''%s\n"hostuser%d"   MD5     "hostpass%d"''' % (conf, i, i)
 
-        with open('%s/hostapd-d1xf/hostapd/hostapd.eap_user' % self.tmpdir, 'w+') as f:
+        with open('%s/hostapd.eap_user' % self.tmpdir, 'w+') as f:
             f.write(conf)
 
     def run_hostapd(self, host):
@@ -4389,17 +4397,13 @@ eapol_flags=0
         Args:
             host (mininet.host): host to run hostapd on.
         """
-        # TODO fix this monstrosity, of compiling the program in the test.
-
-        # TODO fix this hack, (collisions also possible)
-        # pylint: disable=no-member
-
-        contr_num = int(self.net.controller.name.split('-')[1]) % 255
-
         # create the hostapd config files
         hostapd_config_cmd = ''
 #        for vlan_id in range(3, 3 + self.max_hosts):
-        host.cmd('''echo "interface={0}-eth0\n
+        ctrl_iface_dir = '%s/hostapd' % self.tmpdir
+        intf = '%s-eth0' % host.name
+        host.cmd('''echo "interface={3}\n
+ctrl_interface={2}
 driver=wired\n
 logger_stdout=-1\n
 logger_stdout_level=0\n
@@ -4407,23 +4411,22 @@ ieee8021x=1\n
 eap_reauth_period=3600\n
 use_pae_group_addr=0\n
 eap_server=1\n
-eap_user_file={1}/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir))
+eap_user_file={1}/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir, ctrl_iface_dir, intf))
         hostapd_config_cmd = hostapd_config_cmd + ' {0}/{1}-wired.conf'.format(self.tmpdir, host.name)
-
 #            host.cmdPrint('ip link add link {0}-eth0 name {0}-eth0.{1} type vlan id {1}'.format(host.name, vlan_id))
 #            host.cmd('ip link set {0}-eth0.{1} up'.format(host.name, vlan_id))
 
-        # compile hostapd with the new ip address and port of the authentication controller app.
-
+        ctrl_iface_path = '%s/%s' % (ctrl_iface_dir, intf)
+        self.assertLess(len( ctrl_iface_path), 108, 'hostapd ctrl socket cannot be larger than 108 bytes (including null terminator)\nWas: %d\n%s' % (len(ctrl_iface_path), ctrl_iface_path))
 
         print 'Starting hostapd ....'
-        
-        self.create_hostapd_users_file(self.max_hosts)       
-        
+        host.cmd('mkdir %s/hostapd' % self.tmpdir)
+        self.create_hostapd_users_file(self.max_hosts)
+
         # start hostapd
         host.cmd('hostapd -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
         self.pids['hostapd'] = host.lastPid
-
+        
         tcpdump_args = ' '.join((
             '-s 0',
             '-e',
@@ -4452,7 +4455,7 @@ eap_user_file={1}/hostapd-d1xf/hostapd/hostapd.eap_user\n" > {1}/{0}-wired.conf'
         host.cmd('tcpdump %s &' % tcpdump_args)
         self.pids['p0-tcpdump'] = host.lastPid
 
-
+        # TODO is this still required?
         host.cmd('ping -i 0.1 10.0.0.2 &')
         self.pids['p0-ping'] = host.lastPid
 
@@ -4546,6 +4549,7 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
         open(self.tmpdir + '/faucet-acl.yaml', 'w').write(faucet_mininet_test_util.gen_faucet_acl(self.max_hosts) % self.port_map)
 
         self.auth_server_port = port
+
         self.start_net()
         self.start_programs()
 
@@ -4567,6 +4571,7 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
             params1={'ip': '192.168.%s.2/24' % contr_num},
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
+        self.run_hostapd(portal)
         self.run_controller(self.net.controller)
 
         interweb.cmd('echo "This is a text file on a webserver" > index.txt')
@@ -4580,10 +4585,10 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
 
         self.start_dhcp_server(interweb, gw='10.0.0.2', dns='8.8.8.8')
 
-        self.run_hostapd(portal)
 
 
-class FaucetSingleAuthenticationMultiHostDiffPortTest(FaucetAuthenticationSingleSwitchTest):
+
+class FaucetAuthMultiHostDiffPortTest(FaucetAuthenticationSingleSwitchTest):
     """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
 
     def ping_between_hosts(self, users):
@@ -4639,13 +4644,13 @@ class FaucetSingleAuthenticationMultiHostDiffPortTest(FaucetAuthenticationSingle
         self.one_ipv4_ping(h0, '10.0.0.2')
 
 
-class FaucetSingleAuthenticationMultiHostPerPortTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetAuthMultiHostPerPortTest(FaucetAuthenticationSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
     """
     mac_interfaces = {} # {'1': intefcae}
     max_vlan_hosts = 2
     def setUp(self):
-        super(FaucetSingleAuthenticationMultiHostPerPortTest, self).setUp()
+        super(FaucetAuthMultiHostPerPortTest, self).setUp()
         h0 = self.clients[0]
 
         for i in range(self.max_vlan_hosts):
@@ -4685,7 +4690,7 @@ class FaucetSingleAuthenticationMultiHostPerPortTest(FaucetAuthenticationSingleS
         for mac_intf in list(self.mac_interfaces.values()):
             netns = mac_intf + 'ns'
             h0.cmd('ip netns del %s' % netns)
-        super(FaucetSingleAuthenticationMultiHostPerPortTest, self).tearDown()
+        super(FaucetAuthMultiHostPerPortTest, self).tearDown()
 
     def get_macvlan_ip(self, h, intf):
         '''Get the IP address of a macvlan that is in an netns
@@ -4695,8 +4700,9 @@ class FaucetSingleAuthenticationMultiHostPerPortTest(FaucetAuthenticationSingleS
         ip_result = h.cmd('ip netns exec %s %s' % (netns, cmd))
         return re.findall('[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+', ip_result)[0]
 
-@unittest.skip('broken.')
-class FaucetSingleAuthenticationTwoHostsPerPortTest(FaucetSingleAuthenticationMultiHostPerPortTest):
+
+#@unittest.skip('broken.')
+class FaucetAuthTwoHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
 
     max_vlan_hosts = 2
 
@@ -4727,7 +4733,7 @@ class FaucetSingleAuthenticationTwoHostsPerPortTest(FaucetSingleAuthenticationMu
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-class FaucetSingleAuthenticationMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetAuthMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
 
     def test_multi_hosts_sequential(self):
         """Log X different users on on the different ports sequentially (each should complete before the next starts).
@@ -4835,7 +4841,7 @@ class FaucetSingleAuthenticationMultiHostsTest(FaucetAuthenticationSingleSwitchT
                         self.fail_ping_ipv4(h, interweb.IP(), retries=5)
 
 
-class FaucetSingleAuthenticationTenHostsTest(FaucetSingleAuthenticationMultiHostsTest):
+class FaucetAuthTenHostsTest(FaucetAuthMultiHostsTest):
     N_UNTAGGED = 12
     max_hosts = N_UNTAGGED - 2
 
@@ -4846,7 +4852,7 @@ class FaucetSingleAuthenticationTenHostsTest(FaucetSingleAuthenticationMultiHost
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetSingleAuthenticationTwentyHostsTest(FaucetSingleAuthenticationMultiHostsTest):
+class FaucetAuthTwentyHostsTest(FaucetAuthMultiHostsTest):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -4857,7 +4863,7 @@ class FaucetSingleAuthenticationTwentyHostsTest(FaucetSingleAuthenticationMultiH
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetSingleAuthentication14HostsTest(FaucetSingleAuthenticationMultiHostsTest):
+class FaucetAuth14HostsTest(FaucetAuthMultiHostsTest):
     N_UNTAGGED = 16
     max_hosts = N_UNTAGGED - 2
 
@@ -4868,7 +4874,7 @@ class FaucetSingleAuthentication14HostsTest(FaucetSingleAuthenticationMultiHosts
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetSingleAuthenticationTenHostsPerPortTest(FaucetSingleAuthenticationMultiHostPerPortTest):
+class FaucetAuthTenHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
@@ -4937,7 +4943,7 @@ class FaucetSingleAuthenticationTenHostsPerPortTest(FaucetSingleAuthenticationMu
         self.assertTrue(passed)
 
 
-class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetAuthNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
@@ -4974,7 +4980,7 @@ class FaucetSingleAuthenticationNoLogOnTest(FaucetAuthenticationSingleSwitchTest
         self.assertAlmostEqual(ploss, 100)
 
 
-class FaucetSingleAuthenticationDot1XLogonAndLogoffTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetAuthDot1XLogonAndLogoffTest(FaucetAuthenticationSingleSwitchTest):
     """Log on using dot1x and log off"""
 
     def test_logoff(self):
@@ -4999,7 +5005,7 @@ class FaucetSingleAuthenticationDot1XLogonAndLogoffTest(FaucetAuthenticationSing
         self.one_ipv4_ping(h0, interweb.IP())
 
 
-class FaucetSingleAuthenticationDuplicateLogonsTest(FaucetAuthenticationSingleSwitchTest):
+class FaucetAuthDupLogonTest(FaucetAuthenticationSingleSwitchTest):
     """Tests various username and MAC address combinations that may or may not result in
     the configuration changing.
     """
@@ -5042,7 +5048,7 @@ class FaucetSingleAuthenticationDuplicateLogonsTest(FaucetAuthenticationSingleSw
                     self.assertFalse(True, 'test doesnt support rule type: %s. value: %s' % (type(obj),obj))
         return count
 
-    def test_same_username_same_mac_logon_twice_same_port(self):
+    def test_same_user_same_mac_logon_2_same_port(self):
         """Tests that the same username and the same MAC logging onto the same port
         does not add to the base-config file on the second time.
         """
@@ -5081,7 +5087,7 @@ class FaucetSingleAuthenticationDuplicateLogonsTest(FaucetAuthenticationSingleSw
         self.assertTrue(end_base != None)
         self.assertTrue(start_base == end_base)
 
-    def test_same_username_same_mac_logon_twice_diff_port(self):
+    def test_same_user_same_mac_logon_2_diff_port(self):
         """Tests that the same username and the same MAC address can logon on the different ports.
         The system is amiguous in that the first port to authenticate may or may not be logged off,
         when the second start the authentication process. TODO need to clarify what correct behavoiur should be.
@@ -5105,7 +5111,7 @@ class FaucetSingleAuthenticationDuplicateLogonsTest(FaucetAuthenticationSingleSw
         count = self.count_username_and_mac(h0.MAC(), 'hostuser1')
         self.assertGreaterEqual(count, 2)
 
-    def test_same_username_diff_mac_logon_twice_diff_port(self):
+    def test_same_user_diff_mac_logon_2_diff_port(self):
         """Tests that the same username with a different MAC address can logon on different ports.
         """
         h0, h1 = self.clients[0:2]

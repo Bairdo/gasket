@@ -3,8 +3,6 @@ version: 0
 
 logger_location: %(logger_location)s
 
-listen_port: %(listenport)d
-
 faucet:
     prometheus_port: %(promport)d
     ip: 127.0.0.1
@@ -14,6 +12,9 @@ files:
     faucet_config: %(tmpdir)s/faucet.yaml
     acl_config: %(tmpdir)s/faucet-acl.yaml
     base_config: %(tmpdir)s/base-acls.yaml
+
+hostapd:
+    socket_path: %(tmpdir)s/hostapd/%(intf)s
 
 dps:
     faucet-1:
@@ -54,13 +55,6 @@ dps:
                 auth_mode: access
             20:
                 auth_mode: access
-
-# TODO add port for httpserver to listen on.
-urls:
-    # HTTP endpoints for HTTPServer.py
-    capflow: /v1.1/authenticate/auth
-    dot1x: /authenticate/auth
-    idle: /idle
 
 servers:
     gateways:

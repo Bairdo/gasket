@@ -335,7 +335,8 @@ class FaucetTestBase(unittest.TestCase):
                     ca_certs=self.ca_certs,
                     ports_sock=self.ports_sock,
                     port=self.of_port,
-                    test_name=self._test_name()))
+                    test_name=self._test_name(),
+                    switch=self.topo.switches()[0]))
             if self.RUN_GAUGE:
                 self.gauge_controller = faucet_mininet_test_topo.Gauge(
                     name='gauge', tmpdir=self.tmpdir,
