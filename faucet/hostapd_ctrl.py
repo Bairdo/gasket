@@ -1,5 +1,7 @@
 # pytype: disable=none-attr
 # pytype: disable=attribute-error
+# pytype: disable=name-error
+# pytype: disable=wrong-keyword-args
 import random
 import socket
 import subprocess
@@ -102,7 +104,6 @@ class HostapdCtrlUnix(HostapdCtrl):
             raise RuntimeError('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s' % (len(path), path))
         try:
             self.soc.connect(path)
-        # pytype: disable=name-error
         except FileNotFoundError as e:
             logger.error('Unable to connect to socket. FileNotFoundError %s' % path)
             raise
@@ -146,7 +147,6 @@ class HostapdCtrlUDP(HostapdCtrl):
 def request_socket_udp(host, port, logger):
     # use the first addr found, if more than one 
     # (such as the case with hostnames that resolve to both ipv6 and ipv4).
-    # pytpe: disable=wrong-keyword-args
     addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
     return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger)
 
