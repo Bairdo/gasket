@@ -86,10 +86,6 @@ class AuthApp(object):
             else:
                 self.logger.info('unknown message %s' % d)
 
-    def auth_callback(self):
-        pass
-
-
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
          and returns the 'access port' that the mac address is connected on.
@@ -104,20 +100,24 @@ class AuthApp(object):
         prom_mac_table = []
         prom_name_dpid = []
         prom_dpid_port_mode = []
-        for line in prom_txt.splitlines():
-            self.logger.info(line)
+        for line in prom_txt.splitlines(): 
             if line.startswith('learned_macs'):
                 prom_mac_table.append(line)
+                self.logger.debug(line)
             if line.startswith('faucet_config_dp_name'):
                 prom_name_dpid.append(line)
+                self.logger.debug(line)
 
         dpid_name = auth_app_utils.dpid_name_to_map(prom_name_dpid)
+        self.logger.debug(dpid_name)
 
         ret_port = -1
         ret_dp_name = ""
         for line in prom_mac_table:
             labels, float_as_mac = line.split(' ')
-            if mac == auth_app_utils.float_to_mac(float_as_mac):
+            macstr = auth_app_utils.float_to_mac(float_as_mac)
+            self.logger.debug('float %d is mac %s' % (float_as_mac, macstr))
+            if mac == macstr:
                 # if this is also an access port, we have found the dpid and the port
                 _, _, dpid, _, n, _, port, _, vlan, _ = re.split(r'\W+', labels)
                 dp_name = dpid_name[dpid]
