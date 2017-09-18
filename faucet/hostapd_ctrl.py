@@ -1,4 +1,5 @@
-
+# pytype: disable=none-attr
+# pytype: disable=attribute-error
 import random
 import socket
 import subprocess
@@ -66,7 +67,6 @@ class HostapdCtrl(object):
 
     def _to_dict(self, d):
         dic = {}
-        # pytype: disable=attribute-error
         for s in d.split('\\n'):
             print((s))
             try:
@@ -144,6 +144,9 @@ class HostapdCtrlUDP(HostapdCtrl):
 
 
 def request_socket_udp(host, port, logger):
+    # use the first addr found, if more than one 
+    # (such as the case with hostnames that resolve to both ipv6 and ipv4).
+    # pytpe: disable=wrong-keyword-args
     addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
     return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger)
 
