@@ -116,7 +116,7 @@ class AuthApp(object):
         for line in prom_mac_table:
             labels, float_as_mac = line.split(' ')
             macstr = auth_app_utils.float_to_mac(float_as_mac)
-            self.logger.debug('float %d is mac %s' % (float_as_mac, macstr))
+            self.logger.debug('float %s is mac %s' % (float_as_mac, macstr))
             if mac == macstr:
                 # if this is also an access port, we have found the dpid and the port
                 _, _, dpid, _, n, _, port, _, vlan, _ = re.split(r'\W+', labels)
