@@ -2,31 +2,17 @@
 import random
 import socket
 import subprocess
-import tempfile
+import uuid
+
 
 class HostapdCtrl(object):
     soc = None
     logger = None
-    def __init__(self, path, logger):
-        self.logger = logger
-        logger.info('hctrl')
-        self.soc = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        logger.info('connecting')
-        if len(path) > 107:
-            logger.critical('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s' % (len(path), path))
-            raise RuntimeError('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s' % (len(path), path))
-        try:
-            self.soc.connect(path)
-        # pytype: disable=name-error
-        except FileNotFoundError as e:
-            logger.error('Unable to connect to socket. FileNotFoundError %s' % path)
-            raise
-        logger.info('connected')
-        fp = tempfile.NamedTemporaryFile()
-        self.soc.bind(fp.name)
-        logger.info('bound')
+    cookie = None
 
     def request(self, cmd):
+        if self.cookie:
+            cmd = '%s %s' % (self.cookie, cmd)
         self.soc.send(cmd.encode())
 
         d = self.receive(size=4096)
@@ -100,11 +86,79 @@ class HostapdCtrl(object):
     def receive(self, size=4096):
         return str(self.soc.recv(size))
 
+    def close(self):
+        self.soc.close()
 
-def request_socket(path, logger):
-    return HostapdCtrl(path, logger)
 
-def unsolicited_socket(path, logger):
-    s = HostapdCtrl(path, logger)
+class HostapdCtrlUnix(HostapdCtrl):
+
+    def __init__(self, path, logger):
+        self.logger = logger
+        logger.info('hctrl')
+        self.soc = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        logger.info('connecting')
+        if len(path) > 107:
+            logger.critical('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s' % (len(path), path))
+            raise RuntimeError('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s' % (len(path), path))
+        try:
+            self.soc.connect(path)
+        # pytype: disable=name-error
+        except FileNotFoundError as e:
+            logger.error('Unable to connect to socket. FileNotFoundError %s' % path)
+            raise
+        logger.info('connected')
+        tmpfile = '/tmp/%s' % str(uuid.uuid4())
+        try:
+            self.soc.bind(tmpfile)
+            logger.info('bound')
+        except OSError as e:
+            logger.error('Unable to bind to file: %' % tmpfile)
+            raise e
+
+
+class HostapdCtrlUDP(HostapdCtrl):
+
+    def __init__(self, family, sockaddr, logger):
+        self.logger = logger
+        logger.info('hctrl')
+        self.soc = socket.socket(family, socket.SOCK_DGRAM)
+        logger.info('connecting')
+        try:
+            self.soc.connect(sockaddr)
+        # pytype: disable=name-error
+        except FileNotFoundError as e:
+            logger.error('Unable to connect to udp socket. sockaddr %s' % sockaddr)
+            raise
+        logger.info('connected')
+        try:
+            # TODO is this right?
+            self.soc.bind(sockaddr)
+            logger.info('bound')
+        except OSError as e:
+            logger.error('Unable to bind to udp socket. sockaddr %s' % sockaddr)
+            raise e
+        self.cookie = self.get_cookie()
+
+    def get_cookie(self):
+        return str(self.request('GET_COOKIE'))
+
+
+def request_socket_udp(host, port, logger):
+    addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
+    return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger)
+
+
+def unsolicited_socket_udp4(host, port, logger):
+    s = request_socket_udp(host, port, logger)
+    s.attach()
+    return s
+
+
+def request_socket_unix(path, logger):
+    return HostapdCtrlUnix(path, logger)
+
+
+def unsolicited_socket_unix(path, logger):
+    s = request_socket_unix(path, logger)
     s.attach()
     return s

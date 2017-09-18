@@ -58,4 +58,9 @@ class AuthConfig(object):
 
         self.rules = data["auth-rules"]["file"]
 
-        self.hostapd_socket_path = data['hostapd']['socket_path']
+        if 'socket_path' in data['hostapd']:
+            self.hostapd_socket_path = data['hostapd']['socket_path']
+        else:
+            # can be ipv4, ipv6, or hostname
+            self.hostapd_host = data['hostapd']['host'] 
+            self.hostapd_port = data['hostapd']['port']

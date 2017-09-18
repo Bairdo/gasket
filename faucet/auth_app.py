@@ -61,8 +61,14 @@ class AuthApp(object):
         self.logger = get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
 
-        self.hapd_req = hostapd_ctrl.request_socket(self.config.hostapd_socket_path, self.logger)
-        self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket(self.config.hostapd_socket_path, self.logger)
+        if self.config.hostapd_socket_path:
+            self.logger.info('using unix socket for hostapd ctrl')
+            self.hapd_req = hostapd_ctrl.request_socket_unix(self.config.hostapd_socket_path, self.logger)
+            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_unix(self.config.hostapd_socket_path, self.logger)
+        else:
+            self.logger.info('using UDP socket for hostapd ctrl')
+            self.hapd_req = hostapd_ctrl.request_socket_udp(self.config.hostapd_host, self.config.hostapd_port, self.logger)
+            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp(self.config.hostapd_host, self.config.hostapd_port, self.logger)
 
     def run(self):
         while True:
