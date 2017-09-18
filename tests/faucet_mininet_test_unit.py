@@ -4255,6 +4255,7 @@ eapol_flags=0
                     break
                 time.sleep(0.5)
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
+            self.assertLess(i, 3, 'logon has taken %d to reload. max allowable time 1.5seconds' % i)
 
     def wpa_cli_status(self, host, intf=None):
         if intf is None:
@@ -4299,8 +4300,14 @@ eapol_flags=0
 
         print('relogon took %d loops' % i)
         if wait:
-            end_reload_count = self.get_configure_count()
+            end_reload_count = 0
+            for i in range(20):
+                end_reload_count = self.get_configure_count()
+                if end_reload_count > start_reload_count:
+                    break
+                time.sleep(0.5)
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.\nOld Status: %s' % (host, intf, host.MAC(), new_status, old_status))
+            self.assertLess(i, 3, 'relogon has taken %d to reload. max allowable time 1.5seconds' % i)
 
     def fail_ping_ipv4(self, host, dst, retries=1, intf=None, netns=None):
         """Try to ping to a destination from a host.
