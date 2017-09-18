@@ -151,7 +151,7 @@ def request_socket_udp(host, port, logger):
     return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger)
 
 
-def unsolicited_socket_udp4(host, port, logger):
+def unsolicited_socket_udp(host, port, logger):
     s = request_socket_udp(host, port, logger)
     s.attach()
     return s
