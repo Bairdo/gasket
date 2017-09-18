@@ -113,7 +113,7 @@ class HostapdCtrlUnix(HostapdCtrl):
             self.soc.bind(tmpfile)
             logger.info('bound')
         except OSError as e:
-            logger.error('Unable to bind to file: %' % tmpfile)
+            logger.error('Unable to bind to file: %s' % tmpfile)
             raise e
 
 
