@@ -6,16 +6,10 @@ and sending it a SIGHUP.
 # pylint: disable=import-error
 
 import argparse
-import cgi
-import json
 import logging
-import os
 import re
-import threading
-import time
 
 from valve_util import get_logger
-import config_parser
 import config_parser_util
 from auth_config import AuthConfig
 import rule_manager
@@ -63,28 +57,35 @@ class AuthApp(object):
 
         if self.config.hostapd_socket_path:
             self.logger.info('using unix socket for hostapd ctrl')
-            self.hapd_req = hostapd_ctrl.request_socket_unix(self.config.hostapd_socket_path, self.logger)
-            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_unix(self.config.hostapd_socket_path, self.logger)
+            self.hapd_req = hostapd_ctrl.request_socket_unix(
+                self.config.hostapd_socket_path, self.logger)
+            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_unix(
+                self.config.hostapd_socket_path, self.logger)
         else:
             self.logger.info('using UDP socket for hostapd ctrl')
-            self.hapd_req = hostapd_ctrl.request_socket_udp(self.config.hostapd_host, self.config.hostapd_port, self.logger)
-            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp(self.config.hostapd_host, self.config.hostapd_port, self.logger)
+            self.hapd_req = hostapd_ctrl.request_socket_udp(
+                self.config.hostapd_host, self.config.hostapd_port, self.logger)
+            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp(
+                self.config.hostapd_host, self.config.hostapd_port, self.logger)
 
     def run(self):
+        """Main loop, waits for messages from hostapd ctl socket,
+        and processes them.
+        """
         while True:
             self.logger.info('waiting for receive')
-            d = str(self.hapd_unsolicited.receive())
-            if 'CTRL-EVENT-EAP-SUCCESS' in d:
+            data = str(self.hapd_unsolicited.receive())
+            if 'CTRL-EVENT-EAP-SUCCESS' in data:
                 self.logger.info('success message')
-                mac = d.split()[1].replace("'",'')
+                mac = data.split()[1].replace("'", '')
                 sta = self.hapd_req.get_sta(mac)
                 self.authenticate(mac, sta['dot1xAuthSessionUserName'])
-            elif 'AP-STA-DISCONNECTED' in d:
-                self.logger.info('%s disconnected message' % d)
-                mac = d.split()[1].replace("'",'')
+            elif 'AP-STA-DISCONNECTED' in data:
+                self.logger.info('%s disconnected message', data)
+                mac = data.split()[1].replace("'", '')
                 self.deauthenticate(mac)
             else:
-                self.logger.info('unknown message %s' % d)
+                self.logger.info('unknown message %s', data)
 
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
@@ -99,8 +100,7 @@ class AuthApp(object):
 
         prom_mac_table = []
         prom_name_dpid = []
-        prom_dpid_port_mode = []
-        for line in prom_txt.splitlines(): 
+        for line in prom_txt.splitlines():
             if line.startswith('learned_macs'):
                 prom_mac_table.append(line)
                 self.logger.debug(line)
@@ -113,36 +113,38 @@ class AuthApp(object):
 
         ret_port = -1
         ret_dp_name = ""
+        dp_port_mode = self.config.dp_port_mode
         for line in prom_mac_table:
             labels, float_as_mac = line.split(' ')
             macstr = auth_app_utils.float_to_mac(float_as_mac)
-            self.logger.debug('float %s is mac %s' % (float_as_mac, macstr))
+            self.logger.debug('float %s is mac %s', float_as_mac, macstr)
             if mac == macstr:
                 # if this is also an access port, we have found the dpid and the port
                 _, _, dpid, _, n, _, port, _, vlan, _ = re.split(r'\W+', labels)
                 dp_name = dpid_name[dpid]
-                if dp_name in self.config.dp_port_mode and \
-                        'interfaces' in self.config.dp_port_mode[dp_name] and \
-                        int(port) in self.config.dp_port_mode[dp_name]['interfaces'] and \
-                        'auth_mode' in self.config.dp_port_mode[dp_name]['interfaces'][int(port)] and \
-                        self.config.dp_port_mode[dp_name]['interfaces'][int(port)]['auth_mode'] == 'access':
+                if dp_name in dp_port_mode and \
+                        'interfaces' in dp_port_mode[dp_name] and \
+                        int(port) in dp_port_mode[dp_name]['interfaces'] and \
+                        'auth_mode' in dp_port_mode[dp_name]['interfaces'][int(port)] and \
+                        dp_port_mode[dp_name]['interfaces'][int(port)]['auth_mode'] == 'access':
                     ret_port = int(port)
                     ret_dp_name = dp_name
                     break
-        self.logger.info(("name: {} port: {}".format(ret_dp_name, ret_port)))
+        self.logger.info("name: %s port: %d", ret_dp_name, ret_port)
         return ret_dp_name, ret_port
 
-    def authenticate(self, mac, user, intf=None):
+    def authenticate(self, mac, user):
         """Authenticates the user as specifed by adding ACL rules
         to the Faucet configuration file. Once added Faucet is signaled via SIGHUP.
         """
-        self.logger.info(("****authenticated: {} {}".format(mac, user)))
+        self.logger.info("****authenticated: %s %s", mac, user)
 
         switchname, switchport = self._get_dp_name_and_port(mac)
 
         if switchname == '' or switchport == -1:
-            self.logger.warn(("Error switchname '{}' or switchport '{}' is unknown. Cannot generate acls for authed user '{}' on MAC '{}'".format(
-                switchname, switchport, user, mac))) 
+            self.logger.warn(
+                "Error switchname '%s' or switchport '%d' is unknown. Cannot generate acls for authed user '%s' on MAC '%s'",
+                switchname, switchport, user, mac)
             # TODO one or the other?
             self.hapd_req.deauthenticate(mac)
             self.hapd_req.disassociate(mac)
@@ -169,9 +171,9 @@ class AuthApp(object):
             mac (str): mac address string to deauth
             username (str): username to deauth.
         """
-        self.logger.info('---deauthenticated: {} {}'.format(mac, username))
+        self.logger.info('---deauthenticated: %s %s', mac, username)
 
-        success = self.rule_man.deauthenticate(username, mac)
+        self.rule_man.deauthenticate(username, mac)
         # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
         # will likley think it has logged off, so is there anything we can do from hostapd to
         # say they have not actually logged off.
@@ -181,8 +183,7 @@ class AuthApp(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', help='location of yaml configuration file')
-    args = parser.parse_args()
-    auth_app = AuthApp(args)
+    auth_app = AuthApp(parser.parse_args())
     auth_app.run()
 
 

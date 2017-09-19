@@ -1,5 +1,6 @@
 """Interface to find and create the Faucet ACL rules, form an external source (file, db)
-yaml keys "_authport_*, and values "_usermac_" are currently used for replacing with values as discovered at runtime.
+yaml keys "_authport_*, and values "_usermac_" are currently used for replacing with values
+as discovered at runtime.
  Switchport (_authport_) that an authenticated user (_usermac_) has authenticated on & with.
 
 TODO maybe make this an interface for yaml or db generator subclasses.
@@ -8,7 +9,9 @@ TODO maybe make this an interface for yaml or db generator subclasses.
 import yaml
 
 
-class RuleGenerator():
+class RuleGenerator(object):
+    """Object for gernerating rules from a yaml file.
+    """
 
     yaml_file = ""
     conf = None
@@ -28,10 +31,11 @@ class RuleGenerator():
         Returns:
             Dictionary of port_acl names to list of rules.
         """
-        # if we don't reload the values that we will want to swap 
+        # if we don't reload the values that we will want to swap
         # may already be filled if the user has logged on already.
 
-        # what about doing a copy or deepcopy? and only do a full reload when file has actually changed?
+        # what about doing a copy or deepcopy?
+        # and only do a full reload when file has actually changed?
         self.reload(self.yaml_file)
 
         rules = dict()

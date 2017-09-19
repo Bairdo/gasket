@@ -57,6 +57,7 @@ def create_faucet_acls(doc, logger):
                 # rule
                 for _, rule in list(obj.items()):
                     # TODO is this a pointless for loop? instead do rule = obj['rule']
+                    # TODO can thes ifs by made a function as reused?
                     new_rule = {}
                     new_rule['rule'] = rule
                     if '_mac_' in rule:
@@ -95,10 +96,10 @@ def create_faucet_acls(doc, logger):
                 if obj == 'authed-rules':
                     continue
                 else:
-                    print(('illegal string ' + obj))
+                    logger.warning('illegal string %s', obj)
             else:
-                logger.warning('Object type %s not recognised' % type(obj))
-                logger.warning('Object: %s' % obj)
+                logger.warning('Object type %s not recognised', type(obj))
+                logger.warning('Object: %s', obj)
 
         final_acls[acl_name] = seq
     return final
@@ -137,7 +138,7 @@ class RuleManager(object):
         self.base_filename = self.config.base_filename
         self.faucet_acl_filename = self.config.acl_config_file
         self.authed_users = {} # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
-    
+
     def add_to_base_acls(self, filename, rules, user, mac, logger=None):
         '''Adds rules to the base acl file (and writes).
         Args:
@@ -150,8 +151,9 @@ class RuleManager(object):
         # somehow add the rules to the base where ideally the items in the acl are the pointers.
         # but guess it might not matter, just hurts readability.
 
-        # this is NOT a spelling mistake. this ensures that the auth rules are defined before the use in
-        # the port acl. and that the port acl will have the pointer. At the end of the day it doesn't matter.
+        # this is NOT a spelling mistake. this ensures that the auth rules are defined before
+        # the use in the port acl.
+        # and that the port acl will have the pointer. At the end of the day it doesn't matter.
         if 'aauth' not in base:
             base['aauth'] = {}
 
@@ -159,12 +161,14 @@ class RuleManager(object):
             base['aauth'][aclname + user + mac] = acllist
             base_acl = base['acls'][aclname]
             i = base_acl.index('authed-rules')
-            # insert rules above the authed-rules 'flag'. Add 1 for below it. 
-            base_acl[i:i] = [{aclname + user + mac: acllist}] # this may not be included as the reference. but instead inserting each.
+            # insert rules above the authed-rules 'flag'. Add 1 for below it.
+            # this may not be included as the reference. but instead inserting each.
+            base_acl[i:i] = [{aclname + user + mac: acllist}]
 
-        # 'rotate' filename - filename.bak, filename.bak.1 this is primiarily for logging, to see how users affect the config.
+        # 'rotate' filename - filename.bak, filename.bak.1 this is primiarily for logging,
+        # to see how users affect the config.
 
-        # write back to filename 
+        # write back to filename
         write_yaml(base, filename + '.tmp')
         self.backup_file(filename)
         self.logger.warn('backed up base')
@@ -179,7 +183,7 @@ class RuleManager(object):
             mac (str): MAC address
             switch (str): Switch that authentication occured on
             port (str): the 'access port' as configured in 'auth.yaml'
-        Returns: 
+        Returns:
             True if rules are found and faucet reloads or already authenticated. False otherwise.
         """
         # get rules to apply
@@ -187,13 +191,14 @@ class RuleManager(object):
             self.add_to_authed_dict(username, mac, switch, port)
             rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac)
             if rules is None:
-                self.logger.warn('cannot authenticate user: %s, mac: %s no rules found.' % (username, mac))
+                self.logger.warn('cannot authenticate user: %s, mac: %s no rules found.',
+                                 username, mac)
                 return False
             # update base
             base = self.add_to_base_acls(self.base_filename, rules, username, mac)
             # update faucet
             final = create_faucet_acls(base, self.logger)
-            write_yaml(final, self.faucet_acl_filename + '.tmp' , True)
+            write_yaml(final, self.faucet_acl_filename + '.tmp', True)
             self.backup_file(self.faucet_acl_filename)
             self.swap_temp_file(self.faucet_acl_filename)
             # sighup.
@@ -206,12 +211,16 @@ class RuleManager(object):
                     self.logger.info('auth - faucet has reloaded.')
                     return True
                 time.sleep(0.05)
-                self.logger.info('auth - waiting for faucet to process sighup config reload. %d' % i)
+                self.logger.info('auth - waiting for faucet to process sighup config reload. %d', i)
             self.logger.error('auth - faucet did not process sighup within 30 seconds. 0.05 * 400')
             return False
         return True
 
     def get_faucet_reload_count(self):
+        """Queries faucet prometheus and finds the number of time faucet has been reloaded.
+        Returns:
+            number of times faucet has reloaded
+        """
         txt = auth_app_utils.scrape_prometheus(self.config.prom_url)
         for l in txt.splitlines():
             if l.startswith('faucet_config_reload_requests'):
@@ -228,7 +237,7 @@ class RuleManager(object):
         """
         with open(self.base_filename) as f:
             base = yaml.safe_load(f)
-        
+
         self.logger.info(base)
         remove = []
 
@@ -240,7 +249,9 @@ class RuleManager(object):
                     rule = r['rule']
                     if '_mac_' in rule and '_name_' in rule:
                         self.logger.debug('mac and name exist')
-                        if mac == rule['_mac_'] and (username is None or username == rule['_name_']):
+                        if mac == rule['_mac_'] and \
+                                (username is None or \
+                                username == rule['_name_']):
                             self.logger.debug('removing based on name and mac')
                             remove.append(acl)
                             break
@@ -285,7 +296,8 @@ class RuleManager(object):
             username (str): may be None or '(null)' which is treated as None.
             mac (str): MAC address
         Returns:
-            True if a client that is authed has rules removed, or if client is not authed. other wise false (faucet fails to reload)
+            True if a client that is authed has rules removed, or if client is not authed.
+            other wise false (faucet fails to reload)
         """
         if self.is_authenticated(mac, username):
             self.logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
@@ -310,12 +322,13 @@ class RuleManager(object):
                         self.logger.info('deauth - faucet has reloaded.')
                         return True
                     time.sleep(0.05)
-                    self.logger.info('deauth - waiting for faucet to process sighup config reload on. %d' % i)
+                    self.logger.info('deauth - waiting for faucet to process sighup config reload on. %d', i)
                 self.logger.error('deauth - faucet did not process sighup within 400 * 0.05 seconds.')
                 return False
         return True
 
-    def backup_file(self, filename):
+    @staticmethod
+    def backup_file(filename):
         """Backup a file. appends '.bak#' to filename.
         Args:
             filename (str)
@@ -326,7 +339,7 @@ class RuleManager(object):
 
         filenames = ''.join(os.listdir(directory))
         search_str = os.path.basename(filename) + '.bak'
-        
+
         matches = re.findall(search_str, filenames)
 
         i = str(len(matches) + 1)
@@ -334,7 +347,8 @@ class RuleManager(object):
         # backup old current
         shutil.copy2(filename, filename + '.bak' + i)
 
-    def swap_temp_file(self, filename):
+    @staticmethod
+    def swap_temp_file(filename):
         """Renames the temporary file to become the original.
         Args:
             filename (str)

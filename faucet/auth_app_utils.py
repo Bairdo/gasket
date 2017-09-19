@@ -26,10 +26,10 @@ def float_to_mac(mac_as_float_str):
     Returns:
         MAC Address as a string. e.g. "00:00:00:01:e2:40"
     """
-    h = '%012x' % int(mac_as_float_str.split('.')[0])
-    macstr = h[:2] + ':' + h[2:4] + \
-                 ':' + h[4:6] + ':' + h[6:8] + \
-                 ':' + h[8:10] + ':' +  h[10:12]
+    _hex = '%012x' % int(mac_as_float_str.split('.')[0])
+    macstr = _hex[:2] + ':' + _hex[2:4] + \
+                 ':' + _hex[4:6] + ':' + _hex[6:8] + \
+                 ':' + _hex[8:10] + ':' +  _hex[10:12]
     return macstr
 
 
