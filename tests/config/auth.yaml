@@ -55,6 +55,10 @@ dps:
                 auth_mode: access
             20:
                 auth_mode: access
+            21:
+                auth_mode: access
+            22:
+                auth_mode: access
 
 servers:
     gateways:
