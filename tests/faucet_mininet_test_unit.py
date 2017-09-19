@@ -4109,7 +4109,6 @@ class FaucetAuthenticationTest(FaucetTest):
 
     def tearDown(self):
         if self.net is not None:
-            os.system('ps a')
             host = self.net.hosts[0]
             print "about to kill everything"
             for name, pid in self.pids.iteritems():
@@ -4804,7 +4803,7 @@ class FaucetAuthMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
             self.relogon_dot1x(h, wait=False)
         for h in self.clients:
             h.defaultIntf().updateIP()
-            self.one_ipv4_ping(h, interweb.IP(), retries=5)
+            self.one_ipv4_ping(h, interweb.IP(), retries=10)
 
     def multi_hosts_random_parallel(self):
         """Log X different users on and off randomly on different ports in parallel.
@@ -5016,6 +5015,7 @@ class FaucetAuthDupLogonTest(FaucetAuthenticationSingleSwitchTest):
     """Tests various username and MAC address combinations that may or may not result in
     the configuration changing.
     """
+    # TODO need to define what the correct behaviour is for these tests.
 
     def count_username_and_mac(self, mac, username):
         base = yaml.load(open('%s/base-acls.yaml' % self.tmpdir, 'r'))
@@ -5064,11 +5064,10 @@ class FaucetAuthDupLogonTest(FaucetAuthenticationSingleSwitchTest):
 
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP())
-        h0.cmdPrint('ps aux')
+
         # kill wpa_supplicant so we can attempt to logon again.
-        h0.cmdPrint('kill %d' % self.pids['wpa_supplicant-%s-%s' %(h0.name, h0.defaultIntf())])
+        h0.cmd('kill %d' % self.pids['wpa_supplicant-%s-%s' %(h0.name, h0.defaultIntf())])
         time.sleep(3)
-        h0.cmdPrint('ps aux')
 
         with open('%s/base-acls.yaml' % self.tmpdir, 'rw') as f:
             start_base = f.read()
