@@ -166,6 +166,7 @@ def gen_config(num_vlans):
         str for CONFIG
     """
     conf = """
+        timeout: 3000
         interfaces:
             %(port_1)d:
                 name: portal

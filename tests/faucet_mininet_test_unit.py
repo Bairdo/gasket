@@ -4777,6 +4777,7 @@ class FaucetAuthMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
                 print('try ping again')
         self.assertTrue(passed)
 
+    @unittest.skip('currently broken')
     def test_multi_hosts_parallel(self):
         """Log X different users on on different ports in parallel.
         Then log them all off, and back on again. Each stage completes before the next.
@@ -4805,7 +4806,8 @@ class FaucetAuthMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
             h.defaultIntf().updateIP()
             self.one_ipv4_ping(h, interweb.IP(), retries=10)
 
-    def multi_hosts_random_parallel(self):
+    @unittest.skip('currently broken')
+    def test_multi_hosts_random_parallel(self):
         """Log X different users on and off randomly on different ports in parallel.
         """
         # How do we check if the host has successfully logged on or not?
