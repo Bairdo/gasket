@@ -30,7 +30,6 @@ RUN \
     iperf \
     iputils-ping \
     ladvd \
-    libcurl4-gnutls-dev \
     libpython2.7-dev \
     libpython3-dev \
     libssl-dev \
