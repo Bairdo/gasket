@@ -28,7 +28,7 @@ class HostapdCtrl(object):
             cmd = '%s %s' % (self.cookie, cmd)
         self.soc.send(cmd.encode())
 
-        return self.receive(size=4096)
+        return self.receive(size=4096).strip()
 
     def attach(self):
         """Sends the 'attach' command to hostapd.
@@ -113,6 +113,15 @@ class HostapdCtrl(object):
 #       return self._returned_ok(d)
         return True
 
+    def ping(self):
+        """pings hostapd
+        Returns:
+            True if 'PONG' is received, false otherwise.
+        """
+        d = self.request('PING')
+        self.logger.debug('PING - %s', d)
+        return d == 'PONG'
+
     def _to_dict(self, d):
         dic = {}
         for s in d.split('\\n'):
@@ -137,9 +146,14 @@ class HostapdCtrl(object):
         """
         self.soc.close()
 
+    def set_timeout(self, secs):
+        """Set the timeout of the socket
+        """
+        self.soc.settimeout(secs)
+
     @staticmethod
     def _returned_ok(d):
-        return d == b'OK\n'
+        return d == 'OK'
 
 class HostapdCtrlUNIX(HostapdCtrl):
     """UNIX socket interface class.
@@ -256,4 +270,5 @@ def unsolicited_socket_unix(path, logger):
     """
     s = request_socket_unix(path, logger)
     s.attach()
+    s.set_timeout(1)
     return s

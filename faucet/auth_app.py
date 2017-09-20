@@ -8,6 +8,7 @@ and sending it a SIGHUP.
 import argparse
 import logging
 import re
+import socket
 
 from valve_util import get_logger
 import config_parser_util
@@ -54,18 +55,30 @@ class AuthApp(object):
         self.config = AuthConfig(config_filename)
         self.logger = get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
+        self._init_sockets()
 
+    def _init_sockets(self):
+        self._init_request_socket()
+        self._init_unsolicited_socket()
+
+    def _init_unsolicited_socket(self):
         if self.config.hostapd_socket_path:
             self.logger.info('using unix socket for hostapd ctrl')
-            self.hapd_req = hostapd_ctrl.request_socket_unix(
-                self.config.hostapd_socket_path, self.logger)
             self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_unix(
                 self.config.hostapd_socket_path, self.logger)
         else:
             self.logger.info('using UDP socket for hostapd ctrl')
-            self.hapd_req = hostapd_ctrl.request_socket_udp(
-                self.config.hostapd_host, self.config.hostapd_port, self.logger)
             self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp(
+                self.config.hostapd_host, self.config.hostapd_port, self.logger)
+
+    def _init_request_socket(self):
+        if self.config.hostapd_socket_path:
+            self.logger.info('using unix socket for hostapd ctrl')
+            self.hapd_req = hostapd_ctrl.request_socket_unix(
+                self.config.hostapd_socket_path, self.logger)
+        else:
+            self.logger.info('using UDP socket for hostapd ctrl')
+            self.hapd_req = hostapd_ctrl.request_socket_udp(
                 self.config.hostapd_host, self.config.hostapd_port, self.logger)
 
     def run(self):
@@ -74,18 +87,28 @@ class AuthApp(object):
         """
         while True:
             self.logger.info('waiting for receive')
-            data = str(self.hapd_unsolicited.receive())
-            if 'CTRL-EVENT-EAP-SUCCESS' in data:
-                self.logger.info('success message')
-                mac = data.split()[1].replace("'", '')
-                sta = self.hapd_req.get_sta(mac)
-                self.authenticate(mac, sta['dot1xAuthSessionUserName'])
-            elif 'AP-STA-DISCONNECTED' in data:
-                self.logger.info('%s disconnected message', data)
-                mac = data.split()[1].replace("'", '')
-                self.deauthenticate(mac)
-            else:
-                self.logger.info('unknown message %s', data)
+            try:
+                data = str(self.hapd_unsolicited.receive())
+                if 'CTRL-EVENT-EAP-SUCCESS' in data:
+                    self.logger.info('success message')
+                    mac = data.split()[1].replace("'", '')
+                    sta = self.hapd_req.get_sta(mac)
+                    self.authenticate(mac, sta['dot1xAuthSessionUserName'])
+                elif 'AP-STA-DISCONNECTED' in data:
+                    self.logger.info('%s disconnected message', data)
+                    mac = data.split()[1].replace("'", '')
+                    self.deauthenticate(mac)
+                else:
+                    self.logger.info('unknown message %s', data)
+            except socket.timeout:
+                if not self.hapd_unsolicited.ping():
+                    self.logger.warn('no pong received from unsolicited socket')
+#                    self.hapd_unsolicited.close()
+#                    self._init_unsolicited_socket()
+                if not self.hapd_req.ping():
+                    self.logger.warn('no pong received from request (solicited) socket')
+#                    self.hapd_req.close()
+#                    self._init_request_socket()
 
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
