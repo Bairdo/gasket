@@ -103,12 +103,12 @@ class AuthApp(object):
             except socket.timeout:
                 if not self.hapd_unsolicited.ping():
                     self.logger.warn('no pong received from unsolicited socket')
-#                    self.hapd_unsolicited.close()
-#                    self._init_unsolicited_socket()
+                    self.hapd_unsolicited.close()
+                    self._init_unsolicited_socket()
                 if not self.hapd_req.ping():
                     self.logger.warn('no pong received from request (solicited) socket')
-#                    self.hapd_req.close()
-#                    self._init_request_socket()
+                    self.hapd_req.close()
+                    self._init_request_socket()
 
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,

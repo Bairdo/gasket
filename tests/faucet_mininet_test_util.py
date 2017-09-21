@@ -192,7 +192,7 @@ def gen_base_config(num_vlans):
         str of base acl.
     """
     conf = """acls:"""
-
+    # TODO can we not hardcode these output dl_dst mac adddresses for portal?
     for i in range(3, num_vlans + 3):
         port_acl = """
   port_faucet-1_{0}:

@@ -7,7 +7,8 @@
 
 import socket
 import uuid
-
+from datetime import datetime
+import os
 
 class HostapdCtrl(object):
     """Abstract class for the control interface to hostapd.
@@ -16,6 +17,8 @@ class HostapdCtrl(object):
     soc = None
     logger = None
     cookie = None
+    local_unix_sock_path = None
+    attached = False
 
     def request(self, cmd):
         """
@@ -28,7 +31,7 @@ class HostapdCtrl(object):
             cmd = '%s %s' % (self.cookie, cmd)
         self.soc.send(cmd.encode())
 
-        return self.receive(size=4096).strip()
+        return self.receive(size=4096)
 
     def attach(self):
         """Sends the 'attach' command to hostapd.
@@ -38,14 +41,19 @@ class HostapdCtrl(object):
             True if successful. False otherwise.
         """
         d = self.request('ATTACH')
-        return self._returned_ok(d)
+        self.attached = self._returned_ok(d)
+        return self.attached
 
-    def dettach(self):
+    def detach(self):
         """Detatches the socket from hostapd -
         unsubscribes from hostapd's unsolicited events.
+        Returns:
+            True if detach successful or not attached. false otherwise.
         """
-        d = self.request('DETACH')
-        return self._returned_ok(d)
+        if self.attached:
+            d = self.request('DETACH')
+            return self._returned_ok(d)
+        return True
 
     def mib(self):
         """Get MIB variables (dot1x, dot11, radius)
@@ -120,7 +128,7 @@ class HostapdCtrl(object):
         """
         d = self.request('PING')
         self.logger.debug('PING - %s', d)
-        return d == 'PONG'
+        return 'PONG' in str(d)
 
     def _to_dict(self, d):
         dic = {}
@@ -144,7 +152,10 @@ class HostapdCtrl(object):
     def close(self):
         """Close the underlying control socket.
         """
+        self.detach()
         self.soc.close()
+        if self.local_unix_sock_path:
+            os.remove(self.local_unix_sock_path)
 
     def set_timeout(self, secs):
         """Set the timeout of the socket
@@ -153,7 +164,8 @@ class HostapdCtrl(object):
 
     @staticmethod
     def _returned_ok(d):
-        return d == 'OK'
+        return d == b'OK\n'
+
 
 class HostapdCtrlUNIX(HostapdCtrl):
     """UNIX socket interface class.
@@ -176,7 +188,8 @@ class HostapdCtrlUNIX(HostapdCtrl):
             raise
 
         logger.info('connected')
-        tmpfile = '/tmp/%s' % str(uuid.uuid4())
+        tmpfile = '/tmp/auth-sock-%s' % datetime.now().microsecond #str(uuid.uuid4())
+        self.local_unix_sock_path = tmpfile
         try:
             self.soc.bind(tmpfile)
             logger.info('bound')
@@ -270,5 +283,5 @@ def unsolicited_socket_unix(path, logger):
     """
     s = request_socket_unix(path, logger)
     s.attach()
-    s.set_timeout(1)
+    s.set_timeout(4)
     return s

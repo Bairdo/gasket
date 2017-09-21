@@ -4210,7 +4210,7 @@ eapol_flags=0
 
         start_reload_count = self.get_configure_count()
 
-        cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf -f {0}/wpa-{1}.log &".format(self.tmpdir, intf)
+        cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf -t -f {0}/wpa-{1}.log &".format(self.tmpdir, intf)
         if netns is None:
             host.cmd(cmd)
         else:
@@ -4289,10 +4289,23 @@ eapol_flags=0
                 break
             elif new_status == 'AUTHENTICATING':
                 time.sleep(1)
+            elif new_status == 'HELD':
+                # authentication failed for some reason.
+                # maybe restart wpa_supplicant?
+
+                host.cmdPrint('wpa_cli note aboutToKillWpaSupp')
+                host.cmdPrint('kill %s' % self.pids['wpa_supplicant-%s-%s' % (host.name, host.defaultIntf())])
+#                host.cmdPrint('wpa_cli terminate')
+#                host.cmdPrint('rm /var/run/wpa_supplicant/%s-%s' % (host.name, host.defaultIntf()))
+                time.sleep(1)
+                cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf -t -f {0}/wpa-{1}.log &".format(self.tmpdir, intf)
+                host.cmdPrint(cmd)
+                self.pids['wpa_supplicant-%s-%s' % (host.name, host.defaultIntf())] = host.lastPid
+                time.sleep(2)
             else:
                 time.sleep(1)
-                print('relogin attempt failed. trying again.')
-                host.cmdPrint('wpa_cli -i %s logon' % intf)
+                print('unknown wpa status %s' % new_status)
+#                host.cmdPrint('wpa_cli -i %s logon' % intf)
 
             new_status = self.wpa_cli_status(host, intf)
             print(new_status)
@@ -4577,6 +4590,7 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
             params1={'ip': '192.168.%s.2/24' % contr_num},
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
+#        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
         self.run_hostapd(portal)
         self.run_controller(self.net.controller)
 
@@ -5068,7 +5082,7 @@ class FaucetAuthDupLogonTest(FaucetAuthenticationSingleSwitchTest):
         self.one_ipv4_ping(h0, interweb.IP())
 
         # kill wpa_supplicant so we can attempt to logon again.
-        h0.cmd('kill %d' % self.pids['wpa_supplicant-%s-%s' %(h0.name, h0.defaultIntf())])
+        h0.cmd('kill %d' % self.pids['wpa_supplicant-%s-%s' % (h0.name, h0.defaultIntf())])
         time.sleep(3)
 
         with open('%s/base-acls.yaml' % self.tmpdir, 'rw') as f:
