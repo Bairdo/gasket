@@ -12,8 +12,7 @@ RUN \
     tcpdump \
     wget \
     build-essential \
-    libssl-dev \
-    freeradius
+    libssl-dev
 
 COPY ./ /faucet-src/
 
@@ -28,17 +27,13 @@ VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/", "/etc/hostapd"]
 EXPOSE 6653
 
 #
-# this hostapd contains a minor fix for when running the internal radius server.
+# This hostapd contains several minor fixes for when running the internal radius server.
+# Otherwise it is the same as hostapd origin, at the time of the clone. ~15/9/17.
 #
-
 RUN \
   git clone https://github.com/Bairdo/hostapd-d1xf.git && \
   cd hostapd-d1xf/hostapd && \
   git checkout hostapd-master && \
   make && make install
-
-#RUN \
-#  wget https://w1.fi/releases/hostapd-2.6.tar.gz && \
-#  tar -xf hostapd-2.6.tar.gz
 
 CMD ["/faucet-src/docker/runauth.sh"]
