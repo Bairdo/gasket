@@ -41,11 +41,26 @@ class QuietHTTPServer(HTTPServer):
 
 class PostHandler(SimpleHTTPRequestHandler):
 
-    def _log_post(self, influx_log):
+    def _log_post(self):
         content_len = int(self.headers.getheader('content-length', 0))
         content = self.rfile.read(content_len).strip()
-        if content:
-            open(influx_log, 'a').write(content + '\n')
+        if content and hasattr(self.server, 'influx_log'):
+            open(self.server.influx_log, 'a').write(content + '\n')
+
+
+class InfluxPostHandler(PostHandler):
+
+    def do_POST(self):
+        self._log_post()
+        return self.send_response(204)
+
+
+class SlowInfluxPostHandler(PostHandler):
+
+    def do_POST(self):
+        self._log_post()
+        time.sleep(self.server.timeout * 3)
+        return self.send_response(500)
 
 
 class FaucetTest(faucet_mininet_test_base.FaucetTestBase):
@@ -319,6 +334,14 @@ class FaucetSanityTest(FaucetUntaggedTest):
 class FaucetUntaggedPrometheusGaugeTest(FaucetUntaggedTest):
     """Testing Gauge Prometheus"""
 
+    GAUGE_CONFIG_DBS = """
+    prometheus:
+        type: 'prometheus'
+        prometheus_addr: '127.0.0.1'
+        prometheus_port: %(gauge_prom_port)d
+"""
+    config_ports = {'gauge_prom_port': None}
+
     def get_gauge_watcher_config(self):
         return """
     port_stats:
@@ -327,6 +350,11 @@ class FaucetUntaggedPrometheusGaugeTest(FaucetUntaggedTest):
         interval: 5
         db: 'prometheus'
 """
+
+    def _start_gauge_check(self):
+        if not self.gauge_controller.listen_port(self.config_ports['gauge_prom_port']):
+            return 'gauge not listening on prometheus port'
+        return None
 
     def test_untagged(self):
         self.wait_dp_status(1, controller='gauge')
@@ -352,6 +380,20 @@ class FaucetUntaggedPrometheusGaugeTest(FaucetUntaggedTest):
 class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
     """Basic untagged VLAN test with Influx."""
 
+    GAUGE_CONFIG_DBS = """
+    influx:
+        type: 'influx'
+        influx_db: 'faucet'
+        influx_host: '127.0.0.1'
+        influx_port: %(gauge_influx_port)d
+        influx_user: 'faucet'
+        influx_pwd: ''
+        influx_retries: 1
+""" + """
+        influx_timeout: %u
+""" % FaucetUntaggedTest.DB_TIMEOUT
+    config_ports = {'gauge_influx_port': None}
+    influx_log = None
     server_thread = None
     server = None
 
@@ -374,9 +416,26 @@ class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
         db: 'influx'
 """
 
+    def setupInflux(self):
+        self.influx_log = os.path.join(self.tmpdir, 'influx.log')
+        if self.server:
+            self.server.influx_log = self.influx_log
+            self.server.timeout = self.DB_TIMEOUT
+
+    def setUp(self):
+        self.handler = InfluxPostHandler
+        super(FaucetUntaggedInfluxTest, self).setUp()
+        self.setupInflux()
+
+    def tearDown(self):
+        if self.server:
+            self.server.shutdown()
+            self.server.socket.close()
+        super(FaucetUntaggedInfluxTest, self).tearDown()
+
     def _wait_error_shipping(self, timeout=None):
         if timeout is None:
-            timeout = self.DB_TIMEOUT * 2
+            timeout = self.DB_TIMEOUT * 3
         gauge_log = self.env['gauge']['GAUGE_LOG']
         for _ in range(timeout):
             log_content = open(gauge_log).read()
@@ -385,10 +444,10 @@ class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
             time.sleep(1)
         self.fail('Influx error not noted in %s: %s' % (gauge_log, log_content))
 
-    def _verify_influx_log(self, influx_log):
-        self.assertTrue(os.path.exists(influx_log))
+    def _verify_influx_log(self):
+        self.assertTrue(os.path.exists(self.influx_log))
         observed_vars = set()
-        for point_line in open(influx_log).readlines():
+        for point_line in open(self.influx_log).readlines():
             point_fields = point_line.strip().split()
             self.assertEqual(3, len(point_fields), msg=point_fields)
             ts_name, value_field, timestamp_str = point_fields
@@ -412,53 +471,38 @@ class FaucetUntaggedInfluxTest(FaucetUntaggedTest):
             'errors_in', 'bytes_in', 'flow_byte_count', 'port_state_reason',
             'packets_in', 'packets_out']), observed_vars)
 
-    def _wait_influx_log(self, influx_log):
+    def _wait_influx_log(self):
         for _ in range(self.DB_TIMEOUT * 3):
-            if os.path.exists(influx_log):
+            if os.path.exists(self.influx_log):
                 return
             time.sleep(1)
         return
 
-    def _start_influx(self, handler):
-        for _ in range(3):
-            try:
-                self.server = QuietHTTPServer(
-                    (faucet_mininet_test_util.LOCALHOST, self.influx_port), handler)
-                break
-            except socket.error:
-                time.sleep(7)
-        self.assertIsNotNone(
-            self.server,
-            msg='could not start test Influx server on %u' % self.influx_port)
-        self.server_thread = threading.Thread(
-            target=self.server.serve_forever)
-        self.server_thread.daemon = True
-        self.server_thread.start()
-
-    def _stop_influx(self):
-        self.server.shutdown()
-        self.server.socket.close()
+    def _start_gauge_check(self):
+        influx_port = self.config_ports['gauge_influx_port']
+        try:
+            self.server = QuietHTTPServer(
+                (faucet_mininet_test_util.LOCALHOST, influx_port), self.handler)
+            self.server_thread = threading.Thread(
+                target=self.server.serve_forever)
+            self.server_thread.daemon = True
+            self.server_thread.start()
+            return None
+        except socket.error:
+            return 'cannot start Influx test server'
 
     def test_untagged(self):
-        influx_log = os.path.join(self.tmpdir, 'influx.log')
-
-        class InfluxPostHandler(PostHandler):
-
-            def do_POST(self):
-                self._log_post(influx_log)
-                return self.send_response(204)
-
-
-        self._start_influx(InfluxPostHandler)
         self.ping_all_when_learned()
         self.hup_gauge()
         self.flap_all_switch_ports()
-        self._wait_influx_log(influx_log)
-        self._stop_influx()
-        self._verify_influx_log(influx_log)
+        self._wait_influx_log()
+        self._verify_influx_log()
 
 
 class FaucetUntaggedInfluxDownTest(FaucetUntaggedInfluxTest):
+
+    def _start_gauge_check(self):
+        return None
 
     def test_untagged(self):
         self.ping_all_when_learned()
@@ -468,42 +512,19 @@ class FaucetUntaggedInfluxDownTest(FaucetUntaggedInfluxTest):
 
 class FaucetUntaggedInfluxUnreachableTest(FaucetUntaggedInfluxTest):
 
-    def get_gauge_config(self, faucet_config_file,
-                         monitor_stats_file,
-                         monitor_state_file,
-                         monitor_flow_table_file,
-                         prometheus_port,
-                         influx_port):
-        """Build Gauge config."""
-        return """
-faucet_configs:
-    - %s
-watchers:
-    %s
-dbs:
-    stats_file:
-        type: 'text'
-        file: %s
-    state_file:
-        type: 'text'
-        file: %s
-    flow_file:
-        type: 'text'
-        file: %s
+    GAUGE_CONFIG_DBS = """
     influx:
         type: 'influx'
         influx_db: 'faucet'
         influx_host: '127.0.0.2'
-        influx_port: %u
+        influx_port: %(gauge_influx_port)d
         influx_user: 'faucet'
         influx_pwd: ''
         influx_timeout: 2
-""" % (faucet_config_file,
-       self.get_gauge_watcher_config(),
-       monitor_stats_file,
-       monitor_state_file,
-       monitor_flow_table_file,
-       influx_port)
+"""
+
+    def _start_gauge_check(self):
+        return None
 
     def test_untagged(self):
         self.gauge_controller.cmd(
@@ -515,37 +536,15 @@ dbs:
 
 class FaucetUntaggedInfluxTooSlowTest(FaucetUntaggedInfluxTest):
 
-    def get_gauge_watcher_config(self):
-        return """
-    port_stats:
-        dps: ['faucet-1']
-        type: 'port_stats'
-        interval: 2
-        db: 'influx'
-    port_state:
-        dps: ['faucet-1']
-        type: 'port_state'
-        interval: 2
-        db: 'influx'
-"""
+    def setUp(self):
+        self.handler = SlowInfluxPostHandler
+        super(FaucetUntaggedInfluxTest, self).setUp()
+        self.setupInflux()
 
     def test_untagged(self):
-        influx_log = os.path.join(self.tmpdir, 'influx.log')
-
-        class InfluxPostHandler(PostHandler):
-
-            DB_TIMEOUT = self.DB_TIMEOUT
-
-            def do_POST(self):
-                self._log_post(influx_log)
-                time.sleep(self.DB_TIMEOUT * 2)
-                return self.send_response(500)
-
-        self._start_influx(InfluxPostHandler)
         self.ping_all_when_learned()
-        self._wait_influx_log(influx_log)
-        self._stop_influx()
-        self.assertTrue(os.path.exists(influx_log))
+        self._wait_influx_log()
+        self.assertTrue(os.path.exists(self.influx_log))
         self._wait_error_shipping()
         self.verify_no_exception(self.env['gauge']['GAUGE_EXCEPTION_LOG'])
 
@@ -1353,6 +1352,8 @@ vlans:
 """
     exabgp_log = None
     exabgp_err = None
+    config_ports = {'bgp_port': None}
+
 
     def pre_start_net(self):
         exabgp_conf = self.get_exabgp_conf(
@@ -1427,6 +1428,8 @@ vlans:
 """
     exabgp_log = None
     exabgp_err = None
+    config_ports = {'bgp_port': None}
+
 
     def pre_start_net(self):
         exabgp_conf = self.get_exabgp_conf(
@@ -1502,6 +1505,8 @@ vlans:
 
     exabgp_log = None
     exabgp_err = None
+    config_ports = {'bgp_port': None}
+
 
     def pre_start_net(self):
         exabgp_conf = self.get_exabgp_conf(faucet_mininet_test_util.LOCALHOST)
@@ -3075,6 +3080,8 @@ vlans:
 
     exabgp_log = None
     exabgp_err = None
+    config_ports = {'bgp_port': None}
+
 
     def pre_start_net(self):
         exabgp_conf = self.get_exabgp_conf('::1', self.exabgp_peer_conf)
@@ -3143,6 +3150,8 @@ vlans:
 """
     exabgp_log = None
     exabgp_err = None
+    config_ports = {'bgp_port': None}
+
 
     def pre_start_net(self):
         exabgp_conf = self.get_exabgp_conf('::1', self.exabgp_peer_conf)
@@ -3265,6 +3274,8 @@ vlans:
 
     exabgp_log = None
     exabgp_err = None
+    config_ports = {'bgp_port': None}
+
 
     def pre_start_net(self):
         exabgp_conf = self.get_exabgp_conf('::1')
