@@ -30,7 +30,8 @@ class Proto(object):
     DHCP_SERVER_PORT = 67
     DNS_PORT = 53
     HTTP_PORT = 80
-
+FAUCET_ENTERPRISE_NUMBER = 12345
+FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE = 1
 
 class AuthApp(object):
     '''
@@ -93,7 +94,11 @@ class AuthApp(object):
                     self.logger.info('success message')
                     mac = data.split()[1].replace("'", '')
                     sta = self.hapd_req.get_sta(mac)
-                    self.authenticate(mac, sta['dot1xAuthSessionUserName'])
+                    radius_acl_list = sta['AccessAccept:Vendor-Specific:%d:%d'
+                                            % (FAUCET_ENTERPRISE_NUMBER,
+                                                FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE)].split(',')
+                    username = sta['dot1xAuthSessionUserName']
+                    self.authenticate(mac, username, radius_acl_list)
                 elif 'AP-STA-DISCONNECTED' in data:
                     self.logger.info('%s disconnected message', data)
                     mac = data.split()[1].replace("'", '')
@@ -156,9 +161,13 @@ class AuthApp(object):
         self.logger.info("name: %s port: %d", ret_dp_name, ret_port)
         return ret_dp_name, ret_port
 
-    def authenticate(self, mac, user):
+    def authenticate(self, mac, user, acl_list):
         """Authenticates the user as specifed by adding ACL rules
         to the Faucet configuration file. Once added Faucet is signaled via SIGHUP.
+        Args:
+            mac (str): MAC Address.
+            user (str): Username.
+            acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
         """
         self.logger.info("****authenticated: %s %s", mac, user)
 
@@ -172,7 +181,7 @@ class AuthApp(object):
             self.hapd_req.deauthenticate(mac)
             self.hapd_req.disassociate(mac)
 
-        success = self.rule_man.authenticate(user, mac, switchname, switchport)
+        success = self.rule_man.authenticate(user, mac, switchname, switchport, acl_list)
 
         self.logger.error(config_parser_util.read_config(self.config.acl_config_file, self.logname))
 

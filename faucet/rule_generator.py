@@ -21,13 +21,14 @@ class RuleGenerator(object):
         self.reload(rule_file)
         self.logger = logger
 
-    def get_rules(self, username, auth_port_acl, mac):
+    def get_rules(self, username, auth_port_acl, mac, acl_list):
         """Gets Faucet ACL rules for the specified user.
         Replaces placeholder keys/values as required.
         Args:
             username: The username to find rules for.
             auth_port_acl: the port acl name of the port 'username' authenticated on.
             mac: mac address of username's machine
+            acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
         Returns:
             Dictionary of port_acl names to list of rules.
         """
@@ -39,28 +40,30 @@ class RuleGenerator(object):
         self.reload(self.yaml_file)
 
         rules = dict()
-        if username in list(self.conf["users"].keys()):
-            for portacl in list(self.conf["users"][username].keys()):
-                rules[portacl] = []
-                for rule in self.conf["users"][username][portacl]:
-                    r = rule["rule"]
-                    for k, v in list(r.items()):
-                        if v == "_user-mac_":
-                            r[k] = mac
-                        if v == "_user-name_":
-                            r[k] = username
-                    d = dict()
-                    d["rule"] = r
-                    rules[portacl].append(d)
+        for aclname in acl_list:
+            if aclname in list(self.conf['acls']):
+                for portacl in list(self.conf['acls'][aclname].keys()):
+                    if portacl not in rules:
+                        rules[portacl] = []
+                    for rule in self.conf['acls'][aclname][portacl]:
+                        r = rule["rule"]
+                        for k, v in list(r.items()):
+                            if v == "_user-mac_":
+                                r[k] = mac
+                            if v == "_user-name_":
+                                r[k] = username
+                        d = dict()
+                        d["rule"] = r
+                        rules[portacl].append(d)
 
-                if portacl == "_authport_":
-                    # rename the port acl to the one the user authenticated on.
-                    temp = rules[portacl]
-                    del rules[portacl]
-                    rules[auth_port_acl] = temp
-        else:
-            self.logger.warn('user %s cannot be found in rule_file: %s' %(username, self.yaml_file))
-            return None
+                    if portacl == "_authport_":
+                        # rename the port acl to the one the user authenticated on.
+                        temp = rules[portacl]
+                        del rules[portacl]
+                        if auth_port_acl in rules:
+                            rules[auth_port_acl].extend(temp)
+                        else:
+                            rules[auth_port_acl] = temp
         return rules
 
     def reload(self, rule_file):

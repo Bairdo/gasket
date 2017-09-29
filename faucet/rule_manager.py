@@ -139,7 +139,7 @@ class RuleManager(object):
         self.faucet_acl_filename = self.config.acl_config_file
         self.authed_users = {} # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
 
-    def add_to_base_acls(self, filename, rules, user, mac, logger=None):
+    def add_to_base_acls(self, filename, rules, user, mac):
         '''Adds rules to the base acl file (and writes).
         Args:
             filename (str);
@@ -158,6 +158,8 @@ class RuleManager(object):
             base['aauth'] = {}
 
         for aclname, acllist in list(rules.items()):
+            self.logger.debug('base %s', base)
+            self.logger.debug("aclname: %s user: %s mac:%s", aclname, user, mac)
             base['aauth'][aclname + user + mac] = acllist
             base_acl = base['acls'][aclname]
             i = base_acl.index('authed-rules')
@@ -176,20 +178,21 @@ class RuleManager(object):
         self.logger.warn('swapped tmp for base')
         return base
 
-    def authenticate(self, username, mac, switch, port, radius_fields=None):
+    def authenticate(self, username, mac, switch, port, acl_list):
         """Authenticates a username and MAC address on a switch and port.
         Args:
             username (str)
             mac (str): MAC address
             switch (str): Switch that authentication occured on
             port (str): the 'access port' as configured in 'auth.yaml'
+            acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
         Returns:
             True if rules are found and faucet reloads or already authenticated. False otherwise.
         """
         # get rules to apply
         if not self.is_authenticated(mac, username, switch, port):
             self.add_to_authed_dict(username, mac, switch, port)
-            rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac)
+            rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac, acl_list)
             if rules is None:
                 self.logger.warn('cannot authenticate user: %s, mac: %s no rules found.',
                                  username, mac)
@@ -212,7 +215,7 @@ class RuleManager(object):
                     return True
                 time.sleep(0.05)
                 self.logger.info('auth - waiting for faucet to process sighup config reload. %d', i)
-            self.logger.error('auth - faucet did not process sighup within 30 seconds. 0.05 * 400')
+            self.logger.error('auth - faucet did not process sighup within 20 seconds. 0.05 * 400')
             return False
         return True
 
