@@ -6,9 +6,11 @@
 # pytype: disable=wrong-keyword-args
 
 import socket
+import re
 import uuid
 from datetime import datetime
 import os
+import time
 
 class HostapdCtrl(object):
     """Abstract class for the control interface to hostapd.
@@ -19,6 +21,7 @@ class HostapdCtrl(object):
     cookie = None
     local_unix_sock_path = None
     attached = False
+    socket_attempts = 500
 
     def request(self, cmd):
         """
@@ -28,7 +31,8 @@ class HostapdCtrl(object):
             returns result of cmd.
         """
         if self.cookie:
-            cmd = '%s %s' % (self.cookie, cmd)
+            cmd = 'COOKIE=%s %s' % (self.cookie, cmd)
+        self.logger.debug('request is "%s"', cmd)
         self.soc.send(cmd.encode())
 
         return self.receive(size=4096)
@@ -182,7 +186,7 @@ class HostapdCtrlUNIX(HostapdCtrl):
             raise RuntimeError('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s' %
                                (len(path), path))
         try:
-            self.soc.connect(path)
+            self.connect(path)
         except FileNotFoundError as e:
             logger.error('Unable to connect to socket. FileNotFoundError %s' % path)
             raise
@@ -197,6 +201,15 @@ class HostapdCtrlUNIX(HostapdCtrl):
             logger.error('Unable to bind to file: %s' % tmpfile)
             raise e
 
+    def connect(self, addr):
+        for i in range(self.socket_attempts):
+            try:
+                self.soc.connect(addr)
+                return
+            except FileNotFoundError:
+                time.sleep(1 * i)
+                continue
+        raise FileNotFoundError
 
 class HostapdCtrlUDP(HostapdCtrl):
     """UDP socket interface class
@@ -208,20 +221,27 @@ class HostapdCtrlUDP(HostapdCtrl):
         self.soc = socket.socket(family, socket.SOCK_DGRAM)
         logger.info('connecting')
         try:
-            self.soc.connect(sockaddr)
+            self.connect(sockaddr)
         # pytype: disable=name-error
-        except FileNotFoundError as e:
+        except ConnectionRefusedError as e:
             logger.error('Unable to connect to udp socket. sockaddr %s' % sockaddr)
             raise
         logger.info('connected')
-        try:
-            # TODO is this right?
-            self.soc.bind(sockaddr)
-            logger.info('bound')
-        except OSError as e:
-            logger.error('Unable to bind to udp socket. sockaddr %s' % sockaddr)
-            raise e
-        self.cookie = self.get_cookie()
+
+    def connect(self, addr):
+        for i in range(self.socket_attempts):
+            try:
+                self.soc.connect(addr)
+                c = self.get_cookie()
+                self.logger.info('c is %s', c)
+                self.cookie = re.findall("=[0-9a-f]*'", c)[0][1:-1]
+                self.logger.info('cookie is %s', self.cookie)
+                return
+            except ConnectionRefusedError:
+                self.logger.debug('couldnt connect to udp socket %s', addr)
+                time.sleep(1 * i)
+                continue
+        raise ConnectionRefusedError
 
     def get_cookie(self):
         """Get cookie for this control interface.
