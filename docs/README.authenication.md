@@ -14,21 +14,18 @@ If you notice something odd, or have any suggestions please create a Github issu
 | [802.1X Overview](#overview) |
 | [802.1X Setup](#setup) |
 | [802.1X Running](#running) |
-| [Captive Portal](#captive-portal) |
 | [TODO](#todo) |
 
 
 # Introduction
 
-This system is made up of 5 general components as shown in the diagram below: Hosts (end users), authentication server(s), the Internet, OpenFlow Controller, and an OpenFlow 1.3 capable switch.
-
-The **Hosts** must either support 802.1X authentication or have a web browser/be able to make HTTP requests.
+This system is made up of 5 general components as shown in the diagram below: Hosts (end users), authentication server(s), the Internet, OpenFlow Controller, and an OpenFlow 1.3 caphe **Hosts** must either support 802.1X authentication or have a web browser/be able to make HTTP requests.
 This has been tested with Ubuntu 16.04 (with [wpa_supplicant](https://w1.fi/wpa_supplicant/) providing 802.1X support).
-
+The **Hosts** must support 802.1X authentication.
 The **Authentication server(s)** are Network Function Virtualisation (NFV) style servers.
-[Hostapd](https://w1.fi/hostapd/) provides the 802.1X authentication, and a captive portal is provided by [sdn-authenticator-webserver](https://github.com/bairdo/sdn-authenticator-webserver).
+[Hostapd](https://w1.fi/hostapd/) provides the 802.1X authentication.
 
-The **Internet** provides access to the Internet and at this stage DHCP and DNS servers (which are used by the captive portal).
+The **Internet** is the rest of your network, e.g. Gateway, DNS Servers, more Switches & Hosts, e.t.c..
 
 The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/reannz/faucet), and a HTTP 'server' (auth_app.py) for configuring Faucet across the network.
 
@@ -69,7 +66,6 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 
 ## 'Features'
 - 802.1X in SDN environment.
-- Captive Portal Fallback when host unresponsive to attempts to authenticate via 802.1X.
 - Fine grained access control, assign ACL rules that match any 5 tuple (Ethernet src/dst, IP src/dst & transport src/dst port) or any Ryu match field for that matter, not just putting user on a VLAN.
 - Authentication Servers can communicate with a RADIUS Server (FreeRADIUS, Cisco ISE, ...).
 - Support faucet.yaml 'include' option (see limitations below).
@@ -80,8 +76,6 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 - Weird things may happen if a user moves 'access' port, they should successfully reauthenticate, however they might have issues if a malicious user fakes the authenticated users MAC on the old port (poisoning the MAC-port learning table), and if they (malicious user) were to log off the behaviour is currently 'undefined'.
 See [TODO](#todo) for more.
 
-- Each user must have a rule entry, Groups, etc are not supported at this time.
-- Captive Portal transmits passwords in cleartext between user and webserver, need to add HTTPS support.
 
 ## 802.1X
 
@@ -98,7 +92,7 @@ This allows the following:
 1. The hostapd process to inform the client that the network is using 802.1X with a EAP-Request message.
 2. 802.1X traffic destined to the authenticator should only be received by the hostapd process.
 3. One hostpad process to be anywhere on the network.
-When a user sends the EAP-Logoff message  they are unauthenticated from the port.
+When a user sends the EAP-Logoff message they are unauthenticated from the port.
 
 When a user successfully authenticates Access Control List (ACL) rules get applied.
 These ACLs are identical to Faucet ACL rule syntax, and can therefore perform any Faucet action such as output, mirror, modify VLANs, ... .
@@ -110,7 +104,6 @@ This connection is used for HTTP messages to the auth_app process when the state
 
 If desired the RADIUS server can be directly connected to the switch (with appropriate ACLs) or through a 'private' network to the hostapd server.
 
-Once the captive portal is working reliably the hostapd server will be able to assist in providing a 'fallback' to the captive portal for clients who do not want to use 802.1X.
  
 ### Setup
 #### Authentication Server
@@ -461,14 +454,6 @@ hostapd wired.conf
 ```
 
 Start the RADIUS server according to your implementations instructions.
-
-## Captive Portal
-Not Implemented yet.
-### Components
-- Captive Portal Webserver
-- RADIUS Server
-- Faucet
-- auth_app
 
 # TODO
 
