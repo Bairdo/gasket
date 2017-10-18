@@ -19,28 +19,30 @@ If you notice something odd, or have any suggestions please create a Github issu
 
 # Introduction
 
-This system is made up of 5 general components as shown in the diagram below: Hosts (end users), authentication server(s), the Internet, OpenFlow Controller, and an OpenFlow 1.3 caphe **Hosts** must either support 802.1X authentication or have a web browser/be able to make HTTP requests.
+This system is made up of 5 general components as shown in the diagram below: Hosts (end users), authenticator(s), authentication server(s), the Internet, OpenFlow Controller, and an OpenFlow 1.3 capable switch
 This has been tested with Ubuntu 16.04 (with [wpa_supplicant](https://w1.fi/wpa_supplicant/) providing 802.1X support).
 The **Hosts** must support 802.1X authentication.
-The **Authentication server(s)** are Network Function Virtualisation (NFV) style servers.
+
+The **Authenticator** is a Network Function Virtualisation (NFV) style server
 [Hostapd](https://w1.fi/hostapd/) provides the 802.1X authentication.
+
+The **Authentication server** is a RADIUS server.
 
 The **Internet** is the rest of your network, e.g. Gateway, DNS Servers, more Switches & Hosts, e.t.c..
 
-The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/reannz/faucet), and a HTTP 'server' (auth_app.py) for configuring Faucet across the network.
+The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/faucetsdn/faucet), and a process (auth_app.py) for managing authentication messages from the authenticator and  configuring Faucet across the network.
 
 The **OpenFlow Switch** is an OpenFlow 1.3 switch we currently use [OpenVSwitch](openvswitch.org).
-In the future we hope to run on [Allied Telesis ATx930](https:/www.alliedtelesis.com/products/x930-series).
 
-The diagram below is an example of what we have tested with, in the future we hope to verify different configurations such as multiple switches managed by a single authentication server & controller, and multiple switch with multiple Authentication servers at different switches.
-Take note of the link between the Authentication Server and the OpenFlow Controller.
+The diagram below is an example of what we test with, in the future we hope to verify different configurations such as multiple switches managed by a single authenticator & controller, and multiple switch with multiple Authenticator at different switches.
+Take note of the link between the Authenticator and the OpenFlow Controller.
 This allows the authentication traffic to avoid the dataplane of the switch and therefore any end-user traffic, and allow the Controller to run in out-of-band mode.
 
 ```
 +-----------+        +--------------+                    +-----------+
 |           |        |              |                    |           |
-|           |        |Authentication|                    | OpenFlow  |
-|  Internet |        |    Server    +--------------------+Controller |
+|           |        |Authenticator |                    | OpenFlow  |
+|  Internet |        |              +--------------------+Controller |
 |           |        |              |                    |           |
 |           |        |              |                    |           |
 |           |        |              |                    |           |
@@ -99,8 +101,8 @@ These ACLs are identical to Faucet ACL rule syntax, and can therefore perform an
 The ACLs can match on any field that Ryu supports (and therefore Faucet), see [Ryu documentation](http://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#flow-match-structure).
 Typically these 'authorisation' rules should include the 'dl_src' with the users MAC address to ensure that the rule gets applied to the user, however if desired this is not necessary, **BUT this could mean that unauthenticated users can use the network!** so do so at your own risk.
 
-The hostapd process typically runs on its own server and has a separate (from the switch's dataplane) network connection to the controller.
-This connection is used for HTTP messages to the auth_app process when the state of a user changes.
+The hostapd process typically runs on its own server and needs network connectivity to the controller to notify the auth_app process when the state of a user changes.
+This connection can be either on the dataplane with appropriate acl's or seperate from the switch's dataplane.
 
 If desired the RADIUS server can be directly connected to the switch (with appropriate ACLs) or through a 'private' network to the hostapd server.
 
@@ -108,25 +110,21 @@ If desired the RADIUS server can be directly connected to the switch (with appro
 ### Setup
 #### Authentication Server
 ##### Hostapd
-- Get hostapd. Note not official hostapd. This contains modifications to communicate with our Controller HTTPServer.
+- Get hostapd. Note not official hostapd.
+This contains a small number of bugfixes to the control interface socket.
 
 ```bash
 $ git clone https://github.com/bairdo/hostapd-d1xf.git
-$ git checkout username-fix-2
+$ git checkout faucet-con
 ```
 
 - Configure the build.
-The provided .config should suffice. However if you wish to modify it, we basically need the wired driver, and you may also want the integrated RADIUS Server.
-- The IP address of the auth_app.py is hardcoded :( the sed command below will replace '10.0.0.2' with '10.0.13.3'.
-Replace '10\.0\.13\.3' with the IP address of your Faucet's non controlplane link.
-- The port number of the auth_app.py is also hardcoded.
-Replace 12345 with the port for auth_app.py to listen on.
+The provided .config should suffice.
+However if you wish to modify it, we basically need the wired driver.
+CONFIG_CTRL_IFACE=udp shall be used for local udp connections, CONFIG_CTRL_IFACE=udp-remote for udp connections from another machine, or unspecify to use the unix socket.
 - Build and install.
-```bash
-sed -ie 's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eap_server/eap_server.c
-sed -ie 's/10\.0\.0\.2/10\.0\.13\.3/g' hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c
-sed -ie 's/8080/12345/g' hostapd-d1xf/src/eap_server/eap_server.c && \
-sed -ie 's/8080/12345/g' hostapd-d1xf/src/eapol_auth/eapol_auth_sm.c && \
+
+```
 make
 sudo make install
 ```
@@ -134,36 +132,14 @@ sudo make install
 
 Example wired.conf if using hostapd's RADIUS server.
 ```ini
+# udp port to listen on,
+# if not using udp use path to unix socket.
+# ctrl_interface /var/...
+ctrl_interface=udp:8888
 interface=eth0
 driver=wired
-logger_stdout=-1
-logger_stdout_level=0
-ieee8021x=1
-eap_reauth_period=3600
 use_pae_group_addr=0
-eap_server=1
-eap_user_file=<PATH TO FILE>/hostapd.eap_user
-```
 
-If using the integrated RADIUS server a file containing username, auth-type, password is required. 
-
-See [here for more](http://web.mit.edu/freebsd/head/contrib/wpa/hostapd/hostapd.eap_user)
-Example hostapd.eap_user:
-```ini
-"user"          MD5     "password"
-"host110user"   MD5     "host110pass"
-"host111user"   MD5     "host111pass"
-"host112user"   MD5     "host112pass"
-"host113user"   MD5     "host113pass"
-"host114user"   MD5     "host114pass"```
-```
-
-If not using the integrated RADIUS, the Following are required (the acct_* may not be required and at this time hostapd will not provide any meaningful accounting statistics to your RADIUS server):
-```ini
-interface=<interface to listen on>
-driver=wired
-ieee8021x=1
-use_pae_group_addr=0
 auth_server_addr=<RADIUS SERVER IP>
 auth_server_port=<RADIUS SERVER PORT>
 auth_server_shared_secret=<RADIUS SERVER SECRET>
@@ -171,7 +147,18 @@ auth_server_shared_secret=<RADIUS SERVER SECRET>
 acct_server_addr=<ACCOUNTING RADIUS SERVER IP>
 acct_server_port=<ACCOUNTING RADIUS SERVER PORT>
 acct_server_shared_secret=<ACCOUNTING RADIUS SERVER SECRET>
+
+
+radius_auth_access_accept_attr=26:12345:1:s
 ```
+
+(the acct_* may not be required and at this time hostapd will not provide any meaningful accounting statistics to your RADIUS server)
+
+radius_auth_access_accept_attr is a new configuration option that will save the RADIUS Attribute if found in the Access-Accept Message.
+This must be set to the Vendor-Specific attribute for Faucet-ACL, if your RADIUS server has multiple Faucet Vendor Attributes.
+<Attribute Id>:<Vendor Id>:<Vendor Type>:<format>
+
+
 
 ##### RADIUS Server
 - Follow the setup and installation instructions for the RADIUS server of your choice.
@@ -179,7 +166,31 @@ acct_server_shared_secret=<ACCOUNTING RADIUS SERVER SECRET>
 - Hostap will authenticate users using the 802.1X methods specified by the RADIUS Server.
 If you are using Windows clients EAP-MSCHAPv2 will need to be enabled.
 
-- We (the developer) used FreeRadius and the hostap integrated RADIUS server during development, and Cisco ISE during deployment.
+- We (the developer) used FreeRadius during developoment, and Cisco ISE during deployment.
+The hostapd integrated eap server does not currently support saving the Access-Accept attributes so is unavailable to use.
+
+- A Vendor-Specific Attribute is required that will return a list of ACL names to apply, the list should probably contain at least one name.
+
+For a simple FreeRADIUS configuration:
+dictionary
+```ini
+...
+VENDOR          Faucet          12345
+BEGIN-VENDOR    Faucet
+    # this could perhaps be a comma seperated list of faucet-like acls to apply. Limited to 255 characters.
+    ATTRIBUTE       Faucet-ACL-ID       1       string
+END-VENDOR      Faucet
+```
+
+users
+```ini
+...
+host1user   Cleartext-Password := "host1pass"
+            Reply-Message := "this is a reply message",
+            Faucet-ACL-ID := "block-udp,allow-all"
+```
+
+
 
 #### Controller
 ##### Faucet
@@ -227,6 +238,7 @@ include:
 
 1. That each 'acl_in' must be in the form 'port\_' + \<DATAPATH NAME\> + '\_' + \<PORT NUMBER\> e.g. for the above configurations 'port_faucet-1_2'.
 
+Note: in the near future this hardcoded requirement will be removed and replaced by a lookup in either the faucet.yaml 'dp' object, or auth.yaml.
 
 ###### faucet-acls.yaml
 
@@ -234,10 +246,14 @@ The Faucet ACL configuration must be first generated by rule_manager.py.
 rule_manager.py takes an input file that contains the default configuration (when nothing is authenticated) of the ACLs, as well as markers for where to apply rules (for authenticated users) and converts it to a file that Faucet can read containing all the acls.
 The input file (shown as base-acls.yaml below) is used during the running of auth_app.py to reconstruct the faucet-acl.yaml when the authentication changes.
 It also keeps a record of what rules belong to what username/MAC address so they can be removed on deauthentication.
+In the event of a system reboot, as the state is kept here the system can resume without reauthenticating the clients.
+The network can be reset.
+Resetting should be done via copying the base-no-authed config to base-acls.yaml via your start up script - with docker add this to docker/runauth.sh
+
 
 The format is similar to vanilla Faucet config.
 It must contain a top level structure 'acls' which has children for each port ACL.
-The difference from the Faucet config is that the port ACL can in addition to having a single list of rules, can contain multiple lists of rules (in the form of yaml aliases), and a marker of where to insert new rules.
+The difference from the Faucet config is that the port ACL can in addition to having a single list of rules, can contain multiple lists of rules (in the form of yaml aliases/anchors), and a marker of where to insert new rules.
 At a later date it may be beneficial to allow inserting rules at multiple positions within the ACL based on certian conditions (username, RADIUS attributes, groups, ...).
 Other ACLs specific to your network/desires can be anywhere within the list, just take note to not place rules conflicting with the 'redirect_1x' rule (e.g. blocking dl_type: 0x888e), and allow some traffic to be redirected by the 'redirect_all' rule so EAPOL-request messages can be sent if the client will not initiate the 802.1X process.
 
@@ -286,7 +302,7 @@ acls: # acls to keep in the end file.
 
     port_faucet-1_3:
         # This acl is equalivant to the above 1 & 2.
-        # The acl can contain rules (as below), or pointers to lists of rules ( 1 & 2) if the rules are repeating.
+        # The acl can contain rules (as below), or anchors to lists of rules ( 1 & 2) if the rules are repeating.
         - rule:
             dl_type: 0x888e
             actions:
@@ -340,13 +356,27 @@ These configuration files are based on the network diagram at the top.
 - 'port_faucet-1_1' & 'port_faucet-1_2' show the rules that each 802.1X port ACL requires.
 
 - Change the mac address '08:00:27:00:03:02' to the mac address of the server that hostap is running on.
-It should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port ACLs (untested).
+In the future it should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port ACLs, however auth_app does not currently support multiple control sockets.
 
 
 
 ###### rules.yaml
+
+TODO talk about how you can have one acl use many acls. or have the radius server do that.
+
 The base directoy contains the file rules.yaml.
 rules.yaml contains the rules to apply when a user successfully logs on.
+rules.yaml is organised as follows:
+
+- A top-level structure 'acls' which will contain all the ACLs that can be sent from RADIUS.
+
+- Each of these ACLs can have two types lists of ACLs, which both contain lists of ACL rules.
+
+1. A list named '_authed_port', which applies the child rules to the port that the client authenticated on (as determined at runtime).
+
+2. The name of a specific ACL (in base-acls.yaml) to apply these (the child rules) to.
+This will apply regardless of what port the authentication occurs on.
+
 The values '_user-mac_' and '_user-name_' are filled at runtime, with the logged in username and MAC address of the authenticating device.
 
 
@@ -354,8 +384,8 @@ The keys '_mac_', '_name_' and their value is technically optional, but recomend
 The values can be any string, however they are used to identify who the rules belong to so they can be removed when the user logs off, so if they are not set as below when a logoff occurs the rules may not be removed, OR different ones removed (if match a different username).
 
 ```yaml
-users:
-    host111user:
+acls:
+    allow-all:
         port_ovs-hosts-switch_1: # port_acl to apply rules to
             # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
             # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
@@ -382,6 +412,22 @@ users:
                 dl_type: 0x0806
                 actions:
                     allow: 1
+    staff:
+        secret_server_acl:
+            - rule:
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_dst: _user-mac_
+                dl_src: 99:99:99:99:99:99 # mac address of server
+                actions:
+                    allow: 1
+        _auth-port_:
+            - rule:
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_src: _user-mac_
+                actions:
+                    allow: 1
 ```
 
 ##### auth_app.py
@@ -396,8 +442,6 @@ version: 0
 
 logger_location: auth_app.log
 
-listen_port: 8080
-
 faucet:
     prometheus_port: 9244
     ip: 127.0.0.1
@@ -409,10 +453,6 @@ files:
     faucet_config: /etc/ryu/faucet/faucet.yaml
     acl_config: /etc/ryu/faucet/faucet-acls.yaml
     base_config: /etc/ryu/faucet/base-acls.yaml
-
-urls:
-    # HTTP endpoints for auth_app.py
-    dot1x: /authenticate/auth
 
 # rules to be applied for a user once authenticated.
 auth-rules:
@@ -429,6 +469,10 @@ dps:
                 auth_mode: access
             3:
                 auth_mode: access
+
+hostapd:
+    host: hostapd
+    port: 8888
 
 ```
 
@@ -459,11 +503,10 @@ Start the RADIUS server according to your implementations instructions.
 
 - change example config to use only one switch.
 
-- allow user to have their own rules on the port before our user is authenticated ones and after the 1x to hostapd.
-For example if all traffic from port is not allowed to go to 8.8.8.8 for what ever reason.
-
 - allow the use of different modes; 802.1X, Captive Portal, 802.1X with Captive Portal fallback on a port (not necessarily 1X), unauthed vlan.
 
 - Captive Portal.
 
 - Allow ACL rules to be applied to any (named) ACL, e.g. logon port 1, but apply rules to port 2 also.
+
+- hostapd should support using its eap_server instead of an external RADIUS one. 
