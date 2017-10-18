@@ -45,17 +45,38 @@ class RuleGenerator(object):
                 for portacl in list(self.conf['acls'][aclname].keys()):
                     if portacl not in rules:
                         rules[portacl] = []
-                    for rule in self.conf['acls'][aclname][portacl]:
-                        r = rule["rule"]
-                        for k, v in list(r.items()):
-                            if v == "_user-mac_":
-                                r[k] = mac
-                            if v == "_user-name_":
-                                r[k] = username
-                        d = dict()
-                        d["rule"] = r
-                        rules[portacl].append(d)
+                    for obj in self.conf['acls'][aclname][portacl]:
+                        if isinstance(obj, dict) and 'rule' in obj:
+                            r = obj["rule"]
+                            for k, v in list(r.items()):
+                                if v == "_user-mac_":
+                                    r[k] = mac
+                                if v == "_user-name_":
+                                    r[k] = username
+                            d = dict()
+                            d["rule"] = r
+                            rules[portacl].append(d)
+                        elif isinstance(obj, list):
+                            for y in obj:
+                                if isinstance(y, dict):
+                                    # list of dicts
+                                    for _, rule in list(y.items()):
+                                        r = rule
+                                        for k, v in list(r.items()):
+                                            if v == "_user-mac_":
+                                                r[k] = mac
+                                            if v == "_user-name_":
+                                                r[k] = username
+                                        d = dict()
+                                        d["rule"] = r
+                                        rules[portacl].append(d)
+                                else:
+                                    logger.warning('list of unrecognised objects')
+                                    logger.warning('child type: %s' % type(y))
+                                    logger.warning('list object: %s' % obj)
 
+                        else:
+                            self.logger.debug('obj is type %s', type(obj))
                     if portacl == "_authport_":
                         # rename the port acl to the one the user authenticated on.
                         temp = rules[portacl]
