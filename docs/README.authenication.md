@@ -71,12 +71,12 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 - Fine grained access control, assign ACL rules that match any 5 tuple (Ethernet src/dst, IP src/dst & transport src/dst port) or any Ryu match field for that matter, not just putting user on a VLAN.
 - Authentication Servers can communicate with a RADIUS Server (FreeRADIUS, Cisco ISE, ...).
 - Support faucet.yaml 'include' option (see limitations below).
-- >25 EAP methods supported - Thanks hostapd.
+- \>25 EAP methods supported - Thanks hostapd.
 
 ## Limitations
 - .yaml configuration files must have 'dps' & 'acls' as top level (no indentation) objects, and only declared once across all files.
 - Weird things may happen if a user moves 'access' port, they should successfully reauthenticate, however they might have issues if a malicious user fakes the authenticated users MAC on the old port (poisoning the MAC-port learning table), and if they (malicious user) were to log off the behaviour is currently 'undefined'.
-See [TODO](#todo) for more.
+- See [TODO](#todo) for more.
 
 
 ## 802.1X
@@ -523,6 +523,8 @@ hostapd:
 
 
 ### Running
+
+TODO add docker-compose for faucet-con stuff
 
 #### Controller
 
