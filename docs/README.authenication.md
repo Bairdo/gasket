@@ -35,7 +35,7 @@ The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet
 The **OpenFlow Switch** is an OpenFlow 1.3 switch we currently use [OpenVSwitch](openvswitch.org).
 
 The diagram below is an example of what we test with, in the future we hope to verify different configurations such as multiple switches managed by a single authenticator & controller, and multiple switch with multiple Authenticator at different switches.
-Take note of the link between the Authenticator and the OpenFlow Controller.
+Take note of the link between the Authenticator and the OpenFlow Controller, [see more](#hostapd---controller-link).
 This allows the authentication traffic to avoid the dataplane of the switch and therefore any end-user traffic, and allow the Controller to run in out-of-band mode.
 
 ```
@@ -66,12 +66,12 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 +--------+      +-------+     +------+                   +------+
 ```
 
-## 'Features'
+## 'Features' - TODO this needs a better title
 - 802.1X in SDN environment.
 - Fine grained access control, assign ACL rules that match any 5 tuple (Ethernet src/dst, IP src/dst & transport src/dst port) or any Ryu match field for that matter, not just putting user on a VLAN.
 - Authentication Servers can communicate with a RADIUS Server (FreeRADIUS, Cisco ISE, ...).
 - Support faucet.yaml 'include' option (see limitations below).
-
+- >25 EAP methods supported - Thanks hostapd.
 
 ## Limitations
 - .yaml configuration files must have 'dps' & 'acls' as top level (no indentation) objects, and only declared once across all files.
@@ -101,6 +101,7 @@ These ACLs are identical to Faucet ACL rule syntax, and can therefore perform an
 The ACLs can match on any field that Ryu supports (and therefore Faucet), see [Ryu documentation](http://ryu.readthedocs.io/en/latest/ofproto_v1_3_ref.html#flow-match-structure).
 Typically these 'authorisation' rules should include the 'dl_src' with the users MAC address to ensure that the rule gets applied to the user, however if desired this is not necessary, **BUT this could mean that unauthenticated users can use the network!** so do so at your own risk.
 
+#### hostapd - controller link
 The hostapd process typically runs on its own server and needs network connectivity to the controller to notify the auth_app process when the state of a user changes.
 This connection can be either on the dataplane with appropriate acl's or seperate from the switch's dataplane.
 
@@ -121,7 +122,7 @@ $ git checkout faucet-con
 - Configure the build.
 The provided .config should suffice.
 However if you wish to modify it, we basically need the wired driver.
-CONFIG_CTRL_IFACE=udp shall be used for local udp connections, CONFIG_CTRL_IFACE=udp-remote for udp connections from another machine, or unspecify to use the unix socket.
+CONFIG_CTRL_IFACE=udp shall be used for local udp connections, CONFIG_CTRL_IFACE=udp-remote for udp connections from another machine, or unspecify to use the unix socket if operating hostapd on the same machine as auth_app.
 - Build and install.
 
 ```
@@ -156,7 +157,7 @@ radius_auth_access_accept_attr=26:12345:1:s
 
 radius_auth_access_accept_attr is a new configuration option that will save the RADIUS Attribute if found in the Access-Accept Message.
 This must be set to the Vendor-Specific attribute for Faucet-ACL, if your RADIUS server has multiple Faucet Vendor Attributes.
-<Attribute Id>:<Vendor Id>:<Vendor Type>:<format>
+\<Attribute Id\>:\<Vendor Id\>:\<Vendor Type\>:\<format\>
 
 
 
@@ -370,7 +371,7 @@ rules.yaml is organised as follows:
 
 - A top-level structure 'acls' which will contain all the ACLs that can be sent from RADIUS.
 
-- Each of these ACLs can have two types lists of ACLs, which both contain lists of ACL rules.
+- Each of these ACLs can have two types lists of ACLs, which both contain lists of ACL rules, this is shown by the 'staff' ACL below.
 
 1. A list named '_authed_port', which applies the child rules to the port that the client authenticated on (as determined at runtime).
 
@@ -383,9 +384,18 @@ The values '_user-mac_' and '_user-name_' are filled at runtime, with the logged
 The keys '_mac_', '_name_' and their value is technically optional, but recomended for most use cases.
 The values can be any string, however they are used to identify who the rules belong to so they can be removed when the user logs off, so if they are not set as below when a logoff occurs the rules may not be removed, OR different ones removed (if match a different username).
 
+rules.yaml has support for yaml anchors.
+This allows some flexibility in how the acl is defined.
+
+
+Using rules.yaml below , if Faucet-ACL-Names is set as one of 'student-acl1', or 'student-acl2' or 'block8844,allowipv4,allowarp' the end ACL should be identical.
+This means that we can have non singular ACLs defined on our RADIUS server or if that is inconveient just return a single ACL (perhaps a group, vlan, or FIlter-Id) and let rules.yaml generate the more complex ACL.
+
+
+rules.yaml
 ```yaml
 acls:
-    allow-all:
+    student-acl1:
         port_ovs-hosts-switch_1: # port_acl to apply rules to
             # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
             # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
@@ -412,8 +422,43 @@ acls:
                 dl_type: 0x0806
                 actions:
                     allow: 1
+    student-acl2:
+        port_ovs-hosts-switch_1:
+            - *block8844
+            - *allowipv4
+            - *allowarp
+    
+    block8844:
+        port_ovs-hosts-switch_1: &block8844
+             - rule:
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_src: _user-mac_
+                dl_type: 0x0800
+                nw_dst: 8.8.4.4
+                actions:
+                    allow: 0           
+    allowipv4:
+        port_ovs-hosts-switch_1:
+            - rule: &allowipv4
+                # Faucet Rule
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_src: _user-mac_
+                dl_type: 0x0800
+                actions:
+                    allow: 1
+    allowarp:
+        port_ovs-hosts-switch_1: &allowarp
+            - rule:
+                _name_: _user-name_
+                _mac_: _user-mac_
+                dl_src: _user-mac_
+                dl_type: 0x0806
+                actions:
+                    allow: 1
     staff:
-        secret_server_acl:
+        secret_server_acl: # These rules will apply on the ACL named 'secret_server_acl'.
             - rule:
                 _name_: _user-name_
                 _mac_: _user-mac_
@@ -421,7 +466,7 @@ acls:
                 dl_src: 99:99:99:99:99:99 # mac address of server
                 actions:
                     allow: 1
-        _auth-port_:
+        _auth-port_: # These rules will apply on the ACL that belongs to the port the user authenticated on.
             - rule:
                 _name_: _user-name_
                 _mac_: _user-mac_
@@ -501,12 +546,12 @@ Start the RADIUS server according to your implementations instructions.
 
 # TODO
 
-- change example config to use only one switch.
-
 - allow the use of different modes; 802.1X, Captive Portal, 802.1X with Captive Portal fallback on a port (not necessarily 1X), unauthed vlan.
 
 - Captive Portal.
 
-- Allow ACL rules to be applied to any (named) ACL, e.g. logon port 1, but apply rules to port 2 also.
-
 - hostapd should support using its eap_server instead of an external RADIUS one. 
+
+- Link state events - if port goes down clients on that port should have to reauth.
+
+
