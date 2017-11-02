@@ -75,7 +75,11 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 
 ## Limitations
 - .yaml configuration files must have 'dps' & 'acls' as top level (no indentation) objects, and only declared once across all files.
-- Weird things may happen if a user moves 'access' port, they should successfully reauthenticate, however they might have issues if a malicious user fakes the authenticated users MAC on the old port (poisoning the MAC-port learning table), and if they (malicious user) were to log off the behaviour is currently 'undefined'.
+- Weird things may happen if a user moves 'access' port, they should successfully reauthenticate, however they might have issues if a malicious user fakes the authenticated users MAC on the old port (poisoning the MAC-port learning table), and if they (malicious user) were to log off the behaviour is currently 'undefined'
+What is beleived (unconfrimed) to occur, is on the second logon hostapd will send a disconnect message at the start of the authentication process for that MAC address and the system will therefore log the mac off the old port.
+The MAC will therefore only be authenticated on the current port.
+This behaviour however does allow fake users to logoff other users, by either cloning the MAC address of an authenticated client and either of A) sending a EAP-Logoff, or B) starting a new authentication (regardless of whether it is successful).
+The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix' may be availalble for 'B' that ignores the disconnect from unsuccessful logon attempts if the client is still active.
 - See [TODO](#todo) for more.
 
 
@@ -173,6 +177,7 @@ The hostapd integrated eap server does not currently support saving the Access-A
 - A Vendor-Specific Attribute is required that will return a list of ACL names to apply, the list should probably contain at least one name.
 
 For a simple FreeRADIUS configuration:
+
 dictionary
 ```ini
 ...
