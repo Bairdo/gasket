@@ -66,8 +66,6 @@ EXTERNAL_DEPENDENCIES = (
      r'revision: (\d+\.\d+)\n', "4.86"),
     ('mn', ['--version'], r'\d+\.\d+.\d+',
      r'(\d+\.\d+).\d+', "2.2"),
-    ('exabgp', ['--version'], 'ExaBGP',
-     r'ExaBGP : (\d+\.\d+).\d+', "4.0"),
     ('pip', ['show', 'influxdb'], 'influxdb',
      r'Version:\s+(\d+\.\d+)\.\d+', "3.0"),
     ('pylint', ['--version'], 'pylint',
@@ -93,67 +91,8 @@ FAUCET_LINT_SRCS = glob.glob(
 FAUCET_TEST_LINT_SRCS = glob.glob(
     os.path.join(os.path.dirname(__file__), 'faucet_mininet_test*py'))
 
-# see hw_switch_config.yaml for how to bridge in an external hardware switch.
-HW_SWITCH_CONFIG_FILE = 'hw_switch_config.yaml'
 CONFIG_FILE_DIRS = ['/etc/ryu/faucet', './']
 REQUIRED_TEST_PORTS = 4
-
-
-def import_hw_config():
-    """Import configuration for physical switch testing."""
-    for config_file_dir in CONFIG_FILE_DIRS:
-        config_file_name = os.path.join(config_file_dir, HW_SWITCH_CONFIG_FILE)
-        if os.path.isfile(config_file_name):
-            break
-    if os.path.isfile(config_file_name):
-        print('Using config from %s' % config_file_name)
-    else:
-        print('Cannot find %s in %s' % (HW_SWITCH_CONFIG_FILE, CONFIG_FILE_DIRS))
-        sys.exit(-1)
-    try:
-        with open(config_file_name, 'r') as config_file:
-            config = yaml.load(config_file)
-    except IOError:
-        print('Could not load YAML config data from %s' % config_file_name)
-        sys.exit(-1)
-    if 'hw_switch' in config:
-        hw_switch = config['hw_switch']
-        if not isinstance(hw_switch, bool):
-            print('hw_switch must be a bool: ' % hw_switch)
-            sys.exit(-1)
-        if not hw_switch:
-            return None
-        required_config = {
-            'dp_ports': (dict,),
-            'cpn_intf': (str,),
-            'dpid': (long, int),
-            'of_port': (int,),
-            'gauge_of_port': (int,),
-        }
-        for required_key, required_key_types in list(required_config.items()):
-            if required_key not in config:
-                print('%s must be specified in %s to use HW switch.' % (
-                    required_key, config_file_name))
-                sys.exit(-1)
-            required_value = config[required_key]
-            key_type_ok = False
-            for key_type in required_key_types:
-                if isinstance(required_value, key_type):
-                    key_type_ok = True
-                    break
-            if not key_type_ok:
-                print('%s (%s) must be %s in %s' % (
-                    required_key, required_value,
-                    required_key_types, config_file_name))
-                sys.exit(1)
-        dp_ports = config['dp_ports']
-        if len(dp_ports) != REQUIRED_TEST_PORTS:
-            print('Exactly %u dataplane ports are required, '
-                  '%d are provided in %s.' %
-                  (REQUIRED_TEST_PORTS, len(dp_ports), config_file_name))
-        return config
-    else:
-        return None
 
 
 def check_dependencies():
@@ -242,7 +181,7 @@ def make_suite(tc_class, hw_config, root_tmpdir, ports_sock, max_test_load):
         suite.addTest(tc_class(name, hw_config, root_tmpdir, ports_sock, max_test_load))
     return suite
 
-
+# TODO do we (auth_app) want this report?
 def pipeline_superset_report(decoded_pcap_logs):
     """Report on matches, instructions, and actions by table from tshark logs."""
 
@@ -647,7 +586,7 @@ def test_main():
         if not lint_check():
             print('pylint must pass with no errors')
             sys.exit(-1)
-    hw_config = import_hw_config()
+    hw_config = None
     run_tests(
         hw_config, requested_test_classes, dumpfail,
         keep_logs, serial, excluded_test_classes)

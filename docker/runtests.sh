@@ -15,6 +15,7 @@ while getopts "cdknsx" o $FAUCET_TESTS; do
 done
 
 echo "========== checking IPv4/v6 localhost is up ====="
+sysctl -w net.ipv6.conf.lo.disable_ipv6=0
 ping6 -c 1 ::1 || exit 1
 ping -c 1 127.0.0.1 || exit 1
 
@@ -43,9 +44,6 @@ if [ "$DEPCHECK" == 1 ] ; then
     # TODO: pytype doesn't completely understand py3 yet.
     ls -1 ../faucet/*py | parallel pytype -d import-error || exit 1
 fi
-
-echo "========== Running faucet unit tests =========="
-python3 -m pytest ./test_*.py --cov faucet --doctest-modules -v --cov-report term-missing || exit 1
 
 echo "========== Running faucet system tests =========="
 python2 ./faucet_mininet_test.py -c
