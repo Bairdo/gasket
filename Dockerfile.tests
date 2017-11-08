@@ -102,7 +102,7 @@ RUN \
   $AG update && \
   git clone https://github.com/Bairdo/hostapd-d1xf.git && \
   cd hostapd-d1xf/hostapd && \
-  git checkout hostapd-master && \
+  git checkout faucet-tests && \
   make && make install
 
 
@@ -128,7 +128,6 @@ COPY ./ /faucet-src/
 RUN \
   $PIP -r /faucet-src/test-requirements.txt && \
   $PIP3 -r /faucet-src/requirements.txt && \
-  $PIP3 -r /faucet-src/test-requirements.txt && \
-  $PIP3 /faucet-src
+  $PIP3 -r /faucet-src/test-requirements.txt
 
 CMD ["/faucet-src/docker/runtests.sh"]
