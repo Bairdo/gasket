@@ -304,14 +304,14 @@ eapol_flags=0
         faucet_acl = self.tmpdir + '/faucet-acl.yaml'
         base = self.tmpdir + '/base-acls.yaml'
 
-        host.cmd('python3.5 {0}/gasket-src/faucet/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
+        host.cmd('python3.5 {0}/gasket-src/gasket/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
 
         pid = int(open(host.pid_file, 'r').read())
         open('%s/contr_pid' % self.tmpdir, 'w').write(str(pid))
         os.kill(pid, signal.SIGHUP)
         # send signal to faucet here. as we have just generated new acls. and it is already running.
 
-        host.cmd('python3.5 {0}/gasket-src/faucet/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
+        host.cmd('python3.5 {0}/gasket-src/gasket/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
         print 'authentication controller app started'
         self.pids['auth_server'] = host.lastPid
 
@@ -358,8 +358,12 @@ logger_stdout_level=0\n
 ieee8021x=1\n
 eap_reauth_period=3600\n
 use_pae_group_addr=0\n
-eap_server=1\n
-eap_user_file={1}/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir, ctrl_iface_dir, intf))
+auth_server_addr=127.0.0.1
+auth_server_port=1812
+auth_server_shared_secret=SECRET
+
+radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir, ctrl_iface_dir, intf))
+
         hostapd_config_cmd = hostapd_config_cmd + ' {0}/{1}-wired.conf'.format(self.tmpdir, host.name)
 #            host.cmdPrint('ip link add link {0}-eth0 name {0}-eth0.{1} type vlan id {1}'.format(host.name, vlan_id))
 #            host.cmd('ip link set {0}-eth0.{1} up'.format(host.name, vlan_id))
@@ -372,7 +376,7 @@ eap_user_file={1}/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, 
         self.create_hostapd_users_file(self.max_hosts)
 
         # start hostapd
-        host.cmd('hostapd -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
+        host.cmd('hostapd -t -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
         self.pids['hostapd'] = host.lastPid
         
         tcpdump_args = ' '.join((
@@ -407,6 +411,9 @@ eap_user_file={1}/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, 
         host.cmd('ping -i 0.1 10.0.0.2 &')
         self.pids['p0-ping'] = host.lastPid
 
+    def run_freeradius(self, host):
+        host.cmd('freeradius -xx -i 127.0.0.1 -p 1812 -l %s/radius.log' % (self.tmpdir))
+        self.pids['freeradius'] = host.lastPid
 
     def make_dhcp_config(self, filename, intf, gw, dns):
         """Create configuration file for udhcpd.
@@ -513,6 +520,8 @@ class GasketSingleSwitchTest(GasketTest):
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
 #        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
         self.run_hostapd(portal)
+        self.run_freeradius(portal)
+
         self.run_controller(self.net.controller)
 
         interweb.cmd('echo "This is a text file on a webserver" > index.txt')
@@ -591,7 +600,7 @@ class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     mac_interfaces = {} # {'1': intefcae}
     max_vlan_hosts = 2
     def setUp(self):
-        super(FaucetAuthMultiHostPerPortTest, self).setUp()
+        super(GasketMultiHostPerPortTest, self).setUp()
         h0 = self.clients[0]
 
         for i in range(self.max_vlan_hosts):
@@ -631,7 +640,7 @@ class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
         for mac_intf in list(self.mac_interfaces.values()):
             netns = mac_intf + 'ns'
             h0.cmd('ip netns del %s' % netns)
-        super(FaucetAuthMultiHostPerPortTest, self).tearDown()
+        super(GasketMultiHostPerPortTest, self).tearDown()
 
     def get_macvlan_ip(self, h, intf):
         '''Get the IP address of a macvlan that is in an netns
@@ -643,7 +652,7 @@ class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
 
 
 #@unittest.skip('broken.')
-class FaucetAuthTwoHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
+class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 2
 
@@ -784,7 +793,7 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
                         self.fail_ping_ipv4(h, interweb.IP(), retries=5)
 
 
-class FaucetAuthTenHostsTest(FaucetAuthMultiHostsTest):
+class GasketTenHostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 12
     max_hosts = N_UNTAGGED - 2
 
@@ -795,7 +804,7 @@ class FaucetAuthTenHostsTest(FaucetAuthMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetAuthTwentyHostsTest(FaucetAuthMultiHostsTest):
+class GasketTwentyHostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -806,7 +815,7 @@ class FaucetAuthTwentyHostsTest(FaucetAuthMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetAuth14HostsTest(FaucetAuthMultiHostsTest):
+class Gasket14HostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 16
     max_hosts = N_UNTAGGED - 2
 
@@ -817,7 +826,7 @@ class FaucetAuth14HostsTest(FaucetAuthMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetAuthTenHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
+class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
