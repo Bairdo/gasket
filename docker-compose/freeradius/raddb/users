@@ -1,0 +1,10 @@
+host0user   Cleartext-Password := "host0pass"
+            Reply-Message := "this is a reply message",
+            Faucet-ACL-ID := "block-udp,block-tcp,allow-all"
+
+
+host1user   Cleartext-Password := "host1pass"
+            Reply-Message := "this is a reply message",
+            Faucet-ACL-ID := "student",
+            Faucet-VLAN   := "vlan1,vlan2"
+

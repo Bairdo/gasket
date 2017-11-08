@@ -1,0 +1,69 @@
+version: '2.1'
+
+services:
+    hostapd:
+        privileged: true
+        image: 'faucet-auth/portal'
+        build:
+            context: '.'
+            dockerfile: './Dockerfile.hostapd'
+        volumes:
+            - './docker-compose/hostapd/:/etc/hostapd'
+        command:  bash -c "until ip link show eth3; do sleep 1; done;
+            ip link set eth3 down;
+            ip link set eth3 address 44:44:44:44:44:44;
+            ip link set eth3 up;
+            ping 10.0.0.40 -c5 &&
+            hostapd -ddt /etc/hostapd/wired.conf"
+
+        networks:
+            controller-portal-net:
+                ipv4_address: 172.220.0.101
+            radius-net:
+                ipv4_address: 172.221.0.101
+        sysctls:
+        - net.ipv4.conf.all.send_redirects=0
+        - net.ipv4.ip_forward=0
+
+    faucet-auth:
+        build:
+            context: '.'
+            dockerfile: './Dockerfile.auth'
+        volumes:
+            - './docker-compose/faucet-auth/log/ryu/faucet:/var/log/ryu/faucet'
+            - './etc/ryu/faucet:/etc/ryu/faucet'
+
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.100
+            controller-portal-net:
+                ipv4_address: 172.220.0.100
+
+    freeradius:
+        image: 'marcelmaatkamp/freeradius'
+        volumes:
+            - "./docker-compose/freeradius/raddb/clients.conf:/etc/raddb/clients.conf"
+            - "./docker-compose/freeradius/raddb/users:/etc/raddb/users"
+            - "./docker-compose/freeradius/raddb/radiusd.conf:/etc/raddb/radiusd.conf"
+            - "./docker-compose/freeradius/raddb/dictionary:/etc/raddb/dictionary"
+            - "./docker-compose/freeradius/log/radius-log:/var/log/radius/"
+        networks:
+            radius-net:
+                ipv4_address: 172.221.0.102
+
+networks:
+    control-plane-net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.222.0.0/24
+    controller-portal-net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.220.0.0/24
+    radius-net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.221.0.0/24
