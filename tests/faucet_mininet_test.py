@@ -41,7 +41,7 @@ from packaging import version
 import faucet_mininet_test_util
 
 # pylint: disable=wildcard-import
-from faucet_mininet_test_unit import *
+from gasket_mininet_test_unit import *
 
 # Only these hardware types will be tested with meters.
 SUPPORTS_METERS = (
