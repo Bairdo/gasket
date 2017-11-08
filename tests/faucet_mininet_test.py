@@ -332,7 +332,7 @@ def expand_tests(requested_test_classes, excluded_test_classes,
             continue
         if excluded_test_classes and test_name in excluded_test_classes:
             continue
-        if test_name.endswith('Test') and test_name.startswith('Faucet'):
+        if test_name.endswith('Test') and test_name.startswith('Gasket'):
             if not filter_test_hardware(test_obj, hw_config):
                 continue
             print('adding test %s' % test_name)
@@ -341,7 +341,7 @@ def expand_tests(requested_test_classes, excluded_test_classes,
             if test_name.startswith('FaucetSanity'):
                 sanity_test_suites.append(test_suite)
             else:
-                if serial or test_name.startswith('FaucetSingle'):
+                if serial or test_name.startswith('GasketSingle'):
                     single_test_suites.append(test_suite)
                 else:
                     parallel_test_suites.append(test_suite)
