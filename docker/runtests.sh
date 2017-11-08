@@ -37,12 +37,15 @@ sysctl -w net.ipv4.tcp_tw_reuse=1
 # minimize TCP connection timeout so application layer timeouts are quicker to test.
 sysctl -w net.ipv4.tcp_syn_retries=4
 
+echo "========== Setup freeRADIUS ======================"
+mkdir -p /var/run/radius
+
 cd /gasket-src/tests
 
 if [ "$DEPCHECK" == 1 ] ; then
     echo "============ Running pytype analyzer ============"
     # TODO: pytype doesn't completely understand py3 yet.
-    ls -1 ../faucet/*py | parallel pytype -d import-error || exit 1
+    ls -1 ../gasket/*py | parallel pytype -d import-error || exit 1
 fi
 
 echo "========== Running faucet system tests =========="
