@@ -123,11 +123,11 @@ RUN \
 ### To maximize Docker caching, try to keep invariant dependencies above this line.
 ###
 
-COPY ./ /faucet-src/
+COPY ./ /gasket-src/
 
 RUN \
-  $PIP -r /faucet-src/test-requirements.txt && \
-  $PIP3 -r /faucet-src/requirements.txt && \
-  $PIP3 -r /faucet-src/test-requirements.txt
+  $PIP -r /gasket-src/test-requirements.txt && \
+  $PIP3 -r /gasket-src/requirements.txt && \
+  $PIP3 -r /gasket-src/test-requirements.txt
 
-CMD ["/faucet-src/docker/runtests.sh"]
+CMD ["/gasket-src/docker/runtests.sh"]

@@ -506,7 +506,7 @@ files:
 
 # rules to be applied for a user once authenticated.
 auth-rules:
-    file: /faucet-src/rules.yaml
+    file: /gasket-src/rules.yaml
 
 # Each port that is to use 802.1X must have 'auth_mode' set to 'access'.
 # This is used to identify which port is directly connected to the machine authenticating.

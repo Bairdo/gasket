@@ -37,7 +37,7 @@ sysctl -w net.ipv4.tcp_tw_reuse=1
 # minimize TCP connection timeout so application layer timeouts are quicker to test.
 sysctl -w net.ipv4.tcp_syn_retries=4
 
-cd /faucet-src/tests
+cd /gasket-src/tests
 
 if [ "$DEPCHECK" == 1 ] ; then
     echo "============ Running pytype analyzer ============"

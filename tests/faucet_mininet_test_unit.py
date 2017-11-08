@@ -291,7 +291,7 @@ eapol_flags=0
             host (mininet.host): host to start app on (generally the controller)
         """
         print 'Starting Controller ....'
-        with open('/faucet-src/tests/config/auth.yaml', 'r') as f:
+        with open('/gasket-src/tests/config/auth.yaml', 'r') as f:
             httpconfig = f.read()
 
         config_values = {}
@@ -301,21 +301,21 @@ eapol_flags=0
         config_values['portal'] = self.net.hosts[0].name
         config_values['intf'] = self.net.hosts[0].defaultIntf().name
         host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
-        host.cmd('cp -r /faucet-src %s/' % self.tmpdir)
+        host.cmd('cp -r /gasket-src %s/' % self.tmpdir)
 
         host.cmd('echo "%s" > %s/base-acls.yaml' % (self.CONFIG_BASE_ACL, self.tmpdir))
 
         faucet_acl = self.tmpdir + '/faucet-acl.yaml'
         base = self.tmpdir + '/base-acls.yaml'
 
-        host.cmd('python3.5 {0}/faucet-src/faucet/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
+        host.cmd('python3.5 {0}/gasket-src/faucet/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
 
         pid = int(open(host.pid_file, 'r').read())
         open('%s/contr_pid' % self.tmpdir, 'w').write(str(pid))
         os.kill(pid, signal.SIGHUP)
         # send signal to faucet here. as we have just generated new acls. and it is already running.
 
-        host.cmd('python3.5 {0}/faucet-src/faucet/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
+        host.cmd('python3.5 {0}/gasket-src/faucet/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
         print 'authentication controller app started'
         self.pids['auth_server'] = host.lastPid
 
