@@ -3,7 +3,7 @@ version: '2.1'
 services:
     hostapd:
         privileged: true
-        image: 'faucet-auth/portal'
+        image: 'gasket/portal'
         build:
             context: '.'
             dockerfile: './Dockerfile.hostapd'
@@ -25,12 +25,12 @@ services:
         - net.ipv4.conf.all.send_redirects=0
         - net.ipv4.ip_forward=0
 
-    faucet-auth:
+    gasket:
         build:
             context: '.'
             dockerfile: './Dockerfile.auth'
         volumes:
-            - './docker-compose/faucet-auth/log/ryu/faucet:/var/log/ryu/faucet'
+            - './docker-compose/gasket/log/ryu/faucet:/var/log/ryu/faucet'
             - './etc/ryu/faucet:/etc/ryu/faucet'
 
         networks:
@@ -57,6 +57,7 @@ networks:
         ipam:
             config:
                 - subnet: 172.222.0.0/24
+
     controller-portal-net:
         driver: bridge
         ipam:
