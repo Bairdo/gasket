@@ -123,6 +123,12 @@ RUN \
 ### To maximize Docker caching, try to keep invariant dependencies above this line.
 ###
 
+RUN \
+  $AG update && \
+  $AG install -y freeradius
+
+COPY ./tests/config/raddb /etc/freeradius
+
 COPY ./ /gasket-src/
 
 RUN \
