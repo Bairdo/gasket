@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-"""Mininet tests for FAUCET."""
+"""Mininet tests for Gasket.
+These tests use the https://github.com/faucetsdn/faucet base test classes as the underlying framework."""
 
 # pylint: disable=missing-docstring
 # pylint: disable=too-many-arguments
@@ -28,12 +29,7 @@ from datetime import datetime
 from mininet.cli import CLI
 
 
-class FaucetTest(faucet_mininet_test_base.FaucetTestBase):
-
-    pass
-
-
-class FaucetAuthenticationTest(FaucetTest):
+class GasketTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the authentication tests """
 
     RUN_GAUGE = False
@@ -49,7 +45,7 @@ class FaucetAuthenticationTest(FaucetTest):
                 host.cmd('kill ' + str(pid))
 
             self.net.stop()
-        super(FaucetAuthenticationTest, self).tearDown()
+        super(GasketTest, self).tearDown()
 
     def setup_hosts(self, hosts):
         """Create wpa_supplicant config file for each authenticating host.
@@ -468,10 +464,10 @@ option  lease   300  # seconds
 
 
     def setup(self):
-        super(FaucetAuthenticationTest, self).setUp()
+        super(GasketTest, self).setUp()
 
 
-class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
+class GasketSingleSwitchTest(GasketTest):
     """Base Test class for single switch topology
     """
     ws_port = 0
@@ -486,7 +482,7 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED + N_TAGGED)
 
     def setUp(self):
-        super(FaucetAuthenticationSingleSwitchTest, self).setUp()
+        super(GasketSingleSwitchTest, self).setUp()
        
         self.topo = self.topo_class(
             self.ports_sock, self._test_name(), dpids=[self.dpid], n_tagged=self.N_TAGGED, n_untagged=self.N_UNTAGGED)
@@ -533,7 +529,7 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
 
 
 
-class FaucetAuthMultiHostDiffPortTest(FaucetAuthenticationSingleSwitchTest):
+class GasketMultiHostDiffPortTest(GasketSingleSwitchTest):
     """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
 
     def ping_between_hosts(self, users):
@@ -589,7 +585,7 @@ class FaucetAuthMultiHostDiffPortTest(FaucetAuthenticationSingleSwitchTest):
         self.one_ipv4_ping(h0, '10.0.0.2')
 
 
-class FaucetAuthMultiHostPerPortTest(FaucetAuthenticationSingleSwitchTest):
+class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
     """
     mac_interfaces = {} # {'1': intefcae}
@@ -678,7 +674,7 @@ class FaucetAuthTwoHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-class FaucetAuthMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
+class GasketMultiHostsTest(GasketSingleSwitchTest):
 
     def test_multi_hosts_sequential(self):
         """Log X different users on on the different ports sequentially (each should complete before the next starts).
@@ -890,7 +886,7 @@ class FaucetAuthTenHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
         self.assertTrue(passed)
 
 
-class FaucetAuthNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
+class GasketNoLogOnTest(GasketSingleSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
@@ -927,7 +923,7 @@ class FaucetAuthNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class FaucetAuthDot1XLogonAndLogoffTest(FaucetAuthenticationSingleSwitchTest):
+class GasketDot1XLogonAndLogoffTest(GasketSingleSwitchTest):
     """Log on using dot1x and log off"""
 
     def test_logoff(self):
@@ -952,7 +948,7 @@ class FaucetAuthDot1XLogonAndLogoffTest(FaucetAuthenticationSingleSwitchTest):
         self.one_ipv4_ping(h0, interweb.IP())
 
 
-class FaucetAuthDupLogonTest(FaucetAuthenticationSingleSwitchTest):
+class GasketDupLogonTest(GasketSingleSwitchTest):
     """Tests various username and MAC address combinations that may or may not result in
     the configuration changing.
     """
