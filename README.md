@@ -12,5 +12,5 @@ Currently 802.1X is supported.
 
 Quick docker setup [docs/README.docker.md](docs/README.docker.md).
 
-# Support (Comments, Questions, Suggestions)
+## Support (Comments, Questions, Suggestions)
 Contact Michael Baird at michael.baird@ecs.vuw.ac.nz or create a Github issue.
