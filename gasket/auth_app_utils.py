@@ -1,8 +1,23 @@
 """Utility Classes and functions for auth_app
 """
 # pytype: disable=pyi-error
+import logging
+from logging.handlers import WatchedFileHandler
 import re
 import requests
+
+def get_logger(logname, logfile, loglevel, propagate):
+    """Create and return a logger object."""
+    logger = logging.getLogger(logname)
+    logger_handler = WatchedFileHandler(logfile)
+    log_fmt = '%(asctime)s %(name)-6s %(levelname)-8s %(message)s'
+    logger_handler.setFormatter(
+                                logging.Formatter(log_fmt, '%b %d %H:%M:%S'))
+    logger.addHandler(logger_handler)
+    logger.propagate = propagate
+    logger.setLevel(loglevel)
+    return logger
+
 
 class HashableDict(dict):
     '''Used to compared if rules (dictionaries) are the same.
