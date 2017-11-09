@@ -42,11 +42,11 @@ mkdir -p /var/run/radius
 
 cd /gasket-src/tests
 
-if [ "$DEPCHECK" == 1 ] ; then
-    echo "============ Running pytype analyzer ============"
-    # TODO: pytype doesn't completely understand py3 yet.
-    ls -1 ../gasket/*py | parallel pytype -d import-error || exit 1
-fi
+#if [ "$DEPCHECK" == 1 ] ; then
+#    echo "============ Running pytype analyzer ============"
+#    # TODO: pytype doesn't completely understand py3 yet.
+#    ls -1 ../gasket/*py | parallel pytype -d import-error || exit 1
+#fi
 
 echo "========== Running faucet system tests =========="
 python2 ./faucet_mininet_test.py -c
