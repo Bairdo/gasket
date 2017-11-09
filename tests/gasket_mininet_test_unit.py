@@ -412,6 +412,21 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
         self.pids['p0-ping'] = host.lastPid
 
     def run_freeradius(self, host):
+        tcpdump_args = ' '.join((
+            '-s 0',
+            '-e',
+            '-n',
+            '-U',
+            '-q',
+            '-i %s-eth0' % host.name,
+            '-w %s/radius.cap' % self.tmpdir,
+            'udp port 1812 or udp port 1813',
+            '>/dev/null',
+            '2>/dev/null',
+            ))
+        host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['radius-tcpdump'] = host.lastPid
+
         host.cmd('freeradius -xx -i 127.0.0.1 -p 1812 -l %s/radius.log' % (self.tmpdir))
         self.pids['freeradius'] = host.lastPid
 
@@ -468,7 +483,6 @@ option  lease   300  # seconds
         ))
         host.cmd('tcpdump %s &' % tcpdump_args)
         self.pids['i-tcpdump'] = host.lastPid
-
 
     def setup(self):
         super(GasketTest, self).setUp()
