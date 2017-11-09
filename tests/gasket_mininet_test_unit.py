@@ -18,7 +18,7 @@ import yaml
 
 from mininet.log import error, output
 from mininet.net import Mininet
-
+from mininet.link import Intf
 
 import faucet_mininet_test_base
 import faucet_mininet_test_util
@@ -119,24 +119,7 @@ eapol_flags=0
             intf = host.defaultIntf()
 
         for direction in ['in', 'out']:
-            tcpdump_args = ' '.join((
-                '-Q', direction,
-                '-s 0',
-                '-e',
-                '-n',
-                '-U',
-                '-q',
-                '-i %s' % intf,
-                '-w %s/%s-%s.cap' % (self.tmpdir, intf, direction),
-                '>/dev/null',
-                '2>/dev/null',
-            ))
-            cmd = 'tcpdump %s &' % tcpdump_args
-            if netns is None:
-                host.cmd(cmd)
-            else:
-                host.cmdPrint('ip netns exec %s %s' % (netns, cmd))
-            self.pids['%s-%s-%s-tcpdump' % (host.name, intf, direction)] = host.lastPid
+            self.start_tcpdump(host, interface=intf, direction=direction, netns=netns)
 
         start_reload_count = self.get_configure_count()
 
@@ -315,21 +298,6 @@ eapol_flags=0
         print 'authentication controller app started'
         self.pids['auth_server'] = host.lastPid
 
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i %s-eth0' % host.name,
-            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
-            '>/dev/null',
-            '2>/dev/null',
-        ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-
-        self.pids['tcpdump'] = host.lastPid
-
         print 'Controller started.'
 
     def create_hostapd_users_file(self, num_hosts):
@@ -379,54 +347,11 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
         host.cmd('hostapd -t -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
         self.pids['hostapd'] = host.lastPid
         
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i %s-eth1' % host.name,
-            '-w %s/%s-eth1.cap' % (self.tmpdir, host.name),
-            '>/dev/null',
-            '2>/dev/null',
-        ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['p1-tcpdump'] = host.lastPid
-
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i %s-eth0' % host.name,
-            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
-            '>/dev/null',
-            '2>/dev/null',
-        ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['p0-tcpdump'] = host.lastPid
-
         # TODO is this still required?
         host.cmd('ping -i 0.1 10.0.0.2 &')
         self.pids['p0-ping'] = host.lastPid
 
     def run_freeradius(self, host):
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i lo',
-            '-w %s/radius.cap' % self.tmpdir,
-            'udp port 1812 or udp port 1813',
-            '>/dev/null',
-            '2>/dev/null',
-            ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['radius-tcpdump'] = host.lastPid
-
         host.cmd('freeradius -xx -i 127.0.0.1 -p 1812 -l %s/radius.log' % (self.tmpdir))
         self.pids['freeradius'] = host.lastPid
 
@@ -470,19 +395,42 @@ option  lease   300  # seconds
         host.cmd('udhcpd -f', dhcp_config,
                  '> %s/%s-dhcp.log 2>&1  &' % (self.tmpdir, host))
 
+    def start_tcpdump(self, host, interface=None, direction=None, expr=None, netns=None):
+        if direction is None:
+            direction = 'inout'
+        if expr is None:
+            expr = ''
+
+        if interface is None:
+            interface = '%s-eth0' % host.name
+            filename = '%s-%s.pcap' % (interface, direction)
+        elif isinstance(interface, Intf):        
+            if interface.name.startswith(host.name):
+                filename = '%s-%s.pcap' % (interface, direction)
+            else:
+                filename = '%s-%s-%s.pcap' % (host.name, interface, direction)
+        else:
+            filename = '%s-%s-%s.pcap' % (host.name, interface, direction)
+
         tcpdump_args = ' '.join((
             '-s 0',
             '-e',
             '-n',
             '-U',
             '-q',
-            '-i %s-eth0' % host.name,
-            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+            '-Q %s' % direction,
+            '-i %s' % interface,
+            '-w %s/%s' % (self.tmpdir, filename),
+            expr,
             '>/dev/null',
             '2>/dev/null',
         ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['i-tcpdump'] = host.lastPid
+
+        if netns:
+            host.cmd('ip netns exec %s %s' %(netns, cmd))
+        else:
+            host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['tcpdump-%s-%s-%s' % (host.name, interface, direction)] = host.lastPid
 
     def setup(self):
         super(GasketTest, self).setUp()
@@ -533,6 +481,13 @@ class GasketSingleSwitchTest(GasketTest):
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
 #        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
+
+        self.start_tcpdump(self.net.controller)
+        self.start_tcpdump(portal, interface='%s-eth0' % portal.name)
+        self.start_tcpdump(portal, interface='%s-eth1' % portal.name)
+        self.start_tcpdump(portal, interface='lo', expr='udp port 1812 or udp port 1813')
+        self.start_tcpdump(interweb)
+
         self.run_hostapd(portal)
         self.run_freeradius(portal)
 
