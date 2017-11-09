@@ -418,7 +418,7 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
             '-n',
             '-U',
             '-q',
-            '-i %s-eth0' % host.name,
+            '-i l0',
             '-w %s/radius.cap' % self.tmpdir,
             'udp port 1812 or udp port 1813',
             '>/dev/null',
