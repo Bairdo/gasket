@@ -8,7 +8,7 @@ faucet:
     ip: 127.0.0.1
 
 files:
-    controller_pid: %(tmpdir)s/contr_pid
+    controller_pid: %(tmpdir)s/%(pid_file)s
     faucet_config: %(tmpdir)s/faucet.yaml
     acl_config: %(tmpdir)s/faucet-acl.yaml
     base_config: %(tmpdir)s/base-acls.yaml

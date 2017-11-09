@@ -279,6 +279,7 @@ eapol_flags=0
         config_values['logger_location'] = self.tmpdir + '/auth_app.log'
         config_values['portal'] = self.net.hosts[0].name
         config_values['intf'] = self.net.hosts[0].defaultIntf().name
+        config_values['pid_file'] = host.pid_file
         host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
         host.cmd('cp -r /gasket-src %s/' % self.tmpdir)
 
@@ -290,7 +291,6 @@ eapol_flags=0
         host.cmd('python3.5 {0}/gasket-src/gasket/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
 
         pid = int(open(host.pid_file, 'r').read())
-        open('%s/contr_pid' % self.tmpdir, 'w').write(str(pid))
         os.kill(pid, signal.SIGHUP)
         # send signal to faucet here. as we have just generated new acls. and it is already running.
 
@@ -476,9 +476,6 @@ class GasketSingleSwitchTest(GasketTest):
         """
         # pylint: disable=unbalanced-tuple-unpacking
         portal, interweb = self.net.hosts[:2]
-        # pylint: disable=no-member
-        pid = int(open(self.net.controller.pid_file, 'r').read())
-        self.net.controller.cmd('echo {} > {}/contr_pid'.format(pid, self.tmpdir))
 
         # pylint: disable=no-member
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
@@ -489,6 +486,7 @@ class GasketSingleSwitchTest(GasketTest):
             params1={'ip': '192.168.%s.2/24' % contr_num},
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
+        # TODO why is this commented out?
 #        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
 
         self.start_tcpdump(self.net.controller)
