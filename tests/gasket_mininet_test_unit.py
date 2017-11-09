@@ -355,6 +355,15 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
         host.cmd('freeradius -xx -i 127.0.0.1 -p 1812 -l %s/radius.log' % (self.tmpdir))
         self.pids['freeradius'] = host.lastPid
 
+    def run_internet(self, host):
+        host.cmd('echo "This is a text file on a webserver" > index.txt')
+        self.ws_port = faucet_mininet_test_util.find_free_port(
+            self.ports_sock, self._test_name())
+
+        host.cmd('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
+
+        self.start_dhcp_server(host, gw='10.0.0.2', dns='8.8.8.8')
+
     def make_dhcp_config(self, filename, intf, gw, dns):
         """Create configuration file for udhcpd.
         Args:
@@ -490,21 +499,11 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.run_hostapd(portal)
         self.run_freeradius(portal)
-
         self.run_controller(self.net.controller)
-
-        interweb.cmd('echo "This is a text file on a webserver" > index.txt')
-        self.ws_port = faucet_mininet_test_util.find_free_port(
-            self.ports_sock, self._test_name())
-
-        interweb.cmd('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
+        self.run_internet(interweb)
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
-
-        self.start_dhcp_server(interweb, gw='10.0.0.2', dns='8.8.8.8')
-
-
 
 
 class GasketMultiHostDiffPortTest(GasketSingleSwitchTest):
