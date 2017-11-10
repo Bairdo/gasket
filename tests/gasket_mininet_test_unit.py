@@ -412,14 +412,14 @@ option  lease   300  # seconds
 
         if interface is None:
             interface = '%s-eth0' % host.name
-            filename = '%s-%s.pcap' % (interface, direction)
+            filename = '%s-%s.cap' % (interface, direction)
         elif isinstance(interface, Intf):        
             if interface.name.startswith(host.name):
-                filename = '%s-%s.pcap' % (interface, direction)
+                filename = '%s-%s.cap' % (interface, direction)
             else:
-                filename = '%s-%s-%s.pcap' % (host.name, interface, direction)
+                filename = '%s-%s-%s.cap' % (host.name, interface, direction)
         else:
-            filename = '%s-%s-%s.pcap' % (host.name, interface, direction)
+            filename = '%s-%s-%s.cap' % (host.name, interface, direction)
 
         tcpdump_args = ' '.join((
             '-s 0',
@@ -434,11 +434,11 @@ option  lease   300  # seconds
             '>/dev/null',
             '2>/dev/null',
         ))
-
+        cmd = 'tcpdump %s &' % tcpdump_args
         if netns:
             host.cmd('ip netns exec %s %s' %(netns, cmd))
         else:
-            host.cmd('tcpdump %s &' % tcpdump_args)
+            host.cmd(cmd)
         self.pids['tcpdump-%s-%s-%s' % (host.name, interface, direction)] = host.lastPid
 
     def setup(self):
