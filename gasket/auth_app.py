@@ -176,8 +176,11 @@ class AuthApp(object):
                 "Error switchname '%s' or switchport '%d' is unknown. Cannot generate acls for authed user '%s' on MAC '%s'",
                 switchname, switchport, user, mac)
             # TODO one or the other?
-            self.hapd_req.deauthenticate(mac)
-            self.hapd_req.disassociate(mac)
+#            self.hapd_req.deauthenticate(mac)
+#            self.hapd_req.disassociate(mac)
+            return
+
+        self.logger.info('found mac')
 
         success = self.rule_man.authenticate(user, mac, switchname, switchport, acl_list)
 
