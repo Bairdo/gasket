@@ -21,103 +21,53 @@ rules:
             dl_type: 0x0806
             actions:
                 allow: 1
-
-users:
-    
-    hostuser0:
-        _authport_: # port_acl to apply rules
-            # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
-            # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
+    block-tcp: &blocktcp
+        - rule:
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x800
+            ip_proto: 6
+            actions:
+                allow: 0
+    block-tcp: &blockudp
+        - rule:
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x800
+            ip_proto: 17
+            actions:
+                allow: 0
+acls:
+    allowall:
+        _authport_:
             *allowall
-
-
-    hostuser1:
-        _authport_: # port_acl to apply rules
-            # '_authport_' is reserved to mean the port that the user authenticated on. Otherwise it should match a portacl.
-            # While at it, any port acl keys that begin and start with '_***_' are reserved, by this.
+    block-tcp:
+        _authport_:
             - rule:
                 _name_: _user-name_
                 _mac_: _user-mac_
                 dl_src: _user-mac_
-                dl_type: 0x0800
-                nw_dst: 8.8.4.4
+                dl_type: 0x800
+                ip_proto: 6
                 actions:
                     allow: 0
-            - rule:
-                # Faucet Rule
-                _name_: _user-name_
-                _mac_: _user-mac_
-                dl_src: _user-mac_
-                dl_type: 0x0800
-                actions:
-                    allow: 1
+
+    block-udp:
+        _authport_:
             - rule:
                 _name_: _user-name_
                 _mac_: _user-mac_
                 dl_src: _user-mac_
-                dl_type: 0x0806
+                dl_type: 0x800
+                ip_proto: 17
                 actions:
-                    allow: 1
-    hostuser2:
+                    allow: 0
+
+    student:
         _authport_:
-            *allowall
-    hostuser3:
-        _authport_:
-            *allowall
-    hostuser4:
-        _authport_:
-            *allowall
-    hostuser5:
-        _authport_:
-            *allowall
-    hostuser6:
-        _authport_:
-            *allowall
-    hostuser7:
-        _authport_:
-            *allowall
-    hostuser8:
-        _authport_:
-            *allowall
-    hostuser9:
-        _authport_:
-            *allowall
-    hostuser10:
-        _authport_:
-            *allowall
-    hostuser11:
-        _authport_:
-            *allowall
-    hostuser12:
-        _authport_:
-            *allowall
-    hostuser13:
-        _authport_:
-            *allowall
-    hostuser14:
-        _authport_:
-            *allowall
-    hostuser15:
-        _authport_:
-            *allowall
-    hostuser16:
-        _authport_:
-            *allowall
-    hostuser17:
-        _authport_:
-            *allowall
-    hostuser18:
-        _authport_:
-            *allowall
-    hostuser19:
-        _authport_:
-            *allowall
-    hostuser20:
-        _authport_:
-            *allowall
-    hostuser21:
-        _authport_:
-            *allowall
-    hostuser22:
-        _authport_:
-            *allowall
+            - *blocktcp
+            - *blockudp
+            - *allowall
+
