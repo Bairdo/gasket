@@ -26,9 +26,6 @@ import faucet_mininet_test_topo
 
 from datetime import datetime
 
-from mininet.cli import CLI
-
-
 class GasketTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the authentication tests """
 
@@ -295,18 +292,8 @@ eapol_flags=0
         # send signal to faucet here. as we have just generated new acls. and it is already running.
 
         host.cmd('python3.5 {0}/gasket-src/gasket/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
-        print 'authentication controller app started'
+        print 'Authentication controller app started'
         self.pids['auth_server'] = host.lastPid
-
-        print 'Controller started.'
-
-    def create_hostapd_users_file(self, num_hosts):
-        conf = ''
-        for i in range(num_hosts):
-            conf = '''%s\n"hostuser%d"   MD5     "hostpass%d"''' % (conf, i, i)
-
-        with open('%s/hostapd.eap_user' % self.tmpdir, 'w+') as f:
-            f.write(conf)
 
     def run_hostapd(self, host):
         """Compiles and starts the hostapd process.
@@ -341,7 +328,6 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
 
         print 'Starting hostapd ....'
         host.cmd('mkdir %s/hostapd' % self.tmpdir)
-        self.create_hostapd_users_file(self.max_hosts)
 
         # start hostapd
         host.cmd('hostapd -t -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
