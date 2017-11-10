@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-"""Mininet tests for FAUCET."""
+"""Mininet tests for Gasket.
+These tests use the https://github.com/faucetsdn/faucet base test classes as the underlying framework."""
 
 # pylint: disable=missing-docstring
 # pylint: disable=too-many-arguments
@@ -17,7 +18,7 @@ import yaml
 
 from mininet.log import error, output
 from mininet.net import Mininet
-
+from mininet.link import Intf
 
 import faucet_mininet_test_base
 import faucet_mininet_test_util
@@ -28,12 +29,7 @@ from datetime import datetime
 from mininet.cli import CLI
 
 
-class FaucetTest(faucet_mininet_test_base.FaucetTestBase):
-
-    pass
-
-
-class FaucetAuthenticationTest(FaucetTest):
+class GasketTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the authentication tests """
 
     RUN_GAUGE = False
@@ -49,7 +45,7 @@ class FaucetAuthenticationTest(FaucetTest):
                 host.cmd('kill ' + str(pid))
 
             self.net.stop()
-        super(FaucetAuthenticationTest, self).tearDown()
+        super(GasketTest, self).tearDown()
 
     def setup_hosts(self, hosts):
         """Create wpa_supplicant config file for each authenticating host.
@@ -123,24 +119,7 @@ eapol_flags=0
             intf = host.defaultIntf()
 
         for direction in ['in', 'out']:
-            tcpdump_args = ' '.join((
-                '-Q', direction,
-                '-s 0',
-                '-e',
-                '-n',
-                '-U',
-                '-q',
-                '-i %s' % intf,
-                '-w %s/%s-%s.cap' % (self.tmpdir, intf, direction),
-                '>/dev/null',
-                '2>/dev/null',
-            ))
-            cmd = 'tcpdump %s &' % tcpdump_args
-            if netns is None:
-                host.cmd(cmd)
-            else:
-                host.cmdPrint('ip netns exec %s %s' % (netns, cmd))
-            self.pids['%s-%s-%s-tcpdump' % (host.name, intf, direction)] = host.lastPid
+            self.start_tcpdump(host, interface=intf, direction=direction, netns=netns)
 
         start_reload_count = self.get_configure_count()
 
@@ -300,6 +279,7 @@ eapol_flags=0
         config_values['logger_location'] = self.tmpdir + '/auth_app.log'
         config_values['portal'] = self.net.hosts[0].name
         config_values['intf'] = self.net.hosts[0].defaultIntf().name
+        config_values['pid_file'] = host.pid_file
         host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
         host.cmd('cp -r /gasket-src %s/' % self.tmpdir)
 
@@ -308,31 +288,15 @@ eapol_flags=0
         faucet_acl = self.tmpdir + '/faucet-acl.yaml'
         base = self.tmpdir + '/base-acls.yaml'
 
-        host.cmd('python3.5 {0}/gasket-src/faucet/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
+        host.cmd('python3.5 {0}/gasket-src/gasket/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
 
         pid = int(open(host.pid_file, 'r').read())
-        open('%s/contr_pid' % self.tmpdir, 'w').write(str(pid))
         os.kill(pid, signal.SIGHUP)
         # send signal to faucet here. as we have just generated new acls. and it is already running.
 
-        host.cmd('python3.5 {0}/gasket-src/faucet/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
+        host.cmd('python3.5 {0}/gasket-src/gasket/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
         print 'authentication controller app started'
         self.pids['auth_server'] = host.lastPid
-
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i %s-eth0' % host.name,
-            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
-            '>/dev/null',
-            '2>/dev/null',
-        ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-
-        self.pids['tcpdump'] = host.lastPid
 
         print 'Controller started.'
 
@@ -362,8 +326,12 @@ logger_stdout_level=0\n
 ieee8021x=1\n
 eap_reauth_period=3600\n
 use_pae_group_addr=0\n
-eap_server=1\n
-eap_user_file={1}/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir, ctrl_iface_dir, intf))
+auth_server_addr=127.0.0.1
+auth_server_port=1812
+auth_server_shared_secret=SECRET
+
+radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(host.name, self.tmpdir, ctrl_iface_dir, intf))
+
         hostapd_config_cmd = hostapd_config_cmd + ' {0}/{1}-wired.conf'.format(self.tmpdir, host.name)
 #            host.cmdPrint('ip link add link {0}-eth0 name {0}-eth0.{1} type vlan id {1}'.format(host.name, vlan_id))
 #            host.cmd('ip link set {0}-eth0.{1} up'.format(host.name, vlan_id))
@@ -376,41 +344,25 @@ eap_user_file={1}/hostapd.eap_user\n" > {1}/{0}-wired.conf'''.format(host.name, 
         self.create_hostapd_users_file(self.max_hosts)
 
         # start hostapd
-        host.cmd('hostapd -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
+        host.cmd('hostapd -t -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
         self.pids['hostapd'] = host.lastPid
         
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i %s-eth1' % host.name,
-            '-w %s/%s-eth1.cap' % (self.tmpdir, host.name),
-            '>/dev/null',
-            '2>/dev/null',
-        ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['p1-tcpdump'] = host.lastPid
-
-        tcpdump_args = ' '.join((
-            '-s 0',
-            '-e',
-            '-n',
-            '-U',
-            '-q',
-            '-i %s-eth0' % host.name,
-            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
-            '>/dev/null',
-            '2>/dev/null',
-        ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['p0-tcpdump'] = host.lastPid
-
         # TODO is this still required?
         host.cmd('ping -i 0.1 10.0.0.2 &')
         self.pids['p0-ping'] = host.lastPid
 
+    def run_freeradius(self, host):
+        host.cmd('freeradius -xx -i 127.0.0.1 -p 1812 -l %s/radius.log' % (self.tmpdir))
+        self.pids['freeradius'] = host.lastPid
+
+    def run_internet(self, host):
+        host.cmd('echo "This is a text file on a webserver" > index.txt')
+        self.ws_port = faucet_mininet_test_util.find_free_port(
+            self.ports_sock, self._test_name())
+
+        host.cmd('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
+
+        self.start_dhcp_server(host, gw='10.0.0.2', dns='8.8.8.8')
 
     def make_dhcp_config(self, filename, intf, gw, dns):
         """Create configuration file for udhcpd.
@@ -452,26 +404,48 @@ option  lease   300  # seconds
         host.cmd('udhcpd -f', dhcp_config,
                  '> %s/%s-dhcp.log 2>&1  &' % (self.tmpdir, host))
 
+    def start_tcpdump(self, host, interface=None, direction=None, expr=None, netns=None):
+        if direction is None:
+            direction = 'inout'
+        if expr is None:
+            expr = ''
+
+        if interface is None:
+            interface = '%s-eth0' % host.name
+            filename = '%s-%s.pcap' % (interface, direction)
+        elif isinstance(interface, Intf):        
+            if interface.name.startswith(host.name):
+                filename = '%s-%s.pcap' % (interface, direction)
+            else:
+                filename = '%s-%s-%s.pcap' % (host.name, interface, direction)
+        else:
+            filename = '%s-%s-%s.pcap' % (host.name, interface, direction)
+
         tcpdump_args = ' '.join((
             '-s 0',
             '-e',
             '-n',
             '-U',
             '-q',
-            '-i %s-eth0' % host.name,
-            '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
+            '-Q %s' % direction,
+            '-i %s' % interface,
+            '-w %s/%s' % (self.tmpdir, filename),
+            expr,
             '>/dev/null',
             '2>/dev/null',
         ))
-        host.cmd('tcpdump %s &' % tcpdump_args)
-        self.pids['i-tcpdump'] = host.lastPid
 
+        if netns:
+            host.cmd('ip netns exec %s %s' %(netns, cmd))
+        else:
+            host.cmd('tcpdump %s &' % tcpdump_args)
+        self.pids['tcpdump-%s-%s-%s' % (host.name, interface, direction)] = host.lastPid
 
     def setup(self):
-        super(FaucetAuthenticationTest, self).setUp()
+        super(GasketTest, self).setUp()
 
 
-class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
+class GasketSingleSwitchTest(GasketTest):
     """Base Test class for single switch topology
     """
     ws_port = 0
@@ -486,7 +460,7 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED + N_TAGGED)
 
     def setUp(self):
-        super(FaucetAuthenticationSingleSwitchTest, self).setUp()
+        super(GasketSingleSwitchTest, self).setUp()
        
         self.topo = self.topo_class(
             self.ports_sock, self._test_name(), dpids=[self.dpid], n_tagged=self.N_TAGGED, n_untagged=self.N_UNTAGGED)
@@ -502,9 +476,6 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
         """
         # pylint: disable=unbalanced-tuple-unpacking
         portal, interweb = self.net.hosts[:2]
-        # pylint: disable=no-member
-        pid = int(open(self.net.controller.pid_file, 'r').read())
-        self.net.controller.cmd('echo {} > {}/contr_pid'.format(pid, self.tmpdir))
 
         # pylint: disable=no-member
         contr_num = int(self.net.controller.name.split('-')[1]) % 255
@@ -515,25 +486,25 @@ class FaucetAuthenticationSingleSwitchTest(FaucetAuthenticationTest):
             params1={'ip': '192.168.%s.2/24' % contr_num},
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
+        # TODO why is this commented out?
 #        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
+
+        self.start_tcpdump(self.net.controller)
+        self.start_tcpdump(portal, interface='%s-eth0' % portal.name)
+        self.start_tcpdump(portal, interface='%s-eth1' % portal.name)
+        self.start_tcpdump(portal, interface='lo', expr='udp port 1812 or udp port 1813')
+        self.start_tcpdump(interweb)
+
         self.run_hostapd(portal)
+        self.run_freeradius(portal)
         self.run_controller(self.net.controller)
-
-        interweb.cmd('echo "This is a text file on a webserver" > index.txt')
-        self.ws_port = faucet_mininet_test_util.find_free_port(
-            self.ports_sock, self._test_name())
-
-        interweb.cmd('python -m SimpleHTTPServer {0} &'.format(self.ws_port))
+        self.run_internet(interweb)
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
 
-        self.start_dhcp_server(interweb, gw='10.0.0.2', dns='8.8.8.8')
 
-
-
-
-class FaucetAuthMultiHostDiffPortTest(FaucetAuthenticationSingleSwitchTest):
+class GasketMultiHostDiffPortTest(GasketSingleSwitchTest):
     """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
 
     def ping_between_hosts(self, users):
@@ -589,13 +560,13 @@ class FaucetAuthMultiHostDiffPortTest(FaucetAuthenticationSingleSwitchTest):
         self.one_ipv4_ping(h0, '10.0.0.2')
 
 
-class FaucetAuthMultiHostPerPortTest(FaucetAuthenticationSingleSwitchTest):
+class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
     """
     mac_interfaces = {} # {'1': intefcae}
     max_vlan_hosts = 2
     def setUp(self):
-        super(FaucetAuthMultiHostPerPortTest, self).setUp()
+        super(GasketMultiHostPerPortTest, self).setUp()
         h0 = self.clients[0]
 
         for i in range(self.max_vlan_hosts):
@@ -635,7 +606,7 @@ class FaucetAuthMultiHostPerPortTest(FaucetAuthenticationSingleSwitchTest):
         for mac_intf in list(self.mac_interfaces.values()):
             netns = mac_intf + 'ns'
             h0.cmd('ip netns del %s' % netns)
-        super(FaucetAuthMultiHostPerPortTest, self).tearDown()
+        super(GasketMultiHostPerPortTest, self).tearDown()
 
     def get_macvlan_ip(self, h, intf):
         '''Get the IP address of a macvlan that is in an netns
@@ -647,7 +618,7 @@ class FaucetAuthMultiHostPerPortTest(FaucetAuthenticationSingleSwitchTest):
 
 
 #@unittest.skip('broken.')
-class FaucetAuthTwoHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
+class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 2
 
@@ -678,7 +649,7 @@ class FaucetAuthTwoHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-class FaucetAuthMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
+class GasketMultiHostsTest(GasketSingleSwitchTest):
 
     def test_multi_hosts_sequential(self):
         """Log X different users on on the different ports sequentially (each should complete before the next starts).
@@ -788,7 +759,7 @@ class FaucetAuthMultiHostsTest(FaucetAuthenticationSingleSwitchTest):
                         self.fail_ping_ipv4(h, interweb.IP(), retries=5)
 
 
-class FaucetAuthTenHostsTest(FaucetAuthMultiHostsTest):
+class GasketTenHostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 12
     max_hosts = N_UNTAGGED - 2
 
@@ -799,7 +770,7 @@ class FaucetAuthTenHostsTest(FaucetAuthMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetAuthTwentyHostsTest(FaucetAuthMultiHostsTest):
+class GasketTwentyHostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -810,7 +781,7 @@ class FaucetAuthTwentyHostsTest(FaucetAuthMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetAuth14HostsTest(FaucetAuthMultiHostsTest):
+class Gasket14HostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 16
     max_hosts = N_UNTAGGED - 2
 
@@ -821,7 +792,7 @@ class FaucetAuth14HostsTest(FaucetAuthMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class FaucetAuthTenHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
+class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
@@ -890,7 +861,7 @@ class FaucetAuthTenHostsPerPortTest(FaucetAuthMultiHostPerPortTest):
         self.assertTrue(passed)
 
 
-class FaucetAuthNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
+class GasketNoLogOnTest(GasketSingleSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
@@ -927,7 +898,7 @@ class FaucetAuthNoLogOnTest(FaucetAuthenticationSingleSwitchTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class FaucetAuthDot1XLogonAndLogoffTest(FaucetAuthenticationSingleSwitchTest):
+class GasketDot1XLogonAndLogoffTest(GasketSingleSwitchTest):
     """Log on using dot1x and log off"""
 
     def test_logoff(self):
@@ -952,7 +923,7 @@ class FaucetAuthDot1XLogonAndLogoffTest(FaucetAuthenticationSingleSwitchTest):
         self.one_ipv4_ping(h0, interweb.IP())
 
 
-class FaucetAuthDupLogonTest(FaucetAuthenticationSingleSwitchTest):
+class GasketDupLogonTest(GasketSingleSwitchTest):
     """Tests various username and MAC address combinations that may or may not result in
     the configuration changing.
     """

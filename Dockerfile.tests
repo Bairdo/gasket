@@ -28,6 +28,7 @@ RUN \
     curl \
     dhcpcd5 \
     fping \
+    freeradius \
     gcc \
     git \
     haveged \
@@ -59,7 +60,14 @@ RUN \
     udhcpd \
     vlan \
     wget \
-    wpasupplicant
+    wpasupplicant && \
+  git clone https://github.com/openvswitch/ovs -b v${OVSV} && \
+  cd ovs && \
+  ./boot.sh && ./configure --enable-silent-rules && make -s V=0 install && \
+  cd .. && \
+  rm -rf ovs && \
+  $AG purge $OVSDEPS && \
+  $AG autoremove
 
 RUN \
   update-rc.d haveged defaults
@@ -89,17 +97,6 @@ RUN \
 RUN \
   ./setupproxy.sh && \
   $AG update && \
-  wget -q http://openvswitch.org/releases/openvswitch-$OVSV.tar.gz && \
-  tar xf openvswitch-$OVSV.tar.gz && \
-  cd openvswitch-$OVSV && \
-  ./boot.sh && ./configure --enable-silent-rules && make -s install && \
-  cd .. && \
-  rm -rf openvswitch-$OVSV*
-
-
-RUN \
-  ./setupproxy.sh && \
-  $AG update && \
   git clone https://github.com/Bairdo/hostapd-d1xf.git && \
   cd hostapd-d1xf/hostapd && \
   git checkout faucet-tests && \
@@ -119,9 +116,16 @@ RUN \
 RUN \
   cd pytype && git submodule init && git submodule update && python2 $SETUPQ install && cd .. && rm -rf pytype
 
+RUN \
+  ./setupproxy.sh && \
+  git clone https://github.com/faucetsdn/faucet.git /faucet-src&& \
+  $PIP3 /faucet-src
+
 ###
 ### To maximize Docker caching, try to keep invariant dependencies above this line.
 ###
+
+COPY ./tests/config/raddb /etc/freeradius
 
 COPY ./ /gasket-src/
 

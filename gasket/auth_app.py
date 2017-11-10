@@ -10,8 +10,6 @@ import logging
 import re
 import socket
 
-from valve_util import get_logger
-import config_parser_util
 from auth_config import AuthConfig
 import rule_manager
 import auth_app_utils
@@ -54,7 +52,7 @@ class AuthApp(object):
 
         config_filename = args.config
         self.config = AuthConfig(config_filename)
-        self.logger = get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
+        self.logger = auth_app_utils.get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
         self._init_sockets()
 
@@ -182,8 +180,6 @@ class AuthApp(object):
             self.hapd_req.disassociate(mac)
 
         success = self.rule_man.authenticate(user, mac, switchname, switchport, acl_list)
-
-        self.logger.error(config_parser_util.read_config(self.config.acl_config_file, self.logname))
 
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.

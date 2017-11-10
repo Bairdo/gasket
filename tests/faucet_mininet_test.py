@@ -41,7 +41,7 @@ from packaging import version
 import faucet_mininet_test_util
 
 # pylint: disable=wildcard-import
-from faucet_mininet_test_unit import *
+from gasket_mininet_test_unit import *
 
 # Only these hardware types will be tested with meters.
 SUPPORTS_METERS = (
@@ -51,6 +51,8 @@ SUPPORTS_METERS = (
 
 
 EXTERNAL_DEPENDENCIES = (
+#    ('pip', ['show', 'faucet'], 'faucet',
+#     r'Version:\s+(\d+\.\d+)\.\d+', "1.6.8"),
     ('ryu-manager', ['--version'],
      'ryu-manager', r'ryu-manager (\d+\.\d+)\n', "4.9"),
     ('ovs-vsctl', ['--version'], 'Open vSwitch',
@@ -66,8 +68,6 @@ EXTERNAL_DEPENDENCIES = (
      r'revision: (\d+\.\d+)\n', "4.86"),
     ('mn', ['--version'], r'\d+\.\d+.\d+',
      r'(\d+\.\d+).\d+', "2.2"),
-    ('pip', ['show', 'influxdb'], 'influxdb',
-     r'Version:\s+(\d+\.\d+)\.\d+', "3.0"),
     ('pylint', ['--version'], 'pylint',
      r'pylint (\d+\.\d+).\d+,', "1.6"),
     ('curl', ['--version'], 'libcurl',
@@ -332,7 +332,7 @@ def expand_tests(requested_test_classes, excluded_test_classes,
             continue
         if excluded_test_classes and test_name in excluded_test_classes:
             continue
-        if test_name.endswith('Test') and test_name.startswith('Faucet'):
+        if test_name.endswith('Test') and test_name.startswith('Gasket'):
             if not filter_test_hardware(test_obj, hw_config):
                 continue
             print('adding test %s' % test_name)
@@ -341,7 +341,7 @@ def expand_tests(requested_test_classes, excluded_test_classes,
             if test_name.startswith('FaucetSanity'):
                 sanity_test_suites.append(test_suite)
             else:
-                if serial or test_name.startswith('FaucetSingle'):
+                if serial or test_name.startswith('GasketSingle'):
                     single_test_suites.append(test_suite)
                 else:
                     parallel_test_suites.append(test_suite)

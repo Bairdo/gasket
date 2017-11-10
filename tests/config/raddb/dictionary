@@ -1,0 +1,10 @@
+$INCLUDE        /usr/share/freeradius/dictionary
+
+VENDOR          Faucet          12345
+BEGIN-VENDOR    Faucet
+    # this could perhaps be a comma seperated list of faucet-like acls to apply. Limited to 255 characters.
+    ATTRIBUTE       Faucet-ACL-ID       1       string
+    # put the authed mac on a certain vlan, maybe also have an option for tagged?
+    ATTRIBUTE       Faucet-VLAN         2       string
+END-VENDOR      Faucet
+

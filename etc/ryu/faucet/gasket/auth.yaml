@@ -10,7 +10,7 @@ faucet:
 files:
     # the location of files. pid should contain the process id (pid) of the main faucet-process (ryu-manager)
     #  should be obtainable with "ps aux | grep faucet.faucet | head -n1 awk '{print $2}' > /etc/ryu/faucet/contr_pid"
-    controller_pid: /etc/ryu/faucet/contr_pid
+    controller_pid: /var/run/faucet.pid
     faucet_config: /etc/ryu/faucet/faucet.yaml
     acl_config: /etc/ryu/faucet/faucet-acls.yaml
     base_config: /etc/ryu/faucet/auth/base-acls.yaml

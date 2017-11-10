@@ -71,9 +71,9 @@ class RuleGenerator(object):
                                         d["rule"] = r
                                         rules[portacl].append(d)
                                 else:
-                                    logger.warning('list of unrecognised objects')
-                                    logger.warning('child type: %s' % type(y))
-                                    logger.warning('list object: %s' % obj)
+                                    self.logger.warning('list of unrecognised objects')
+                                    self.logger.warning('child type: %s' % type(y))
+                                    self.logger.warning('list object: %s' % obj)
 
                         else:
                             self.logger.debug('obj is type %s', type(obj))

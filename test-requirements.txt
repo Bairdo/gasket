@@ -7,4 +7,4 @@ pytest-cov
 pyyaml
 requests
 ryu==4.19
-faucet
+#faucet==1.6.8
