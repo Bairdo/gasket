@@ -51,6 +51,8 @@ SUPPORTS_METERS = (
 
 
 EXTERNAL_DEPENDENCIES = (
+#    ('pip', ['show', 'faucet'], 'faucet',
+#     r'Version:\s+(\d+\.\d+)\.\d+', "1.6.8"),
     ('ryu-manager', ['--version'],
      'ryu-manager', r'ryu-manager (\d+\.\d+)\n', "4.9"),
     ('ovs-vsctl', ['--version'], 'Open vSwitch',
@@ -66,8 +68,6 @@ EXTERNAL_DEPENDENCIES = (
      r'revision: (\d+\.\d+)\n', "4.86"),
     ('mn', ['--version'], r'\d+\.\d+.\d+',
      r'(\d+\.\d+).\d+', "2.2"),
-    ('pip', ['show', 'influxdb'], 'influxdb',
-     r'Version:\s+(\d+\.\d+)\.\d+', "3.0"),
     ('pylint', ['--version'], 'pylint',
      r'pylint (\d+\.\d+).\d+,', "1.6"),
     ('curl', ['--version'], 'libcurl',
