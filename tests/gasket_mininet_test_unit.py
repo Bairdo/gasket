@@ -123,9 +123,9 @@ eapol_flags=0
 
         start_reload_count = self.get_configure_count()
 
-        cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf -t -f {0}/wpa-{1}.log &".format(self.tmpdir, intf)
+        cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf -t -d > {0}/wpa_supp-{1}.log 2>&1 &".format(self.tmpdir, intf)
         if netns is None:
-            host.cmd(cmd)
+            host.cmdPrint(cmd)
         else:
             host.cmdPrint('ip netns exec %s %s' %(netns , cmd))
         self.pids['wpa_supplicant-%s-%s' % (host.name, intf)] = host.lastPid
@@ -139,15 +139,15 @@ eapol_flags=0
                 if not wait:
                     print('not waiting')
                     break
-            elif new_status == 'HELD':
+            elif new_status == 'HELD' or new_status == 'FAILURE':
                 print('logging attemot failed. trying again')
                 host.cmdPrint('wpa_cli -i %s logon' % intf)
             elif 'AUTHENTICATED' != new_status:
                 break
             time.sleep(1)
-            print('login attempt failed. trying again.')
-            new_status = host.cmd('wpa_cli -i %s status' % intf)
-            print(new_status)
+            print(host.name, 'login attempt failed. trying again.')
+            new_status = self.wpa_cli_status(host, intf=intf)
+            print(host.name, new_status)
         cmds = ["ip addr flush %s" % intf, "dhcpcd --timeout 60 %s" % intf]
         for cmd in cmds:
             if netns is None:
@@ -186,7 +186,7 @@ eapol_flags=0
         if intf is None:
             intf = host.defaultIntf()
         start_reload_count = self.get_configure_count()
-        old_status = host.cmd('wpa_cli -i %s status' % intf)
+        old_status = self.wpa_cli_status(host, intf=intf)
         host.cmdPrint('wpa_cli -i %s logon > %s/wpa_cli-%s.log 2>&1' % (intf, self.tmpdir, host.name))
 
         new_status = self.wpa_cli_status(host, intf)
@@ -360,22 +360,24 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
             dns (str): ip address of dns server
         """
         dns_template = """
-start       10.0.0.20
-end     10.0.0.250
-option  subnet  255.255.255.0
-option  domain  local
-option  lease   300  # seconds
-"""
+default-lease-time 600;
+max-lease-time 7200;
+option subnet-mask 255.255.255.0;
+option broadcast-address 10.0.0.255;
+option routers %s;
+option domain-name-servers %s;
 
-        # Create a DHCP configuration file
-        config = (
-            'interface %s' % intf,
-            dns_template,
-            'option router %s' % gw,
-            'option dns %s' % dns,
-            '')
+
+subnet 10.0.0.0 netmask 255.255.255.0 {
+        range 10.0.0.20 10.0.0.250;
+        } 
+""" % (gw, dns)
+# default listening interface is eth0
+
+#            'interface %s' % intf,
+
         with open(filename, 'w') as f:
-            f.write('\n'.join(config))
+            f.write(dns_template)
 
     def start_dhcp_server(self, host, gw, dns):
         """Start DHCP server (udhcp) on host with specified DNS server
@@ -388,7 +390,9 @@ option  lease   300  # seconds
         print('* Starting DHCP server on', host, 'at', host.IP(), '\n')
         dhcp_config = '/tmp/%s-udhcpd.conf' % host
         self.make_dhcp_config(dhcp_config, host.defaultIntf(), gw, dns)
-        host.cmd('udhcpd -f', dhcp_config,
+        host.cmd('touch %s/dhcp.leases' % self.tmpdir)
+        host.cmd('dhcpd -d -cf ', dhcp_config, ' ',  host.defaultIntf(),
+                ' -lf %s/dhcp.leases' % self.tmpdir,
                  '> %s/%s-dhcp.log 2>&1  &' % (self.tmpdir, host))
 
     def start_tcpdump(self, host, interface=None, direction=None, expr=None, netns=None):
@@ -474,7 +478,7 @@ class GasketSingleSwitchTest(GasketTest):
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
         # TODO why is this commented out?
-#        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
+        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
 
         self.start_tcpdump(self.net.controller)
         self.start_tcpdump(portal, interface='%s-eth0' % portal.name)
@@ -682,17 +686,19 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
         try:
             self.logon_dot1x(host)
             q = 1
-            self.one_ipv4_ping(host, interweb.IP(), retries=20)
+            self.one_ipv4_ping(host, interweb.IP(), retries=15)
             q = 2
             print('%s on' % host.name)
             self.logoff_dot1x(host)
             q = 3
-            self.fail_ping_ipv4(host, interweb.IP())
+            # TODO do we want to reduce this retry count (effectivley giving us 5 seconds to stop the hosts traffic)?
+            # as close to 0 as possible should be the goal.
+            self.fail_ping_ipv4(host, interweb.IP(), retries=15)
             q = 4
             print('%s off' % host.name)
             self.relogon_dot1x(host)
             q = 5
-            self.one_ipv4_ping(host, interweb.IP(), retries=20)
+            self.one_ipv4_ping(host, interweb.IP(), retries=15)
             q = 6 
             print('%s reon' % host.name)
             return (q, '')
@@ -706,7 +712,7 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
         Then log them all off, and back on again.
         """
         failures = {}
-        with futures.ThreadPoolExecutor(max_workers=2) as executor:
+        with futures.ThreadPoolExecutor(max_workers=self.max_hosts) as executor:
             future_to_times = dict ((executor.submit(self.logon_logoff, i), i) for i in self.clients)
 
             for future in futures.as_completed(future_to_times):
