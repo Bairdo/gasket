@@ -126,29 +126,6 @@ RUN \
 ### To maximize Docker caching, try to keep invariant dependencies above this line.
 ###
 
-RUN \
-  ./setupproxy.sh && \
-  $AG update && \
-  $AG install -y pkg-config
-
-RUN \
-  ./setupproxy.sh && \
-  $AG update && \
-  $AG install -y libnl-genl-3-dev libnl-3-dev
-
-
-RUN \
-  ./setupproxy.sh && \
-  $AG remove -y wpasupplicant && \
-  $AG install -y libnl-3-dev && \
-  wget https://w1.fi/releases/wpa_supplicant-2.6.tar.gz && \
-  tar -xzf wpa_supplicant-2.6.tar.gz && \
-  cd wpa_supplicant-2.6/wpa_supplicant && \
-  cp defconfig .config && \
-  echo 'CONFIG_LIBNL32=y' >> .config && \
-  make && cp wpa_cli wpa_supplicant /usr/local/bin
-
-
 COPY ./tests/config/raddb /etc/freeradius
 
 COPY ./ /gasket-src/
