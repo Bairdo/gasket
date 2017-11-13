@@ -691,7 +691,7 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
             print('%s on' % host.name)
             self.logoff_dot1x(host)
             q = 3
-            # TODO do we want to reduce this retry count (effectivley giving us 5 seconds to stop the hosts traffic)?
+            # TODO do we want to reduce this retry count (effectivley giving us 15 seconds to stop the hosts traffic)?
             # as close to 0 as possible should be the goal.
             self.fail_ping_ipv4(host, interweb.IP(), retries=15)
             q = 4
