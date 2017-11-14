@@ -103,9 +103,11 @@ eapol_flags=0
 
         host.cmd('wpa_cli -i %s logoff' % intf)
         if wait:
-            time.sleep(5)
-            end_reload_count = self.get_configure_count()
-
+            for i in range(60):
+                end_reload_count = self.get_configure_count()
+                if end_reload_count > start_reload_count:
+                    break
+                time.sleep(0.1)
             self.assertGreater(end_reload_count, start_reload_count)
 
     def logon_dot1x(self, host, intf=None, netns=None, wait=True):
@@ -655,7 +657,7 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
             q = 3
             # TODO do we want to reduce this retry count (effectivley giving us 15 seconds to stop the hosts traffic)?
             # as close to 0 as possible should be the goal.
-            self.fail_ping_ipv4(host, interweb.IP(), retries=45)
+            self.fail_ping_ipv4(host, interweb.IP(), retries=60)
             q = 4
             print('%s off' % host.name)
             self.relogon_dot1x(host)
