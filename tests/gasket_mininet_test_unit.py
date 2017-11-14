@@ -640,45 +640,7 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-
-
 class GasketMultiHostsTest(GasketSingleSwitchTest):
-    @unittest.skip('lazy')
-    def test_multi_hosts_sequential(self):
-        """Log X different users on on the different ports sequentially (each should complete before the next starts).
-        Then Log them all off. Then back on again.
-        """
-        interweb = self.net.hosts[1]
-
-        # get each intf going.
-        for host in self.clients:
-            self.logon_dot1x(host)
-            self.one_ipv4_ping(host, interweb.IP(), retries=10)
-        print('first logons complete')
-
-        for host in self.clients:
-            self.logoff_dot1x(host)
-            self.fail_ping_ipv4(host, interweb.IP())
-        print('logoffs complete')
-
-        for host in self.clients:
-            self.relogon_dot1x(host)
-        print('relogons complete')
-
-
-        passed = False
-        for i in range(9):
-            try:
-                for host in self.clients:
-                    print('ping after relogin')
-                    self.one_ipv4_ping(host, interweb.IP(), retries=1)
-                # if it makes it to here all pings have succeeded.
-                passed = True
-                break
-            except AssertionError as e:
-                print(e)
-                print('try ping again')
-        self.assertTrue(passed)
     
     def logon_logoff(self, host):
         interweb = self.net.hosts[1]
@@ -722,47 +684,14 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
                 print(h)
         self.assertEqual(len(failures), 0, 'the following hosts failed at stages: %s' % failures)
 
-    @unittest.skip('currently broken')
+    @unittest.skip('not implemented')
     def test_multi_hosts_random_parallel(self):
         """Log X different users on and off randomly on different ports in parallel.
         """
-        # How do we check if the host has successfully logged on or not?
-        host_status = {}
-        for i in range(5):
-            for h in self.clients:
-                status = self.wpa_cli_status(h)
-                r = random.random() 
-                if status == 'AUTHENTICATED':
-                    # should we logoff?
-                    if r <= 0.5:
-                        self.logoff_dot1x(h, wait=False)
-                        host_status[h.name] = 'logoff'
-                elif status == 'LOGOFF':
-                    # should we logon?
-                    if r <= 0.5:
-                        self.relogon_dot1x(h, wait=False)
-                        host_status[h.name] = 'logon'
-                elif status == 'CONNECTING':
-                    pass
-                elif status == None:
-                    # first time?
-                    if r <= 0.5:
-                        self.logon_dot1x(h, wait=False)
-                        host_status[h.name] = 'logon'
-                else:
-                    # do not know how to handle the status.
-                    self.assertIsNotNone(status)
-                    self.assertIsNone(status)
-            if i == 1 or i == 3 or i == 4:
-                for h in self.clients:
-                    # dhcp completed?
-                    h.defualtIntf().updateIP()
-                    if host_status[h.name] == 'logon':
-                        # this in effect gives >5 seconds for the logon to occur
-                        self.one_ipv4_ping(h, interweb.IP(), retries=5)
-                    elif host_status[h.name] == 'logoff':
-                        # this has the effect of giving >5 seconds for logoff to occur.
-                        self.fail_ping_ipv4(h, interweb.IP(), retries=5)
+        # TODO implement.
+        # Take a similar appraoch to test_multi_hosts_parallel's ThreadPool.
+        # But have the job function randomise weather a host is going to log on, off, or do nothing.
+        # Repaat that for each host a number of times.
 
 
 class GasketSingleTenHostsTest(GasketMultiHostsTest):
