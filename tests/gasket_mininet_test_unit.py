@@ -650,19 +650,19 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
         try:
             self.logon_dot1x(host)
             q = 1
-            self.one_ipv4_ping(host, interweb.IP(), retries=20, print_flag=False)
+            self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
             q = 2
             print('%s on' % host.name)
             self.logoff_dot1x(host, wait=False)
             q = 3
             # TODO do we want to reduce this retry count (effectivley giving us 15 seconds to stop the hosts traffic)?
             # as close to 0 as possible should be the goal.
-            self.fail_ping_ipv4(host, interweb.IP(), retries=60, print_flag=False)
+            self.fail_ping_ipv4(host, interweb.IP(), retries=self.LOGOFF_RETRIES, print_flag=False)
             q = 4
             print('%s off' % host.name)
             self.relogon_dot1x(host)
             q = 5
-            self.one_ipv4_ping(host, interweb.IP(), retries=10, print_flag=False)
+            self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
             q = 6 
             print('%s reon' % host.name)
             return (q, '')
@@ -706,6 +706,9 @@ class GasketSingleTenHostsTest(GasketMultiHostsTest):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
+    LOGON_RETRIES = 10
+    LOGOFF_RETRIES = 10
+
 
 class GasketSingleTwentyHostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 22
@@ -717,6 +720,9 @@ class GasketSingleTwentyHostsTest(GasketMultiHostsTest):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
+    LOGON_RETRIES = 20
+    LOGOFF_RETRIES = 60
+
 
 class GasketSingle14HostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 16
@@ -727,6 +733,23 @@ class GasketSingle14HostsTest(GasketMultiHostsTest):
     CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
+
+    LOGON_RETRIES = 10
+    LOGOFF_RETRIES = 40
+
+
+class GasketSingleTwoHostsTest(GasketMultiHostsTest):
+    N_UNTAGGED = 4
+    max_hosts = N_UNTAGGED - 2
+
+    CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
+    CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
+
+    port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
+
+    LOGON_RETRIES = 5
+    LOGOFF_RETRIES = 10
 
 
 class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
@@ -821,31 +844,6 @@ class GasketNoLogOnTest(GasketSingleSwitchTest):
 
         ploss = self.net.ping(hosts=users, timeout='5')
         self.assertAlmostEqual(ploss, 100)
-
-
-class GasketDot1XLogonAndLogoffTest(GasketSingleSwitchTest):
-    """Log on using dot1x and log off"""
-
-    def test_logoff(self):
-        """Check that the user cannot go on the internet after logoff"""
-        h0 = self.clients[0]
-        interweb = self.net.hosts[1]
-
-        self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
-        result = self.check_http_connection(h0)
-        self.assertTrue(result)
-
-        self.logoff_dot1x(h0)
-        # TODO possibly poll wpa_cli status to check that the status has changed?
-        #  instead of a sleep??
-
-        self.fail_ping_ipv4(h0, '10.0.0.2')
-        result = self.check_http_connection(h0)
-        self.assertFalse(result)
-
-        self.relogon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
 
 
 class GasketDupLogonTest(GasketSingleSwitchTest):
