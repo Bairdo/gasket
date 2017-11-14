@@ -1246,26 +1246,27 @@ dbs:
         self.assertEqual(
             '', results, msg='%s: %s' % (add_cmd, results))
 
-    def _one_ip_ping(self, host, ping_cmd, retries, require_host_learned):
+    def _one_ip_ping(self, host, ping_cmd, retries, require_host_learned, print_flag=True):
         if require_host_learned:
             self.require_host_learned(host)
         for _ in range(retries):
             ping_result = host.cmd(ping_cmd)
-            print(ping_result)
+            if print_flag:
+                print(ping_result)
             if re.search(self.ONE_GOOD_PING, ping_result):
                 return
         self.assertTrue(
             re.search(self.ONE_GOOD_PING, ping_result),
             msg='%s: %s' % (ping_cmd, ping_result))
 
-    def one_ipv4_ping(self, host, dst, retries=3, require_host_learned=True, intf=None, netns=None):
+    def one_ipv4_ping(self, host, dst, retries=3, require_host_learned=True, intf=None, netns=Nonei, print_flag=True):
         """Ping an IPv4 destination from a host."""
         if intf is None:
             intf = host.defaultIntf()
         ping_cmd = 'ping -c1 -I%s %s' % (intf, dst)
         if netns is not None:
             ping_cmd = 'ip netns exec %s %s' % (netns, ping_cmd)
-        return self._one_ip_ping(host, ping_cmd, retries, require_host_learned)
+        return self._one_ip_ping(host, ping_cmd, retries, require_host_learned, print_flag=print_flag)
 
     def one_ipv4_controller_ping(self, host):
         """Ping the controller from a host with IPv4."""

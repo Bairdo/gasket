@@ -234,7 +234,7 @@ eapol_flags=0
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.\nOld Status: %s' % (host, intf, host.MAC(), new_status, old_status))
             self.assertLess(i, 3, 'relogon has taken %d to reload. max allowable time 1.5seconds' % i)
 
-    def fail_ping_ipv4(self, host, dst, retries=1, intf=None, netns=None):
+    def fail_ping_ipv4(self, host, dst, retries=1, intf=None, netns=None, print_flag=True):
         """Try to ping to a destination from a host.
         Args:
             host (mininet.host): source host.
@@ -244,7 +244,7 @@ eapol_flags=0
         """
         for i in range(retries):
             try:
-                self.one_ipv4_ping(host, dst, retries=1, require_host_learned=False, intf=intf, netns=netns)
+                self.one_ipv4_ping(host, dst, retries=1, require_host_learned=False, intf=intf, netns=netns, print_flag=print_flag)
             except AssertionError:
                 return
             time.sleep(1)
@@ -650,19 +650,19 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
         try:
             self.logon_dot1x(host)
             q = 1
-            self.one_ipv4_ping(host, interweb.IP(), retries=20)
+            self.one_ipv4_ping(host, interweb.IP(), retries=20, print_flag=False)
             q = 2
             print('%s on' % host.name)
-            self.logoff_dot1x(host)
+            self.logoff_dot1x(host, wait=False)
             q = 3
             # TODO do we want to reduce this retry count (effectivley giving us 15 seconds to stop the hosts traffic)?
             # as close to 0 as possible should be the goal.
-            self.fail_ping_ipv4(host, interweb.IP(), retries=60)
+            self.fail_ping_ipv4(host, interweb.IP(), retries=60, print_flag=False)
             q = 4
             print('%s off' % host.name)
             self.relogon_dot1x(host)
             q = 5
-            self.one_ipv4_ping(host, interweb.IP(), retries=10)
+            self.one_ipv4_ping(host, interweb.IP(), retries=10, print_flag=False)
             q = 6 
             print('%s reon' % host.name)
             return (q, '')
