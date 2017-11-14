@@ -1259,7 +1259,7 @@ dbs:
             re.search(self.ONE_GOOD_PING, ping_result),
             msg='%s: %s' % (ping_cmd, ping_result))
 
-    def one_ipv4_ping(self, host, dst, retries=3, require_host_learned=True, intf=None, netns=Nonei, print_flag=True):
+    def one_ipv4_ping(self, host, dst, retries=3, require_host_learned=True, intf=None, netns=None, print_flag=True):
         """Ping an IPv4 destination from a host."""
         if intf is None:
             intf = host.defaultIntf()
