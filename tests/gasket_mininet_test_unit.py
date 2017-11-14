@@ -706,7 +706,6 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
             print("Error during method logon_logoff:\n{}".format(e))
             return (q, e)
 
-#    @unittest.skip('currently broken')
     def test_multi_hosts_parallel(self):
         """Log X different users on on different ports in parallel.
         Then log them all off, and back on again.
@@ -766,7 +765,7 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
                         self.fail_ping_ipv4(h, interweb.IP(), retries=5)
 
 
-class GasketTenHostsTest(GasketMultiHostsTest):
+class GasketSingleTenHostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 12
     max_hosts = N_UNTAGGED - 2
 
@@ -777,7 +776,7 @@ class GasketTenHostsTest(GasketMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class GasketTwentyHostsTest(GasketMultiHostsTest):
+class GasketSingleTwentyHostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -788,7 +787,7 @@ class GasketTwentyHostsTest(GasketMultiHostsTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-class Gasket14HostsTest(GasketMultiHostsTest):
+class GasketSingle14HostsTest(GasketMultiHostsTest):
     N_UNTAGGED = 16
     max_hosts = N_UNTAGGED - 2
 
