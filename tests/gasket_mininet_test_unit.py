@@ -107,7 +107,7 @@ eapol_flags=0
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
-                time.sleep(0.1)
+                time.sleep(0.25)
             self.assertGreater(end_reload_count, start_reload_count)
 
     def logon_dot1x(self, host, intf=None, netns=None, wait=True):
@@ -650,7 +650,7 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
         try:
             self.logon_dot1x(host)
             q = 1
-            self.one_ipv4_ping(host, interweb.IP(), retries=10)
+            self.one_ipv4_ping(host, interweb.IP(), retries=20)
             q = 2
             print('%s on' % host.name)
             self.logoff_dot1x(host)
@@ -821,7 +821,7 @@ class GasketNoLogOnTest(GasketSingleSwitchTest):
 
         ploss = self.net.ping(hosts=users, timeout='5')
         self.assertAlmostEqual(ploss, 100)
-        self.assertTrue(False, 'this test actually passes.')
+
 
 class GasketDot1XLogonAndLogoffTest(GasketSingleSwitchTest):
     """Log on using dot1x and log off"""
