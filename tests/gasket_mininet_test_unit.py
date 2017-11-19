@@ -642,7 +642,7 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-class GasketMultiHostsTest(GasketSingleSwitchTest):
+class GasketMultiHostsBase(GasketSingleSwitchTest):
     
     def logon_logoff(self, host):
         interweb = self.net.hosts[1]
@@ -696,7 +696,7 @@ class GasketMultiHostsTest(GasketSingleSwitchTest):
         # Repaat that for each host a number of times.
 
 
-class GasketSingleTenHostsTest(GasketMultiHostsTest):
+class GasketSingleTenHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 12
     max_hosts = N_UNTAGGED - 2
 
@@ -710,7 +710,7 @@ class GasketSingleTenHostsTest(GasketMultiHostsTest):
     LOGOFF_RETRIES = 15
 
 
-class GasketSingleTwentyHostsTest(GasketMultiHostsTest):
+class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -724,7 +724,7 @@ class GasketSingleTwentyHostsTest(GasketMultiHostsTest):
     LOGOFF_RETRIES = 60
 
 
-class GasketSingle14HostsTest(GasketMultiHostsTest):
+class GasketSingle14HostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 16
     max_hosts = N_UNTAGGED - 2
 
@@ -738,7 +738,7 @@ class GasketSingle14HostsTest(GasketMultiHostsTest):
     LOGOFF_RETRIES = 60
 
 
-class GasketSingleTwoHostsTest(GasketMultiHostsTest):
+class GasketSingleTwoHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 4
     max_hosts = N_UNTAGGED - 2
 
