@@ -846,7 +846,7 @@ class GasketNoLogOnTest(GasketSingleSwitchTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class GasketDupLogonTest(GasketSingleSwitchTest):
+class GasketSingleDupLogonTest(GasketSingleSwitchTest):
     """Tests various username and MAC address combinations that may or may not result in
     the configuration changing.
     """
@@ -890,7 +890,7 @@ class GasketDupLogonTest(GasketSingleSwitchTest):
                     self.assertFalse(True, 'test doesnt support rule type: %s. value: %s' % (type(obj),obj))
         return count
 
-    def test_same_user_same_mac_logon_2_same_port(self):
+    def test_same_user_mac_logon_2_same_port(self):
         """Tests that the same username and the same MAC logging onto the same port
         does not add to the base-config file on the second time.
         """
@@ -928,7 +928,7 @@ class GasketDupLogonTest(GasketSingleSwitchTest):
         self.assertTrue(end_base != None)
         self.assertTrue(start_base == end_base)
 
-    def test_same_user_same_mac_logon_2_diff_port(self):
+    def test_same_user_mac_logon_2_diff_port(self):
         """Tests that the same username and the same MAC address can logon on the different ports.
         The system is ambiguous in that the first port to authenticate may or may not be logged off,
         when the second start the authentication process. TODO need to clarify what correct behavoiur should be.
@@ -949,10 +949,10 @@ class GasketDupLogonTest(GasketSingleSwitchTest):
 
         # TODO 
         # self.one_ipv4_ping(h0, interweb.IP())
-        count = self.count_username_and_mac(h0.MAC(), 'hostuser1')
+        count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         self.assertGreaterEqual(count, 2)
 
-    def test_same_user_diff_mac_logon_2_diff_port(self):
+    def test_same_user_diff_mac_port_logon_2(self):
         """Tests that the same username with a different MAC address can logon on different ports.
         """
         h0, h1 = self.clients[0:2]
