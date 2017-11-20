@@ -560,7 +560,7 @@ eapol_flags=0
 
 
 #@unittest.skip('broken.')
-class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
+class GasketSingleTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 2
 
