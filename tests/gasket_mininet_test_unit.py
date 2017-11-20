@@ -6,6 +6,7 @@ These tests use the https://github.com/faucetsdn/faucet base test classes as the
 # pylint: disable=missing-docstring
 # pylint: disable=too-many-arguments
 
+from concurrent import futures
 import os
 import random
 import re
@@ -24,10 +25,6 @@ import faucet_mininet_test_base
 import faucet_mininet_test_util
 import faucet_mininet_test_topo
 
-from concurrent import futures
-
-
-from datetime import datetime
 
 class GasketTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the authentication tests """
@@ -377,9 +374,6 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         range 10.0.0.20 10.0.0.250;
         } 
 """ % (gw, dns)
-# default listening interface is eth0
-
-#            'interface %s' % intf,
 
         with open(filename, 'w') as f:
             f.write(dns_template)
@@ -576,12 +570,12 @@ class GasketSingleTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.assertTrue(result)
 
         mac_intf = self.mac_interfaces['1']
+        netns = mac_intf + 'ns'
+        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf, netns=netns)
 
-        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf, netns=mac_intf + 'ns')
+        self.logon_dot1x(h0, intf=mac_intf, netns=netns)
 
-        self.logon_dot1x(h0, intf=mac_intf, netns=mac_intf + 'ns')
-
-        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf, netns=mac_intf + 'ns')
+        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf, netns=netns)
 
         self.logoff_dot1x(h0)
         self.fail_ping_ipv4(h0, '10.0.0.2', retries=5)
@@ -597,29 +591,29 @@ class GasketMultiHostsBase(GasketSingleSwitchTest):
     
     def logon_logoff(self, host):
         interweb = self.net.hosts[1]
-        q = 0
+        error_point = 0
         try:
             self.logon_dot1x(host)
-            q = 1
+            error_point = 1
             self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
-            q = 2
+            error_point = 2
             print('%s on' % host.name)
             self.logoff_dot1x(host, wait=False)
-            q = 3
+            error_point = 3
             # TODO do we want to reduce this retry count (effectivley giving us 15 seconds to stop the hosts traffic)?
             # as close to 0 as possible should be the goal.
             self.fail_ping_ipv4(host, interweb.IP(), retries=self.LOGOFF_RETRIES, print_flag=False)
-            q = 4
+            error_point = 4
             print('%s off' % host.name)
             self.relogon_dot1x(host)
-            q = 5
+            error_point = 5
             self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
-            q = 6 
+            error_point = 6 
             print('%s reon' % host.name)
-            return (q, '')
+            return (error_point, '')
         except Exception as e:
             print("Error during method logon_logoff:\n{}".format(e))
-            return (q, e)
+            return (error_point, e)
 
     def test_multi_hosts_parallel(self):
         """Log X different users on on different ports in parallel.
@@ -632,9 +626,8 @@ class GasketMultiHostsBase(GasketSingleSwitchTest):
             for future in futures.as_completed(future_to_times):
                 if future.result()[0] < 6:
                     failures[future_to_times[future]] = future.result()
-                print(future.result())
                 h = future_to_times[future]
-                print(h)
+
         self.assertEqual(len(failures), 0, 'the following hosts failed at stages: %s' % failures)
 
     @unittest.skip('not implemented')
@@ -731,34 +724,32 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
         self.one_ipv4_ping(h1, interweb.IP(), retries=5)
         self.one_ipv4_ping(h0, h1.IP())
-        mac_intfs = self.mac_interfaces.values()
-
+        mac_intfs = { mac: mac + 'ns' for mac in self.mac_interfaces.values()}
+        
         # get each intf going.
-        for intf in mac_intfs:
-            netns = intf + 'ns'
+        for intf, netns in mac_intfs:
             self.logon_dot1x(h0, intf=intf, netns=netns)
             self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10, netns=netns)
         print('first logons complete')
 
-        for intf in mac_intfs:
-            self.logoff_dot1x(h0, intf=intf, netns=intf+'ns')
-            self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=intf+'ns')
+        for intf, netns in mac_intfs:
+            self.logoff_dot1x(h0, intf=intf, netns=netns)
+            self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=netns)
 
         print('logoffs complete')
         self.one_ipv4_ping(h0, interweb.IP())
 
-        for intf in mac_intfs[1:]:
+        for intf, netns in mac_intfs[1:]:
             self.relogon_dot1x(h0, intf=intf)
 
         print('relogons complete')
         self.one_ipv4_ping(h0, interweb.IP())
-        print(datetime.now())
         passed = False
         for i in range(9):
             try:
-                for intf in mac_intfs[1:]:
+                for intf, netns in mac_intfs[1:]:
                     print('ping after relogin')
-                    self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=1, netns=intf+'ns')
+                    self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=1, netns=netns)
                 # if it makes it to here all pings have succeeded.
                 passed = True
                 break
