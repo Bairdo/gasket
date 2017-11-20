@@ -95,13 +95,16 @@ eapol_flags=0
                 return host
         return None
 
-    def logoff_dot1x(self, host, intf=None, wait=True):
+    def logoff_dot1x(self, host, intf=None, netns=None, wait=True):
         if intf is None:
             intf = host.defaultIntf()
 
         start_reload_count = self.get_configure_count()
+        cmd = 'wpa_cli -i %s logoff' % intf
+        if netns is None:
+            cmd = 'ip netns exec %s %s' %(netns , cmd)
 
-        host.cmd('wpa_cli -i %s logoff' % intf)
+        host.cmd(cmd)
         if wait:
             for i in range(60):
                 end_reload_count = self.get_configure_count()
@@ -781,29 +784,27 @@ class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
         self.logon_dot1x(h2)
         self.logon_dot1x(h1)
         self.logon_dot1x(h0)
-
-        self.one_ipv4_ping(h0, h1.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.one_ipv4_ping(h0, h1.IP(), retries=5)
         mac_intfs = self.mac_interfaces.values()
 
         # get each intf going.
         for intf in mac_intfs:
             netns = intf + 'ns'
             self.logon_dot1x(h0, intf=intf, netns=netns)
-            macvlan_ip = self.get_macvlan_ip(h0, intf)
-            self.assertTrue(macvlan_ip != '')
-            self.assertTrue(macvlan_ip is not None)
-            self.one_ipv4_ping(h1, macvlan_ip, retries=10)
+            self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10, netns=netns)
         print('first logons complete')
 
         for intf in mac_intfs:
-            self.logoff_dot1x(h0, intf=intf)
-            macvlan_ip = self.get_macvlan_ip(h0, intf)
-            self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=intf+'ns')#macvlan_ip)
+            self.logoff_dot1x(h0, intf=intf, netns=intf+'ns')
+            self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=intf+'ns')
+
         print('logoffs complete')
         self.one_ipv4_ping(h0, interweb.IP())
 
         for intf in mac_intfs[1:]:
             self.relogon_dot1x(h0, intf=intf)
+
         print('relogons complete')
         self.one_ipv4_ping(h0, interweb.IP())
         print(datetime.now())
@@ -812,10 +813,7 @@ class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
             try:
                 for intf in mac_intfs[1:]:
                     print('ping after relogin')
-                    print(intf)
-                    macvlan_ip = self.get_macvlan_ip(h0, intf)
-                    print(macvlan_ip)
-                    self.one_ipv4_ping(h0, h2.IP(), intf=intf, retries=1, netns=intf+'ns')
+                    self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=1, netns=intf+'ns')
                 # if it makes it to here all pings have succeeded.
                 passed = True
                 break
