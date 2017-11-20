@@ -106,7 +106,7 @@ eapol_flags=0
 
         host.cmd(cmd)
         if wait:
-            for i in range(60):
+            for i in range(600):
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
@@ -500,62 +500,6 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
-
-
-class GasketMultiHostDiffPortTest(GasketSingleSwitchTest):
-    """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
-
-    def ping_between_hosts(self, users):
-        """Ping between the specified host
-        Args:
-            users (list<mininet.host>): users to ping between.
-                0 & 1 should be authenitcated.
-                2 should be unauthenticated,
-        """
-        for user in users:
-            user.defaultIntf().updateIP()
-
-        h0 = users[0]
-        h1 = users[1]
-        h2 = users[2]
-        h1_ip = ipaddress.ip_address(unicode(h1.IP()))
-        # h2 will not have an ip via dhcp as they are unauthenticated, so give them one.
-        h2.setIP('10.0.12.253')
-        h2_ip = ipaddress.ip_address(unicode(h2.IP()))
-        # ping between the authenticated hosts
-        self.one_ipv4_ping(h0, h1_ip)
-        self.one_ipv4_ping(h1, '10.0.0.2')
-
-        #ping between an authenticated host and an unauthenticated host
-        self.fail_ping_ipv4(h0, h2_ip)
-        self.fail_ping_ipv4(h1, h2_ip)
-
-        ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
-        self.assertAlmostEqual(ploss, 100)
-
-
-    def test_onlydot1x(self):
-        """Only authenticate through dot1x.
-        At first h0 will logon (only h0 can ping), then h1 will logon (both can ping), h1 will then logoff (h0 should still be logged on, h1 logged off)"""
-        h0 = self.clients[0]
-        h1 = self.clients[1]
-
-        self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, '10.0.0.2')
-
-        h1.setIP('10.0.0.10')
-
-        self.fail_ping_ipv4(h1, '10.0.0.2')
-
-        self.logon_dot1x(h1)
-        time.sleep(5)
-        self.ping_between_hosts(self.clients)
-
-        self.logoff_dot1x(h1)
-
-        self.fail_ping_ipv4(h1, h0.IP())
-        self.fail_ping_ipv4(h1, '10.0.0.2')
-        self.one_ipv4_ping(h0, '10.0.0.2')
 
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
