@@ -479,8 +479,10 @@ class GasketSingleSwitchTest(GasketTest):
             params1={'ip': '192.168.%s.2/24' % contr_num},
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
-        # TODO why is this commented out?
         portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
+        # do not allow the portal to forward ip packets. Otherwise packets redirected to the portal will be forwarded,
+        # and effectivley bypass the ACLs.
+        portal.cmdPrint("echo '0' > /proc/sys/net/ipv4/ip_forward")
 
         self.start_tcpdump(self.net.controller)
         self.start_tcpdump(portal, interface='%s-eth0' % portal.name)
@@ -556,7 +558,7 @@ class GasketMultiHostDiffPortTest(GasketSingleSwitchTest):
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
     """
-    mac_interfaces = {} # {'1': intefcae}
+    mac_interfaces = {} # {'1': inteface}
     max_vlan_hosts = 2
     def setUp(self):
         super(GasketMultiHostPerPortTest, self).setUp()
@@ -578,19 +580,19 @@ class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
             password = 'hostpass{}'.format(i)
 
             wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
-    ctrl_interface_group=0
-    eapol_version=2
-    ap_scan=0
-    network={
-    key_mgmt=IEEE8021X
-    eap=TTLS MD5
-    identity="%s"
-    anonymous_identity="%s"
-    password="%s"
-    phase1="auth=MD5"
-    phase2="auth=PAP password=password"
-    eapol_flags=0
-    }''' % (username, username, password)
+ctrl_interface_group=0
+eapol_version=2
+ap_scan=0
+network={
+key_mgmt=IEEE8021X
+eap=TTLS MD5
+identity="%s"
+anonymous_identity="%s"
+password="%s"
+phase1="auth=MD5"
+phase2="auth=PAP password=password"
+eapol_flags=0
+}''' % (username, username, password)
             h0.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, mac_intf))
 
     def tearDown(self):
@@ -616,6 +618,8 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
     max_vlan_hosts = 2
 
     def test_two_hosts_one_port(self):
+        '''user0 logs on/off with two devices (MACs) on the same port.
+        '''
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
 
@@ -626,14 +630,14 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
         mac_intf = self.mac_interfaces['1']
 
-        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf)
+        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf, netns=mac_intf + 'ns')
 
-        self.logon_dot1x(h0, intf=mac_intf)
+        self.logon_dot1x(h0, intf=mac_intf, netns=mac_intf + 'ns')
 
-        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf)
+        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf, netns=mac_intf + 'ns')
 
         self.logoff_dot1x(h0)
-        self.fail_ping_ipv4(h0, '10.0.0.2')
+        self.fail_ping_ipv4(h0, '10.0.0.2', retries=5)
 
         self.relogon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP())
