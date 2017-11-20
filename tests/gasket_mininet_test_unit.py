@@ -101,7 +101,7 @@ eapol_flags=0
 
         start_reload_count = self.get_configure_count()
         cmd = 'wpa_cli -i %s logoff' % intf
-        if netns is None:
+        if netns is not None:
             cmd = 'ip netns exec %s %s' %(netns , cmd)
 
         host.cmd(cmd)
