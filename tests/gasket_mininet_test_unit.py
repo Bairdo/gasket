@@ -785,7 +785,8 @@ class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
         self.logon_dot1x(h1)
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
-        self.one_ipv4_ping(h0, h1.IP(), retries=5)
+        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
+        self.one_ipv4_ping(h0, h1.IP())
         mac_intfs = self.mac_interfaces.values()
 
         # get each intf going.
