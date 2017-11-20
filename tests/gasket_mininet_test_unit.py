@@ -703,7 +703,7 @@ class GasketSingleTwoHostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 10
 
 
-class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
+class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
@@ -717,7 +717,7 @@ class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-    def test_ten_hosts_one_port_sequential(self):
+    def test_10_hosts_1_port_seq(self):
         """Log 10 different users on on the same port (using macvlans) sequentially (each should complete before the next starts).
         Then Log them all off. Then back on again. This takes a VERY LONG time to complete >15mins. 
         """
