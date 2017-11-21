@@ -650,7 +650,7 @@ class GasketSingleTenHostsTest(GasketMultiHostsBase):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
-    LOGON_RETRIES = 5
+    LOGON_RETRIES = 10
     LOGOFF_RETRIES = 15
 
 
@@ -664,7 +664,7 @@ class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
-    LOGON_RETRIES = 60
+    LOGON_RETRIES = 80
     LOGOFF_RETRIES = 60
 
 
@@ -678,7 +678,7 @@ class GasketSingle14HostsTest(GasketMultiHostsBase):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
-    LOGON_RETRIES = 10
+    LOGON_RETRIES = 20
     LOGOFF_RETRIES = 60
 
 
