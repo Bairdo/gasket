@@ -727,19 +727,19 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         mac_intfs = { mac: mac + 'ns' for mac in self.mac_interfaces.values()}
         
         # get each intf going.
-        for intf, netns in mac_intfs:
+        for intf, netns in mac_intfs.items():
             self.logon_dot1x(h0, intf=intf, netns=netns)
             self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10, netns=netns)
         print('first logons complete')
 
-        for intf, netns in mac_intfs:
+        for intf, netns in mac_intfs.items():
             self.logoff_dot1x(h0, intf=intf, netns=netns)
             self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=netns)
 
         print('logoffs complete')
         self.one_ipv4_ping(h0, interweb.IP())
 
-        for intf, netns in mac_intfs[1:]:
+        for intf, netns in mac_intfs.items():
             self.relogon_dot1x(h0, intf=intf)
 
         print('relogons complete')
@@ -747,7 +747,7 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         passed = False
         for i in range(9):
             try:
-                for intf, netns in mac_intfs[1:]:
+                for intf, netns in mac_intfs.items():
                     print('ping after relogin')
                     self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=1, netns=netns)
                 # if it makes it to here all pings have succeeded.
