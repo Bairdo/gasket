@@ -664,7 +664,7 @@ class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
-    LOGON_RETRIES = 30
+    LOGON_RETRIES = 60
     LOGOFF_RETRIES = 60
 
 
@@ -700,7 +700,7 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
-    N_UNTAGGED = 12
+    N_UNTAGGED = 5
     max_hosts = N_UNTAGGED - 2
 
     CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
@@ -723,7 +723,8 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
         self.one_ipv4_ping(h1, interweb.IP(), retries=5)
-        self.one_ipv4_ping(h0, h1.IP())
+        h1.intf().updateIP()
+        self.one_ipv4_ping(h0, h1.IP(), retries=10)
         mac_intfs = { mac: mac + 'ns' for mac in self.mac_interfaces.values()}
         
         # get each intf going.
