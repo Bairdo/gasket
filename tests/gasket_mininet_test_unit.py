@@ -837,7 +837,7 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         interweb = self.net.hosts[1]
 
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         # kill wpa_supplicant so we can attempt to logon again.
         h0.cmd('kill %d' % self.pids['wpa_supplicant-%s-%s' % (h0.name, h0.defaultIntf())])
@@ -876,7 +876,7 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         interweb = self.net.hosts[1]
 
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         h1.setMAC(h0.MAC())
 
@@ -884,7 +884,7 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
         self.logon_dot1x(h1)
-        self.one_ipv4_ping(h1, interweb.IP())
+        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
 
         # TODO 
         # self.one_ipv4_ping(h0, interweb.IP())
@@ -898,13 +898,13 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         interweb = self.net.hosts[1]
 
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         h1.cmd('sed -i -e s/hostuser1/hostuser0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
         self.logon_dot1x(h1)
-        self.one_ipv4_ping(h1, interweb.IP())
+        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
 
         h0_count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         h1_count = self.count_username_and_mac(h1.MAC(), 'hostuser0')
