@@ -910,3 +910,20 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         h1_count = self.count_username_and_mac(h1.MAC(), 'hostuser0')
         self.assertEqual(h0_count, 2)
         self.assertEqual(h1_count, 2)
+
+
+class GasketSingleLinkStateTest(GasketSingleSwitchTest):
+
+    def test_dp_link_down_up(self):
+
+        h0 = self.clients[0]
+        # log host on
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.set_port_down(3)
+        time.sleep(1)
+        self.set_port_up(3)
+        # check host cannot ping
+        self.fail_ping_ipv4(h0, interweb.ip(), retries=5)
+        self.relogon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
