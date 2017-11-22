@@ -6,6 +6,7 @@ These tests use the https://github.com/faucetsdn/faucet base test classes as the
 # pylint: disable=missing-docstring
 # pylint: disable=too-many-arguments
 
+from concurrent import futures
 import os
 import random
 import re
@@ -23,10 +24,6 @@ from mininet.link import Intf
 import faucet_mininet_test_base
 import faucet_mininet_test_util
 import faucet_mininet_test_topo
-
-from datetime import datetime
-
-from mininet.cli import CLI
 
 
 class GasketTest(faucet_mininet_test_base.FaucetTestBase):
@@ -95,17 +92,22 @@ eapol_flags=0
                 return host
         return None
 
-    def logoff_dot1x(self, host, intf=None, wait=True):
+    def logoff_dot1x(self, host, intf=None, netns=None, wait=True):
         if intf is None:
             intf = host.defaultIntf()
 
         start_reload_count = self.get_configure_count()
+        cmd = 'wpa_cli -i %s logoff' % intf
+        if netns is not None:
+            cmd = 'ip netns exec %s %s' %(netns , cmd)
 
-        host.cmd('wpa_cli -i %s logoff' % intf)
+        host.cmd(cmd)
         if wait:
-            time.sleep(5)
-            end_reload_count = self.get_configure_count()
-
+            for i in range(600):
+                end_reload_count = self.get_configure_count()
+                if end_reload_count > start_reload_count:
+                    break
+                time.sleep(0.25)
             self.assertGreater(end_reload_count, start_reload_count)
 
     def logon_dot1x(self, host, intf=None, netns=None, wait=True):
@@ -123,9 +125,9 @@ eapol_flags=0
 
         start_reload_count = self.get_configure_count()
 
-        cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf -t -f {0}/wpa-{1}.log &".format(self.tmpdir, intf)
+        cmd = "wpa_supplicant -i{1} -Dwired -c{0}/{1}.conf -t -d > {0}/wpa_supp-{1}.log 2>&1 &".format(self.tmpdir, intf)
         if netns is None:
-            host.cmd(cmd)
+            host.cmdPrint(cmd)
         else:
             host.cmdPrint('ip netns exec %s %s' %(netns , cmd))
         self.pids['wpa_supplicant-%s-%s' % (host.name, intf)] = host.lastPid
@@ -139,18 +141,15 @@ eapol_flags=0
                 if not wait:
                     print('not waiting')
                     break
-            elif new_status == 'HELD':
+            elif new_status == 'HELD' or new_status == 'FAILURE':
                 print('logging attemot failed. trying again')
                 host.cmdPrint('wpa_cli -i %s logon' % intf)
             elif 'AUTHENTICATED' != new_status:
                 break
             time.sleep(1)
-            print('login attempt failed. trying again.')
-            new_status = host.cmd('wpa_cli -i %s status' % intf)
-            print(new_status)
-        background_dhcpcd = ''
-        if wait:
-            background_dhcpcd = '&'
+            print(host.name, 'login attempt failed. trying again.')
+            new_status = self.wpa_cli_status(host, intf=intf)
+            print(host.name, new_status)
         cmds = ["ip addr flush %s" % intf, "dhcpcd --timeout 60 %s" % intf]
         for cmd in cmds:
             if netns is None:
@@ -166,6 +165,7 @@ eapol_flags=0
                 if end_reload_count > start_reload_count:
                     break
                 time.sleep(0.5)
+            # this in only an indicator, it could be possible for another host to successfully logon (and reconfigure faucet), thus increasing the counter.
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
             self.assertLess(i, 3, 'logon has taken %d to reload. max allowable time 1.5seconds' % i)
 
@@ -188,7 +188,7 @@ eapol_flags=0
         if intf is None:
             intf = host.defaultIntf()
         start_reload_count = self.get_configure_count()
-        old_status = host.cmd('wpa_cli -i %s status' % intf)
+        old_status = self.wpa_cli_status(host, intf=intf)
         host.cmdPrint('wpa_cli -i %s logon > %s/wpa_cli-%s.log 2>&1' % (intf, self.tmpdir, host.name))
 
         new_status = self.wpa_cli_status(host, intf)
@@ -234,7 +234,7 @@ eapol_flags=0
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.\nOld Status: %s' % (host, intf, host.MAC(), new_status, old_status))
             self.assertLess(i, 3, 'relogon has taken %d to reload. max allowable time 1.5seconds' % i)
 
-    def fail_ping_ipv4(self, host, dst, retries=1, intf=None, netns=None):
+    def fail_ping_ipv4(self, host, dst, retries=1, intf=None, netns=None, print_flag=True):
         """Try to ping to a destination from a host.
         Args:
             host (mininet.host): source host.
@@ -244,7 +244,7 @@ eapol_flags=0
         """
         for i in range(retries):
             try:
-                self.one_ipv4_ping(host, dst, retries=1, require_host_learned=False, intf=intf, netns=netns)
+                self.one_ipv4_ping(host, dst, retries=1, require_host_learned=False, intf=intf, netns=netns, print_flag=print_flag)
             except AssertionError:
                 return
             time.sleep(1)
@@ -295,18 +295,8 @@ eapol_flags=0
         # send signal to faucet here. as we have just generated new acls. and it is already running.
 
         host.cmd('python3.5 {0}/gasket-src/gasket/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
-        print 'authentication controller app started'
+        print 'Authentication controller app started'
         self.pids['auth_server'] = host.lastPid
-
-        print 'Controller started.'
-
-    def create_hostapd_users_file(self, num_hosts):
-        conf = ''
-        for i in range(num_hosts):
-            conf = '''%s\n"hostuser%d"   MD5     "hostpass%d"''' % (conf, i, i)
-
-        with open('%s/hostapd.eap_user' % self.tmpdir, 'w+') as f:
-            f.write(conf)
 
     def run_hostapd(self, host):
         """Compiles and starts the hostapd process.
@@ -341,7 +331,6 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
 
         print 'Starting hostapd ....'
         host.cmd('mkdir %s/hostapd' % self.tmpdir)
-        self.create_hostapd_users_file(self.max_hosts)
 
         # start hostapd
         host.cmd('hostapd -t -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
@@ -373,22 +362,21 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
             dns (str): ip address of dns server
         """
         dns_template = """
-start       10.0.0.20
-end     10.0.0.250
-option  subnet  255.255.255.0
-option  domain  local
-option  lease   300  # seconds
-"""
+default-lease-time 600;
+max-lease-time 7200;
+option subnet-mask 255.255.255.0;
+option broadcast-address 10.0.0.255;
+option routers %s;
+option domain-name-servers %s;
 
-        # Create a DHCP configuration file
-        config = (
-            'interface %s' % intf,
-            dns_template,
-            'option router %s' % gw,
-            'option dns %s' % dns,
-            '')
+
+subnet 10.0.0.0 netmask 255.255.255.0 {
+        range 10.0.0.20 10.0.0.250;
+        } 
+""" % (gw, dns)
+
         with open(filename, 'w') as f:
-            f.write('\n'.join(config))
+            f.write(dns_template)
 
     def start_dhcp_server(self, host, gw, dns):
         """Start DHCP server (udhcp) on host with specified DNS server
@@ -401,7 +389,9 @@ option  lease   300  # seconds
         print('* Starting DHCP server on', host, 'at', host.IP(), '\n')
         dhcp_config = '/tmp/%s-udhcpd.conf' % host
         self.make_dhcp_config(dhcp_config, host.defaultIntf(), gw, dns)
-        host.cmd('udhcpd -f', dhcp_config,
+        host.cmd('touch %s/dhcp.leases' % self.tmpdir)
+        host.cmd('dhcpd -d -cf ', dhcp_config, ' ',  host.defaultIntf(),
+                ' -lf %s/dhcp.leases' % self.tmpdir,
                  '> %s/%s-dhcp.log 2>&1  &' % (self.tmpdir, host))
 
     def start_tcpdump(self, host, interface=None, direction=None, expr=None, netns=None):
@@ -486,8 +476,10 @@ class GasketSingleSwitchTest(GasketTest):
             params1={'ip': '192.168.%s.2/24' % contr_num},
             params2={'ip': '192.168.%s.3/24' % contr_num})
         self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
-        # TODO why is this commented out?
-#        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
+        portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
+        # do not allow the portal to forward ip packets. Otherwise packets redirected to the portal will be forwarded,
+        # and effectivley bypass the ACLs.
+        portal.cmdPrint("echo '0' > /proc/sys/net/ipv4/ip_forward")
 
         self.start_tcpdump(self.net.controller)
         self.start_tcpdump(portal, interface='%s-eth0' % portal.name)
@@ -504,66 +496,10 @@ class GasketSingleSwitchTest(GasketTest):
         self.setup_hosts(self.clients)
 
 
-class GasketMultiHostDiffPortTest(GasketSingleSwitchTest):
-    """Check if authenticated and unauthenticated users can communicate and of different authentication methods (1x & cp)"""
-
-    def ping_between_hosts(self, users):
-        """Ping between the specified host
-        Args:
-            users (list<mininet.host>): users to ping between.
-                0 & 1 should be authenitcated.
-                2 should be unauthenticated,
-        """
-        for user in users:
-            user.defaultIntf().updateIP()
-
-        h0 = users[0]
-        h1 = users[1]
-        h2 = users[2]
-        h1_ip = ipaddress.ip_address(unicode(h1.IP()))
-        # h2 will not have an ip via dhcp as they are unauthenticated, so give them one.
-        h2.setIP('10.0.12.253')
-        h2_ip = ipaddress.ip_address(unicode(h2.IP()))
-        # ping between the authenticated hosts
-        self.one_ipv4_ping(h0, h1_ip)
-        self.one_ipv4_ping(h1, '10.0.0.2')
-
-        #ping between an authenticated host and an unauthenticated host
-        self.fail_ping_ipv4(h0, h2_ip)
-        self.fail_ping_ipv4(h1, h2_ip)
-
-        ploss = self.net.ping(hosts=[users[0], users[2]], timeout='5')
-        self.assertAlmostEqual(ploss, 100)
-
-
-    def test_onlydot1x(self):
-        """Only authenticate through dot1x.
-        At first h0 will logon (only h0 can ping), then h1 will logon (both can ping), h1 will then logoff (h0 should still be logged on, h1 logged off)"""
-        h0 = self.clients[0]
-        h1 = self.clients[1]
-
-        self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, '10.0.0.2')
-
-        h1.setIP('10.0.0.10')
-
-        self.fail_ping_ipv4(h1, '10.0.0.2')
-
-        self.logon_dot1x(h1)
-        time.sleep(5)
-        self.ping_between_hosts(self.clients)
-
-        self.logoff_dot1x(h1)
-
-        self.fail_ping_ipv4(h1, h0.IP())
-        self.fail_ping_ipv4(h1, '10.0.0.2')
-        self.one_ipv4_ping(h0, '10.0.0.2')
-
-
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
     """
-    mac_interfaces = {} # {'1': intefcae}
+    mac_interfaces = {} # {'1': inteface}
     max_vlan_hosts = 2
     def setUp(self):
         super(GasketMultiHostPerPortTest, self).setUp()
@@ -585,19 +521,19 @@ class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
             password = 'hostpass{}'.format(i)
 
             wpa_conf = '''ctrl_interface=/var/run/wpa_supplicant
-    ctrl_interface_group=0
-    eapol_version=2
-    ap_scan=0
-    network={
-    key_mgmt=IEEE8021X
-    eap=TTLS MD5
-    identity="%s"
-    anonymous_identity="%s"
-    password="%s"
-    phase1="auth=MD5"
-    phase2="auth=PAP password=password"
-    eapol_flags=0
-    }''' % (username, username, password)
+ctrl_interface_group=0
+eapol_version=2
+ap_scan=0
+network={
+key_mgmt=IEEE8021X
+eap=TTLS MD5
+identity="%s"
+anonymous_identity="%s"
+password="%s"
+phase1="auth=MD5"
+phase2="auth=PAP password=password"
+eapol_flags=0
+}''' % (username, username, password)
             h0.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, mac_intf))
 
     def tearDown(self):
@@ -618,11 +554,13 @@ class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
 
 
 #@unittest.skip('broken.')
-class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
+class GasketSingleTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 2
 
     def test_two_hosts_one_port(self):
+        '''user0 logs on/off with two devices (MACs) on the same port.
+        '''
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
 
@@ -632,15 +570,15 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.assertTrue(result)
 
         mac_intf = self.mac_interfaces['1']
+        netns = mac_intf + 'ns'
+        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf, netns=netns)
 
-        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf)
+        self.logon_dot1x(h0, intf=mac_intf, netns=netns)
 
-        self.logon_dot1x(h0, intf=mac_intf)
-
-        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf)
+        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf, netns=netns)
 
         self.logoff_dot1x(h0)
-        self.fail_ping_ipv4(h0, '10.0.0.2')
+        self.fail_ping_ipv4(h0, '10.0.0.2', retries=5)
 
         self.relogon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP())
@@ -649,117 +587,60 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-class GasketMultiHostsTest(GasketSingleSwitchTest):
-
-    def test_multi_hosts_sequential(self):
-        """Log X different users on on the different ports sequentially (each should complete before the next starts).
-        Then Log them all off. Then back on again.
-        """
+class GasketMultiHostsBase(GasketSingleSwitchTest):
+    
+    def logon_logoff(self, host):
         interweb = self.net.hosts[1]
-
-        # get each intf going.
-        for host in self.clients:
+        error_point = 0
+        try:
             self.logon_dot1x(host)
-            self.one_ipv4_ping(host, interweb.IP(), retries=10)
-        print('first logons complete')
-
-        for host in self.clients:
-            self.logoff_dot1x(host)
-            self.fail_ping_ipv4(host, interweb.IP())
-        print('logoffs complete')
-
-        for host in self.clients:
+            error_point = 1
+            self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
+            error_point = 2
+            print('%s on' % host.name)
+            self.logoff_dot1x(host, wait=False)
+            error_point = 3
+            # TODO do we want to reduce this retry count (effectivley giving us 15 seconds to stop the hosts traffic)?
+            # as close to 0 as possible should be the goal.
+            self.fail_ping_ipv4(host, interweb.IP(), retries=self.LOGOFF_RETRIES, print_flag=False)
+            error_point = 4
+            print('%s off' % host.name)
             self.relogon_dot1x(host)
-        print('relogons complete')
+            error_point = 5
+            self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
+            error_point = 6 
+            print('%s reon' % host.name)
+            return (error_point, '')
+        except Exception as e:
+            print("Error during method logon_logoff:\n{}".format(e))
+            return (error_point, e)
 
-
-        passed = False
-        for i in range(9):
-            try:
-                for host in self.clients:
-                    print('ping after relogin')
-                    self.one_ipv4_ping(host, interweb.IP(), retries=1)
-                # if it makes it to here all pings have succeeded.
-                passed = True
-                break
-            except AssertionError as e:
-                print(e)
-                print('try ping again')
-        self.assertTrue(passed)
-
-    @unittest.skip('currently broken')
     def test_multi_hosts_parallel(self):
         """Log X different users on on different ports in parallel.
-        Then log them all off, and back on again. Each stage completes before the next.
+        Then log them all off, and back on again.
         """
-        interweb = self.net.hosts[1]
+        failures = {}
+        with futures.ThreadPoolExecutor(max_workers=self.max_hosts) as executor:
+            future_to_times = dict ((executor.submit(self.logon_logoff, i), i) for i in self.clients)
 
-        # setup.
-        # start tcpdump. (move this from logon to setup host.)
-        # start wpa_supplicant
+            for future in futures.as_completed(future_to_times):
+                if future.result()[0] < 6:
+                    failures[future_to_times[future]] = future.result()
+                h = future_to_times[future]
 
-        # log all on.
-        for h in self.clients:
-            self.logon_dot1x(h, wait=False)
-        for h in self.clients:
-            h.defaultIntf().updateIP()
-            self.one_ipv4_ping(h, interweb.IP(), retries=5)
-        # log all off.       
-        for h in self.clients:
-            self.logoff_dot1x(h, wait=False)
-        for h in self.clients:
-            self.fail_ping_ipv4(h, interweb.IP(), retries=5)
-        # log all back on again
-        for h in self.clients:
-            self.relogon_dot1x(h, wait=False)
-        for h in self.clients:
-            h.defaultIntf().updateIP()
-            self.one_ipv4_ping(h, interweb.IP(), retries=10)
+        self.assertEqual(len(failures), 0, 'the following hosts failed at stages: %s' % failures)
 
-    @unittest.skip('currently broken')
+    @unittest.skip('not implemented')
     def test_multi_hosts_random_parallel(self):
         """Log X different users on and off randomly on different ports in parallel.
         """
-        # How do we check if the host has successfully logged on or not?
-        host_status = {}
-        for i in range(5):
-            for h in self.clients:
-                status = self.wpa_cli_status(h)
-                r = random.random() 
-                if status == 'AUTHENTICATED':
-                    # should we logoff?
-                    if r <= 0.5:
-                        self.logoff_dot1x(h, wait=False)
-                        host_status[h.name] = 'logoff'
-                elif status == 'LOGOFF':
-                    # should we logon?
-                    if r <= 0.5:
-                        self.relogon_dot1x(h, wait=False)
-                        host_status[h.name] = 'logon'
-                elif status == 'CONNECTING':
-                    pass
-                elif status == None:
-                    # first time?
-                    if r <= 0.5:
-                        self.logon_dot1x(h, wait=False)
-                        host_status[h.name] = 'logon'
-                else:
-                    # do not know how to handle the status.
-                    self.assertIsNotNone(status)
-                    self.assertIsNone(status)
-            if i == 1 or i == 3 or i == 4:
-                for h in self.clients:
-                    # dhcp completed?
-                    h.defualtIntf().updateIP()
-                    if host_status[h.name] == 'logon':
-                        # this in effect gives >5 seconds for the logon to occur
-                        self.one_ipv4_ping(h, interweb.IP(), retries=5)
-                    elif host_status[h.name] == 'logoff':
-                        # this has the effect of giving >5 seconds for logoff to occur.
-                        self.fail_ping_ipv4(h, interweb.IP(), retries=5)
+        # TODO implement.
+        # Take a similar appraoch to test_multi_hosts_parallel's ThreadPool.
+        # But have the job function randomise weather a host is going to log on, off, or do nothing.
+        # Repaat that for each host a number of times.
 
 
-class GasketTenHostsTest(GasketMultiHostsTest):
+class GasketSingleTenHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 12
     max_hosts = N_UNTAGGED - 2
 
@@ -769,8 +650,11 @@ class GasketTenHostsTest(GasketMultiHostsTest):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
+    LOGON_RETRIES = 10
+    LOGOFF_RETRIES = 15
 
-class GasketTwentyHostsTest(GasketMultiHostsTest):
+
+class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -780,8 +664,11 @@ class GasketTwentyHostsTest(GasketMultiHostsTest):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
+    LOGON_RETRIES = 100
+    LOGOFF_RETRIES = 60
 
-class Gasket14HostsTest(GasketMultiHostsTest):
+
+class GasketSingle14HostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 16
     max_hosts = N_UNTAGGED - 2
 
@@ -791,12 +678,29 @@ class Gasket14HostsTest(GasketMultiHostsTest):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
+    LOGON_RETRIES = 20
+    LOGOFF_RETRIES = 60
 
-class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
+
+class GasketSingleTwoHostsTest(GasketMultiHostsBase):
+    N_UNTAGGED = 4
+    max_hosts = N_UNTAGGED - 2
+
+    CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
+    CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
+
+    port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
+
+    LOGON_RETRIES = 5
+    LOGOFF_RETRIES = 10
+
+
+class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
-    N_UNTAGGED = 12
+    N_UNTAGGED = 5
     max_hosts = N_UNTAGGED - 2
 
     CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
@@ -806,7 +710,7 @@ class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
 
-    def test_ten_hosts_one_port_sequential(self):
+    def test_10_hosts_1_port_seq(self):
         """Log 10 different users on on the same port (using macvlans) sequentially (each should complete before the next starts).
         Then Log them all off. Then back on again. This takes a VERY LONG time to complete >15mins. 
         """
@@ -817,41 +721,36 @@ class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
         self.logon_dot1x(h2)
         self.logon_dot1x(h1)
         self.logon_dot1x(h0)
-
-        self.one_ipv4_ping(h0, h1.IP())
-        mac_intfs = self.mac_interfaces.values()
-
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
+        h1.intf().updateIP()
+        self.one_ipv4_ping(h0, h1.IP(), retries=10)
+        mac_intfs = { mac: mac + 'ns' for mac in self.mac_interfaces.values()}
+        
         # get each intf going.
-        for intf in mac_intfs:
-            netns = intf + 'ns'
+        for intf, netns in mac_intfs.items():
             self.logon_dot1x(h0, intf=intf, netns=netns)
-            macvlan_ip = self.get_macvlan_ip(h0, intf)
-            self.assertTrue(macvlan_ip != '')
-            self.assertTrue(macvlan_ip is not None)
-            self.one_ipv4_ping(h1, macvlan_ip, retries=10)
+            self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10, netns=netns)
         print('first logons complete')
 
-        for intf in mac_intfs:
-            self.logoff_dot1x(h0, intf=intf)
-            macvlan_ip = self.get_macvlan_ip(h0, intf)
-            self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=intf+'ns')#macvlan_ip)
+        for intf, netns in mac_intfs.items():
+            self.logoff_dot1x(h0, intf=intf, netns=netns)
+            self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=netns)
+
         print('logoffs complete')
         self.one_ipv4_ping(h0, interweb.IP())
 
-        for intf in mac_intfs[1:]:
+        for intf, netns in mac_intfs.items():
             self.relogon_dot1x(h0, intf=intf)
+
         print('relogons complete')
         self.one_ipv4_ping(h0, interweb.IP())
-        print(datetime.now())
         passed = False
         for i in range(9):
             try:
-                for intf in mac_intfs[1:]:
+                for intf, netns in mac_intfs.items():
                     print('ping after relogin')
-                    print(intf)
-                    macvlan_ip = self.get_macvlan_ip(h0, intf)
-                    print(macvlan_ip)
-                    self.one_ipv4_ping(h0, h2.IP(), intf=intf, retries=1, netns=intf+'ns')
+                    self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=1, netns=netns)
                 # if it makes it to here all pings have succeeded.
                 passed = True
                 break
@@ -872,19 +771,7 @@ class GasketNoLogOnTest(GasketSingleSwitchTest):
         for user in users:
             i = i + 1
             host = user
-            tcpdump_args = ' '.join((
-                '-s 0',
-                '-e',
-                '-n',
-                '-U',
-                '-q',
-                '-i %s-eth0' % host.name,
-                '-w %s/%s-eth0.cap' % (self.tmpdir, host.name),
-                '>/dev/null',
-                '2>/dev/null',
-            ))
-            host.cmd('tcpdump %s &' % tcpdump_args)
-            self.pids['i-tcpdump-%s' % host.name] = host.lastPid
+            self.start_tcpdump(host)
 
             cmd = "ip addr flush {0} && dhcpcd --timeout 5 {0}".format(
                 user.defaultIntf())
@@ -898,32 +785,7 @@ class GasketNoLogOnTest(GasketSingleSwitchTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class GasketDot1XLogonAndLogoffTest(GasketSingleSwitchTest):
-    """Log on using dot1x and log off"""
-
-    def test_logoff(self):
-        """Check that the user cannot go on the internet after logoff"""
-        h0 = self.clients[0]
-        interweb = self.net.hosts[1]
-
-        self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
-        result = self.check_http_connection(h0)
-        self.assertTrue(result)
-
-        self.logoff_dot1x(h0)
-        # TODO possibly poll wpa_cli status to check that the status has changed?
-        #  instead of a sleep??
-
-        self.fail_ping_ipv4(h0, '10.0.0.2')
-        result = self.check_http_connection(h0)
-        self.assertFalse(result)
-
-        self.relogon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
-
-
-class GasketDupLogonTest(GasketSingleSwitchTest):
+class GasketSingleDupLogonTest(GasketSingleSwitchTest):
     """Tests various username and MAC address combinations that may or may not result in
     the configuration changing.
     """
@@ -967,7 +829,7 @@ class GasketDupLogonTest(GasketSingleSwitchTest):
                     self.assertFalse(True, 'test doesnt support rule type: %s. value: %s' % (type(obj),obj))
         return count
 
-    def test_same_user_same_mac_logon_2_same_port(self):
+    def test_same_user_mac_logon_2_same_port(self):
         """Tests that the same username and the same MAC logging onto the same port
         does not add to the base-config file on the second time.
         """
@@ -975,11 +837,11 @@ class GasketDupLogonTest(GasketSingleSwitchTest):
         interweb = self.net.hosts[1]
 
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         # kill wpa_supplicant so we can attempt to logon again.
         h0.cmd('kill %d' % self.pids['wpa_supplicant-%s-%s' % (h0.name, h0.defaultIntf())])
-        time.sleep(3)
+        time.sleep(1)
 
         with open('%s/base-acls.yaml' % self.tmpdir, 'rw') as f:
             start_base = f.read()
@@ -1005,16 +867,16 @@ class GasketDupLogonTest(GasketSingleSwitchTest):
         self.assertTrue(end_base != None)
         self.assertTrue(start_base == end_base)
 
-    def test_same_user_same_mac_logon_2_diff_port(self):
+    def test_same_user_mac_logon_2_diff_port(self):
         """Tests that the same username and the same MAC address can logon on the different ports.
-        The system is amiguous in that the first port to authenticate may or may not be logged off,
+        The system is ambiguous in that the first port to authenticate may or may not be logged off,
         when the second start the authentication process. TODO need to clarify what correct behavoiur should be.
         """
         h0, h1 = self.clients[0:2]
         interweb = self.net.hosts[1]
 
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         h1.setMAC(h0.MAC())
 
@@ -1022,27 +884,27 @@ class GasketDupLogonTest(GasketSingleSwitchTest):
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
         self.logon_dot1x(h1)
-        self.one_ipv4_ping(h1, interweb.IP())
+        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
 
         # TODO 
         # self.one_ipv4_ping(h0, interweb.IP())
-        count = self.count_username_and_mac(h0.MAC(), 'hostuser1')
+        count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         self.assertGreaterEqual(count, 2)
 
-    def test_same_user_diff_mac_logon_2_diff_port(self):
+    def test_same_user_diff_mac_port_logon_2(self):
         """Tests that the same username with a different MAC address can logon on different ports.
         """
         h0, h1 = self.clients[0:2]
         interweb = self.net.hosts[1]
 
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         h1.cmd('sed -i -e s/hostuser1/hostuser0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
         self.logon_dot1x(h1)
-        self.one_ipv4_ping(h1, interweb.IP())
+        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
 
         h0_count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         h1_count = self.count_username_and_mac(h1.MAC(), 'hostuser0')

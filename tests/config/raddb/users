@@ -26,3 +26,75 @@ hostuser4 Cleartext-Password := "hostpass4"
 
 hostuser5 Cleartext-Password := "hostpass5"
             Faucet-ACL-ID := "allowall"
+
+hostuser6 Cleartext-Password := "hostpass6"
+            Faucet-ACL-ID := "allowall"
+
+hostuser7 Cleartext-Password := "hostpass7"
+            Faucet-ACL-ID := "allowall"
+
+hostuser8 Cleartext-Password := "hostpass8"
+            Faucet-ACL-ID := "allowall"
+
+hostuser9 Cleartext-Password := "hostpass9"
+            Faucet-ACL-ID := "allowall"
+
+hostuser10 Cleartext-Password := "hostpass10"
+            Faucet-ACL-ID := "allowall"
+
+hostuser11 Cleartext-Password := "hostpass11"
+            Faucet-ACL-ID := "allowall"
+
+hostuser12 Cleartext-Password := "hostpass12"
+            Faucet-ACL-ID := "allowall"
+
+hostuser13 Cleartext-Password := "hostpass13"
+            Faucet-ACL-ID := "allowall"
+
+hostuser14 Cleartext-Password := "hostpass14"
+            Faucet-ACL-ID := "allowall"
+
+hostuser15 Cleartext-Password := "hostpass15"
+            Faucet-ACL-ID := "allowall"
+
+hostuser16 Cleartext-Password := "hostpass16"
+            Faucet-ACL-ID := "allowall"
+
+hostuser17 Cleartext-Password := "hostpass17"
+            Faucet-ACL-ID := "allowall"
+
+hostuser18 Cleartext-Password := "hostpass18"
+            Faucet-ACL-ID := "allowall"
+
+hostuser19 Cleartext-Password := "hostpass19"
+            Faucet-ACL-ID := "allowall"
+
+hostuser20 Cleartext-Password := "hostpass20"
+            Faucet-ACL-ID := "allowall"
+
+hostuser21 Cleartext-Password := "hostpass21"
+            Faucet-ACL-ID := "allowall"
+
+hostuser22 Cleartext-Password := "hostpass22"
+            Faucet-ACL-ID := "allowall"
+
+hostuser23 Cleartext-Password := "hostpass23"
+            Faucet-ACL-ID := "allowall"
+
+hostuser24 Cleartext-Password := "hostpass24"
+            Faucet-ACL-ID := "allowall"
+
+hostuser25 Cleartext-Password := "hostpass25"
+            Faucet-ACL-ID := "allowall"
+
+hostuser26 Cleartext-Password := "hostpass26"
+            Faucet-ACL-ID := "allowall"
+
+hostuser27 Cleartext-Password := "hostpass27"
+            Faucet-ACL-ID := "allowall"
+
+hostuser28 Cleartext-Password := "hostpass28"
+            Faucet-ACL-ID := "allowall"
+
+hostuser29 Cleartext-Password := "hostpass29"
+            Faucet-ACL-ID := "allowall"

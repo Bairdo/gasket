@@ -1,4 +1,5 @@
 concurrencytest
+futures
 ipaddress
 netifaces
 packaging
@@ -7,4 +8,4 @@ pytest-cov
 pyyaml
 requests
 ryu==4.19
-#faucet==1.6.8
+faucet==1.6.9
