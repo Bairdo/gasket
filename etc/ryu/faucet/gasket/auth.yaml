@@ -1,7 +1,7 @@
 ---
 version: 0
 
-logger_location: /var/log/ryu/faucet/auth/auth_app.log
+logger_location: /var/log/ryu/faucet/gasket/auth_app.log
 
 faucet:
     prometheus_port: 9302
@@ -13,11 +13,11 @@ files:
     controller_pid: /var/run/faucet.pid
     faucet_config: /etc/ryu/faucet/faucet.yaml
     acl_config: /etc/ryu/faucet/faucet-acls.yaml
-    base_config: /etc/ryu/faucet/auth/base-acls.yaml
+    base_config: /etc/ryu/faucet/gasket/base-acls.yaml
 
 # rules to be applied for a user once authenticated.
 auth-rules:
-    file: /etc/ryu/faucet/auth/rules.yaml
+    file: /etc/ryu/faucet/gasket/rules.yaml
 dps:
     faucet-1:
         interfaces:
