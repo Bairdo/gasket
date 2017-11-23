@@ -137,6 +137,8 @@ class RuleManager(object):
         self.rule_gen = RuleGenerator(self.config.rules, self.logger)
         self.base_filename = self.config.base_filename
         self.faucet_acl_filename = self.config.acl_config_file
+
+        # TODO do we want to use another datastructure? and keep more data in memory.
         self.authed_users = {} # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
 
     def add_to_base_acls(self, filename, rules, user, mac):
@@ -379,6 +381,8 @@ class RuleManager(object):
         Returns:
             True if already authenticated. False otherwise.
         '''
+        # TODO There might be a bug in here where passed the mac and username, but not the switch and port.
+        #  this will always return false.
         # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
         if username and username != '(null)':
             if username in self.authed_users:
@@ -418,6 +422,24 @@ class RuleManager(object):
                     if port not in self.authed_users[username][mac][switch]:
                         self.authed_users[username][mac][switch][port] = 1
 
+    def remove_all_from_authed_dict(self, dp_name, port_num):
+        """Removes all users that are on coressponding dp and port.
+        Args:
+            dp_name (str): name of datapath.
+            port_num (int): port number
+        """
+# {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
+        for user, mac_d in self.authed_users.items():
+            for mac in mac_d.keys():
+                # TODO if user is authed on multiple ports dont delete the mac/user
+                #  if there are not on multiple ports delete user.
+                self.logger.debug('can we remove %s %s %s %d',user, mac, dp_name, port_num)
+                try:
+                    del self.authed_users[user][mac][dp_name][port_num]
+                except KeyError:
+                    self.logger.debug('no we cannot')
+
+
     def remove_from_authed_dict(self, username, mac):
         """Remove the mac from the authed_users dictionary.
         If username is None or '(null)' as is the case with some deauthentications,
@@ -438,6 +460,55 @@ class RuleManager(object):
             for user in remove_users:
                 self.logger.info('removing mac %s. wildcard user' % mac)
                 del self.authed_users[user][mac]
+
+    def reset_port_acl(self, dp_name, port_num):
+        """Reset the port acl back to the original state (where nothing is authenticated)
+        Args:
+            dp_name (str): name of datapath.
+            port_num (int): port number.
+        """
+        # TODO optimize the ording of this - do we want to signal faucet asap?
+        # find the acl name for that port.
+        acl_name = ""
+        data = yaml.load(open(self.config.faucet_config_file, 'r'))
+        if dp_name in data['dps']:
+            if port_num in data['dps'][dp_name]['interfaces']:
+                if 'acl_in' in data['dps'][dp_name]['interfaces'][port_num]:
+                    self.logger.debug('can rewrite acl')
+                    acl_name = data['dps'][dp_name]['interfaces'][port_num]['acl_in']
+                    # find the acl for acl_name in base-original.
+                    orig = yaml.load(open(self.config.base_filename + '-orig', 'r'))
+                    orig_acl = orig['acls'][acl_name]
+                    # copy the original acl over to the current base.
+                    base = yaml.load(open(self.config.base_filename, 'r'))
+
+                    base['acls'][acl_name] = orig_acl
+
+                    final = create_faucet_acls(base, self.logger)
+                    write_yaml(final, self.faucet_acl_filename + '.tmp', True)
+                    self.backup_file(self.faucet_acl_filename)
+                    self.swap_temp_file(self.faucet_acl_filename)
+
+                    self.remove_all_from_authed_dict(dp_name, port_num)
+
+                    write_yaml(base, self.base_filename + '.tmp')
+                    self.backup_file(self.base_filename)
+                    self.swap_temp_file(self.base_filename)
+
+                    # sighup.
+                    start_count = self.get_faucet_reload_count()
+                    self.send_signal(signal.SIGHUP)
+                    self.logger.info('reset acl signal sent.')
+                    for i in range(400):
+                        end_count = self.get_faucet_reload_count()
+                        if end_count > start_count:
+                            self.logger.info('reset acl - faucet has reloaded.')
+                            return True
+                        time.sleep(0.05)
+                        self.logger.info('reset - waiting for faucet to process sighup config reload. %d', i)
+                    self.logger.error('reset - faucet did not process sighup within 20 seconds. 0.05 * 400')
+
+                    # send signal.
 
 
 if __name__ == '__main__':

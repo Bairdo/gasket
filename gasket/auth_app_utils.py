@@ -101,3 +101,15 @@ def scrape_prometheus(prom_url):
         if not prom_line.startswith('#'):
             prom_vars.append(prom_line)
     return '\n'.join(prom_vars)
+
+def scrape_prometheus_vars(prom_url, variables):
+    prom_txt = scrape_prometheus(prom_url)
+
+    ret = []
+    for v in variables:
+        matches = []
+        for line in prom_txt.splitlines():
+            if line.startswith(v):
+                matches.append(line)
+        ret.append(matches)
+    return ret
