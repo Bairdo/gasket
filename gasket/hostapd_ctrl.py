@@ -262,7 +262,7 @@ def request_socket_udp(host, port, logger):
     """
     # use the first addr found, if more than one
     # (such as the case with hostnames that resolve to both ipv6 and ipv4).
-    addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
+    addrinfo = socket.getaddrinfo(host, port, socktype=socket.SOCK_DGRAM)[0]
     return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger)
 
 
