@@ -10,6 +10,7 @@ from concurrent import futures
 import os
 import random
 import re
+import shutil
 import signal
 import time
 import unittest
@@ -28,7 +29,7 @@ import faucet_mininet_test_topo
 
 class GasketTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the authentication tests """
-
+    RUN_GASKET = True
     RUN_GAUGE = False
     pids = {}
 
@@ -70,6 +71,9 @@ phase2="auth=PAP password=password"
 eapol_flags=0
 }''' % (username, username, password)
             host.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, host.defaultIntf()))
+
+            for direction in ['in', 'out']:
+                self.start_tcpdump(host, interface=host.defaultIntf(), direction=direction)
  
     def get_users(self):
         """Get the hosts that are users (ie not the portal or controller hosts)
@@ -119,9 +123,9 @@ eapol_flags=0
 
         if intf is None:
             intf = host.defaultIntf()
-
-        for direction in ['in', 'out']:
-            self.start_tcpdump(host, interface=intf, direction=direction, netns=netns)
+        else:
+            for direction in ['in', 'out']:
+                self.start_tcpdump(host, interface=intf, direction=direction, netns=netns)
 
         start_reload_count = self.get_configure_count()
 
@@ -150,12 +154,13 @@ eapol_flags=0
             print(host.name, 'login attempt failed. trying again.')
             new_status = self.wpa_cli_status(host, intf=intf)
             print(host.name, new_status)
-        cmds = ["ip addr flush %s" % intf, "dhcpcd --timeout 60 %s" % intf]
+        cmds = ["ip addr flush %s" % intf, "dhcpcd -p -1 --timeout 60 %s " % intf]
         for cmd in cmds:
             if netns is None:
                 host.cmd(cmd)
             else:
                 host.cmdPrint('ip netns exec %s %s' % (netns, cmd))
+#        self.pids['dhcpcd-%s-%s' % (host.name, host.defaultIntf())] = host.lastPid
 
         host.defaultIntf().updateIP()
         if wait:
@@ -167,7 +172,7 @@ eapol_flags=0
                 time.sleep(0.5)
             # this in only an indicator, it could be possible for another host to successfully logon (and reconfigure faucet), thus increasing the counter.
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
-            self.assertLess(i, 3, 'logon has taken %d to reload. max allowable time 1.5seconds' % i)
+            self.assertLess(i, 10, 'logon has taken %d to reload. max allowable time 5 seconds' % i)
 
     def wpa_cli_status(self, host, intf=None):
         if intf is None:
@@ -264,39 +269,6 @@ eapol_flags=0
                 return True
         return False
 
-    def run_controller(self, host):
-        """Starts the authentication controller app.
-        Args:
-            host (mininet.host): host to start app on (generally the controller)
-        """
-        print 'Starting Controller ....'
-        with open('/gasket-src/tests/config/auth.yaml', 'r') as f:
-            httpconfig = f.read()
-
-        config_values = {}
-        config_values['tmpdir'] = self.tmpdir
-        config_values['promport'] = self.prom_port
-        config_values['logger_location'] = self.tmpdir + '/auth_app.log'
-        config_values['portal'] = self.net.hosts[0].name
-        config_values['intf'] = self.net.hosts[0].defaultIntf().name
-        config_values['pid_file'] = host.pid_file
-        host.cmd('echo "%s" > %s/auth.yaml' % (httpconfig % config_values, self.tmpdir))
-        host.cmd('cp -r /gasket-src %s/' % self.tmpdir)
-
-        host.cmd('echo "%s" > %s/base-acls.yaml' % (self.CONFIG_BASE_ACL, self.tmpdir))
-
-        faucet_acl = self.tmpdir + '/faucet-acl.yaml'
-        base = self.tmpdir + '/base-acls.yaml'
-
-        host.cmd('python3.5 {0}/gasket-src/gasket/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
-
-        pid = int(open(host.pid_file, 'r').read())
-        os.kill(pid, signal.SIGHUP)
-        # send signal to faucet here. as we have just generated new acls. and it is already running.
-
-        host.cmd('python3.5 {0}/gasket-src/gasket/auth_app.py --config  {0}/auth.yaml  > {0}/auth_app.txt 2> {0}/auth_app.err &'.format(self.tmpdir))
-        print 'Authentication controller app started'
-        self.pids['auth_server'] = host.lastPid
 
     def run_hostapd(self, host):
         """Compiles and starts the hostapd process.
@@ -334,7 +306,7 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
 
         # start hostapd
         host.cmd('hostapd -t -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
-        self.pids['hostapd'] = host.lastPid
+#        self.pids['hostapd'] = host.lastPid
         
         # TODO is this still required?
         host.cmd('ping -i 0.1 10.0.0.2 &')
@@ -457,9 +429,11 @@ class GasketSingleSwitchTest(GasketTest):
        
         # do the base config thing here.
         open(self.tmpdir + '/faucet-acl.yaml', 'w').write(faucet_mininet_test_util.gen_faucet_acl(self.max_hosts) % self.port_map)
-
+        shutil.copytree('/gasket-src/', '%s/gasket-src' % self.tmpdir)
         self.start_net()
+        print('network started')
         self.start_programs()
+        print('programs started')
 
     def start_programs(self):
         """Start the authentication controller app, hostapd, dhcp server, 'internet' webserver
@@ -489,12 +463,12 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.run_hostapd(portal)
         self.run_freeradius(portal)
-        self.run_controller(self.net.controller)
+
         self.run_internet(interweb)
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
-
+        time.sleep(10)
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
@@ -917,13 +891,20 @@ class GasketSingleLinkStateTest(GasketSingleSwitchTest):
     def test_dp_link_down_up(self):
 
         h0 = self.clients[0]
+        interweb = self.net.hosts[1]
         # log host on
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
         self.set_port_down(3)
-        time.sleep(1)
+
+        h0.cmd('kill %d' % self.pids['wpa_supplicant-%s-%s' % (h0.name, h0.defaultIntf())])
+        time.sleep(3)
+
         self.set_port_up(3)
         # check host cannot ping
-        self.fail_ping_ipv4(h0, interweb.ip(), retries=5)
-        self.relogon_dot1x(h0)
+        # might need to give h0 a fake ip.
+        h0.setIP('10.0.0.99', prefixLen=24)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
+
+        self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)

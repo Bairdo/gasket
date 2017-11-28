@@ -238,8 +238,13 @@ class BaseFAUCET(Controller):
         name = '%s-%u' % (name, os.getpid())
         self.tmpdir = tmpdir
         self.controller_intf = controller_intf
+        cargs = self._add_cargs(cargs, name)
+        self.extra()
         super(BaseFAUCET, self).__init__(
-            name, cargs=self._add_cargs(cargs, name), **kwargs)
+            name, cargs=cargs, **kwargs)
+
+    def extra(self):
+        pass
 
     def _add_cargs(self, cargs, name):
         ofp_listen_host_arg = ''
@@ -282,7 +287,7 @@ class BaseFAUCET(Controller):
             tls_cargs.append(('--ofp-ssl-listen-port=%u' % ofctl_port))
         return ' '.join(tls_cargs)
 
-    def _command(self, env, tmpdir, name, args):
+    def command_(self, env, tmpdir, name, args):
         """Wrap controller startup command in shell script with environment."""
         env_vars = []
         for var, val in list(sorted(env.items())):
@@ -392,7 +397,7 @@ class FAUCET(BaseFAUCET):
             tmpdir,
             controller_intf,
             cargs=cargs,
-            command=self._command(env, tmpdir, name, 'ryu.app.ofctl_rest faucet.faucet'),
+            command=self.command_(env, tmpdir, name, 'ryu.app.ofctl_rest faucet.faucet'),
             port=port,
             **kwargs)
 
@@ -411,7 +416,7 @@ class Gauge(BaseFAUCET):
             tmpdir,
             controller_intf,
             cargs=self._tls_cargs(port, ctl_privkey, ctl_cert, ca_certs),
-            command=self._command(env, tmpdir, name, 'faucet.gauge'),
+            command=self.command_(env, tmpdir, name, 'faucet.gauge'),
             port=port,
             **kwargs)
 
@@ -423,5 +428,74 @@ class FaucetAPI(BaseFAUCET):
         super(FaucetAPI, self).__init__(
             name,
             tmpdir,
-            command=self._command(env, tmpdir, name, 'faucet.faucet test_api.py'),
+            command=self.command_(env, tmpdir, name, 'faucet.faucet test_api.py'),
             **kwargs)
+
+
+class Gasket(BaseFAUCET):
+    """Start a FAUCET controller."""
+
+    def __init__(self, name, tmpdir, controller_intf, env,
+                 ctl_privkey, ctl_cert, ca_certs,
+                 ports_sock, port, test_name, prom_port, config_base_acl, **kwargs):
+        self.ofctl_port = faucet_mininet_test_util.find_free_port(
+            ports_sock, test_name)
+        self.ports_sock = ports_sock
+        self.test_name = test_name
+        self.prom_port = prom_port
+        self.CONFIG_BASE_ACL = config_base_acl
+        cargs = ' '.join((
+            '--wsapi-host=%s' % faucet_mininet_test_util.LOCALHOST,
+            '--wsapi-port=%u' % self.ofctl_port,
+            self._tls_cargs(port, ctl_privkey, ctl_cert, ca_certs)))
+        super(Gasket, self).__init__(
+            name,
+            tmpdir,
+            controller_intf,
+            cargs=cargs,
+            command=self.command_(env, tmpdir, name, 'ryu.app.ofctl_rest gasket.auth_app faucet.faucet'),
+            port=port,
+            **kwargs)
+
+    def listening(self):
+        return self.listen_port(self.ofctl_port) and super(Gasket, self).listening()
+
+    def _get_sid_prefix(self, ports_served):
+        """Return a unique switch/host prefix for a test."""
+        # Linux tools require short interface names.
+        # pylint: disable=no-member
+        id_chars = string.letters + string.digits
+        id_a = int(ports_served / len(id_chars))
+        id_b = ports_served - (id_a * len(id_chars))
+        return 'uab'
+#        return 'u%s%s' % (
+#            id_chars[id_a], id_chars[id_b])
+
+    def extra(self):
+        """Starts the authentication controller app.
+        Args:
+            host (mininet.host): host to start app on (generally the controller)
+        """
+        print ('abcdefghijkl')
+        print 'Starting Controller ....'
+        with open('/gasket-src/tests/config/auth.yaml', 'r') as f:
+            httpconfig = f.read()
+
+        config_values = {}
+        config_values['tmpdir'] = self.tmpdir
+        config_values['promport'] = self.prom_port
+        config_values['logger_location'] = self.tmpdir + '/auth_app.log'
+        serial = faucet_mininet_test_util.get_serialno(
+                self.ports_sock, self.test_name)
+        portal_name = self._get_sid_prefix(serial) + '1'
+        config_values['intf'] = portal_name + '-eth0'  # self.net.hosts[0].defaultIntf().name # need to get this.
+        config_values['pid_file'] = self.pid_file
+
+        open('%s/auth.yaml' % self.tmpdir, 'w').write(httpconfig % config_values)
+        open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL) # need to get C_B_A
+
+        faucet_acl = self.tmpdir + '/faucet-acl.yaml'
+        base = self.tmpdir + '/base-acls.yaml'
+
+        os.system('python3.5 {0}/gasket-src/gasket/rule_manager.py {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
+        print('qwertyuiop')
