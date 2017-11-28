@@ -742,12 +742,8 @@ class GasketNoLogOnTest(GasketSingleSwitchTest):
             host = user
             self.start_tcpdump(host)
 
-            cmd = "ip addr flush {0} && dhcpcd --timeout 5 {0}".format(
-                user.defaultIntf())
-            user.cmd(cmd)
-            # TODO check dhcp did not work.
-
-            # give ip address so ping 'could' work (it won't).
+            # give ip address so ping 'could' work (it won't)
+            # TODO is this even needed. will the host not already have an mininet assigned ip?
             user.cmd('ip addr add 10.0.0.%d/24 dev %s' % (i, user.defaultIntf()))
 
         ploss = self.net.ping(hosts=users, timeout='5')
