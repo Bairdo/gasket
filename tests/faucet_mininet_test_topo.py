@@ -466,10 +466,9 @@ class Gasket(BaseFAUCET):
         # pylint: disable=no-member
         id_chars = string.letters + string.digits
         id_a = int(ports_served / len(id_chars))
-        id_b = ports_served - (id_a * len(id_chars))
-        return 'uab'
-#        return 'u%s%s' % (
-#            id_chars[id_a], id_chars[id_b])
+        id_b = ports_served - (id_a * len(id_chars)) - 1
+        return 'u%s%s' % (
+            id_chars[id_a], id_chars[id_b])
 
     def extra(self):
         """Starts the authentication controller app.
