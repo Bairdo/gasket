@@ -154,10 +154,10 @@ eapol_flags=0
             print(host.name, 'login attempt failed. trying again.')
             new_status = self.wpa_cli_status(host, intf=intf)
             print(host.name, new_status)
-        cmds = ["ip addr flush %s" % intf, "dhcpcd -p -1 --timeout 60 %s " % intf]
+        cmds = ["ip addr flush %s" % intf, "dhcpcd -p -1 -L --waitip 4 --timeout 90 %s " % intf]
         for cmd in cmds:
             if netns is None:
-                host.cmd(cmd)
+                print(host.cmdPrint(cmd))
             else:
                 host.cmdPrint('ip netns exec %s %s' % (netns, cmd))
 #        self.pids['dhcpcd-%s-%s' % (host.name, host.defaultIntf())] = host.lastPid
@@ -306,7 +306,7 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
 
         # start hostapd
         host.cmd('hostapd -t -dd {1} > {0}/hostapd.out 2>&1 &'.format(self.tmpdir, hostapd_config_cmd))
-#        self.pids['hostapd'] = host.lastPid
+        self.pids['hostapd'] = host.lastPid
         
         # TODO is this still required?
         host.cmd('ping -i 0.1 10.0.0.2 &')
@@ -898,7 +898,7 @@ class GasketSingleLinkStateTest(GasketSingleSwitchTest):
         self.set_port_down(3)
 
         h0.cmd('kill %d' % self.pids['wpa_supplicant-%s-%s' % (h0.name, h0.defaultIntf())])
-        time.sleep(3)
+        time.sleep(10)
 
         self.set_port_up(3)
         # check host cannot ping
