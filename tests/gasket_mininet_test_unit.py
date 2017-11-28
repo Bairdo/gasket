@@ -154,15 +154,7 @@ eapol_flags=0
             print(host.name, 'login attempt failed. trying again.')
             new_status = self.wpa_cli_status(host, intf=intf)
             print(host.name, new_status)
-        cmds = ["ip addr flush %s" % intf, "dhcpcd -p -1 -L --waitip 4 --timeout 90 %s " % intf]
-        for cmd in cmds:
-            if netns is None:
-                print(host.cmdPrint(cmd))
-            else:
-                host.cmdPrint('ip netns exec %s %s' % (netns, cmd))
-#        self.pids['dhcpcd-%s-%s' % (host.name, host.defaultIntf())] = host.lastPid
 
-        host.defaultIntf().updateIP()
         if wait:
             end_reload_count = 0
             for i in range(20):
@@ -381,7 +373,10 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
             else:
                 filename = '%s-%s-%s.cap' % (host.name, interface, direction)
         else:
-            filename = '%s-%s-%s.cap' % (host.name, interface, direction)
+            if interface.startswith(host.name):
+                filename = '%s-%s.cap' % (interface, direction)
+            else:
+                filename = '%s-%s-%s.cap' % (host.name, interface, direction)
 
         tcpdump_args = ' '.join((
             '-s 0',
