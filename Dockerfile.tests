@@ -26,7 +26,6 @@ RUN \
     bc \
     build-essential \
     curl \
-    dhcpcd5 \
     fping \
     freeradius \
     gcc \
