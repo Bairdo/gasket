@@ -239,7 +239,7 @@ class HostapdCtrlUDP(HostapdCtrl):
                 return
             except ConnectionRefusedError:
                 self.logger.debug('couldnt connect to udp socket %s', addr)
-                time.sleep(1 * i)
+                time.sleep(pow(1.01,  i))
                 continue
         raise ConnectionRefusedError
 
