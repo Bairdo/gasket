@@ -19,11 +19,10 @@ from ryu.controller import ofp_event
 from ryu.lib import hub
 
 import faucet.valve_of as valve_of
-
-from auth_config import AuthConfig
-import rule_manager
-import auth_app_utils
-import hostapd_ctrl
+from gasket.auth_config import AuthConfig
+from gasket import rule_manager
+from gasket import auth_app_utils
+from gasket import hostapd_ctrl
 
 class Proto(object):
     """Class for protocol constants.
@@ -96,8 +95,7 @@ class AuthApp(app_manager.RyuApp):
 
     def start(self):
         super(AuthApp, self).start()
-        print('starting sockets')
-        self._init_sockets()
+        self.logger.info('Starting threads')
         print('starting thread')
         self.threads.extend([
                         hub.spawn(thread) for thread in ( self.run, )])
@@ -107,6 +105,9 @@ class AuthApp(app_manager.RyuApp):
         """Main loop, waits for messages from hostapd ctl socket,
         and processes them.
         """
+        self.logger.info('initiating sockets')
+        self._init_sockets()
+        self.logger.info('sockets initiated')
         while True:
             self.logger.info('waiting for receive')
             try:

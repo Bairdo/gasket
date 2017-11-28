@@ -10,8 +10,8 @@ import time
 # pytype: disable=pyi-error
 import yaml
 
-from rule_generator import RuleGenerator
-import auth_app_utils
+from gasket.rule_generator import RuleGenerator
+from gasket import auth_app_utils
 
 def main():
     """Create a default base config and the initial Faucet ACL yaml file,
@@ -191,6 +191,8 @@ class RuleManager(object):
         Returns:
             True if rules are found and faucet reloads or already authenticated. False otherwise.
         """
+        self.logger.debug('authenticate  authed_users')
+        self.logger.debug(self.authed_users)
         # get rules to apply
         if not self.is_authenticated(mac, username, switch, port):
             self.add_to_authed_dict(username, mac, switch, port)
@@ -304,6 +306,9 @@ class RuleManager(object):
             True if a client that is authed has rules removed, or if client is not authed.
             other wise false (faucet fails to reload)
         """
+        self.logger.debug('deauthenticate  authed_users')
+        self.logger.debug(self.authed_users)
+
         if self.is_authenticated(mac, username):
             self.logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
             self.remove_from_authed_dict(username, mac)
@@ -429,16 +434,51 @@ class RuleManager(object):
             port_num (int): port number
         """
 # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
+        deletes = []
         for user, mac_d in self.authed_users.items():
-            for mac in mac_d.keys():
+            macs_counter = len(mac_d)
+            for mac, dp_d in mac_d.items():
                 # TODO if user is authed on multiple ports dont delete the mac/user
                 #  if there are not on multiple ports delete user.
-                self.logger.debug('can we remove %s %s %s %d',user, mac, dp_name, port_num)
-                try:
-                    del self.authed_users[user][mac][dp_name][port_num]
-                except KeyError:
-                    self.logger.debug('no we cannot')
 
+                # if only one port and it is going to be removed, remove switch also.
+                # if no siwtches remove user, remove mac.
+                dp_counter = len(dp_d)
+                for dp_n, port_d in dp_d.items():
+                    if dp_n == dp_name:
+                        port_counter = len(port_d)
+                        for port, _ in port_d.items():
+                            if port == port_num:
+                                port_counter -= 1
+                                deletes.append((user, mac, dp_n, port))
+                                break
+                                # we can remove this.
+                        if port_counter == 0:
+                            # port_d can be removed.
+                            dp_counter -= 1
+                            deletes.append((user, mac, dp_n))
+                if dp_counter == 0:
+                    #dp_d can be removed
+                    macs_counter -= 1
+                    deletes.append((user, mac))
+            if macs_counter == 0:
+                deletes.append((user,))
+
+        for delete in deletes:
+            if len(delete) == 1:
+                # user can be deleted
+                del self.authed_users[delete[0]]
+            elif len(delete) == 2:
+                # mac can be deleted
+                del self.authed_users[delete[0]][delete[1]]
+            elif len(delete) == 3:
+                # dp can be deleted
+                del self.authed_users[delete[0]][delete[1]][delete[2]]
+            elif len(delete) == 4:
+                # port can be deleted
+                del self.authed_users[delet[0]][delete[1]][delete[2]][delete[3]]
+            else:
+                self.logger.warning('drm no supported length %s %d', str(delet), len(delet))
 
     def remove_from_authed_dict(self, username, mac):
         """Remove the mac from the authed_users dictionary.
