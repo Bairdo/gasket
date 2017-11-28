@@ -543,7 +543,7 @@ class GasketSingleTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf, netns=netns)
 
         self.logon_dot1x(h0, intf=mac_intf, netns=netns)
-
+        h0.setIP('10.0.0.50', intf=mac_intf)
         self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf, netns=netns)
 
         self.logoff_dot1x(h0)
@@ -697,8 +697,12 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         mac_intfs = { mac: mac + 'ns' for mac in self.mac_interfaces.values()}
         
         # get each intf going.
+        i = 0
         for intf, netns in mac_intfs.items():
             self.logon_dot1x(h0, intf=intf, netns=netns)
+            ip = 50 + i
+            i += 1
+            h0.setIP('10.0.0.%d' % ip, intf=intf)
             self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10, netns=netns)
         print('first logons complete')
 
