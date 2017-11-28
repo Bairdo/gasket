@@ -476,7 +476,7 @@ class RuleManager(object):
                 del self.authed_users[delete[0]][delete[1]][delete[2]]
             elif len(delete) == 4:
                 # port can be deleted
-                del self.authed_users[delet[0]][delete[1]][delete[2]][delete[3]]
+                del self.authed_users[delete[0]][delete[1]][delete[2]][delete[3]]
             else:
                 self.logger.warning('drm no supported length %s %d', str(delet), len(delet))
 
@@ -512,7 +512,9 @@ class RuleManager(object):
         acl_name = ""
         data = yaml.load(open(self.config.faucet_config_file, 'r'))
         if dp_name in data['dps']:
+            self.logger.debug('found dp_name: %s in dps', dp_name)
             if port_num in data['dps'][dp_name]['interfaces']:
+                self.logger.debug('found port_num: %d', port_num)
                 if 'acl_in' in data['dps'][dp_name]['interfaces'][port_num]:
                     self.logger.debug('can rewrite acl')
                     acl_name = data['dps'][dp_name]['interfaces'][port_num]['acl_in']
