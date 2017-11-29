@@ -40,7 +40,7 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
             host = self.net.hosts[0]
             print "about to kill everything"
             for name, pid in self.pids.iteritems():
-                host.cmd('kill ' + str(pid))
+                host.cmd('kill -s sigkill' + str(pid))
 
             self.net.stop()
         super(GasketTest, self).tearDown()
@@ -473,18 +473,14 @@ class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     def setUp(self):
         super(GasketMultiHostPerPortTest, self).setUp()
         h0 = self.clients[0]
-
+        h0.cmd('echo 1 > /proc/sys/net/ipv4/conf/all/arp_filter')
+        h0.cmd('echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter')
         for i in range(self.max_vlan_hosts):
             mac_intf = '%s-mac%u' % (h0.name, i)
 
             self.mac_interfaces[str(i)] = mac_intf
 
             self.add_macvlan(h0, mac_intf)
-            netns =  mac_intf + 'ns'
-            h0.cmd('ip netns add %s' % netns)
-            h0.cmd('ip link set %s netns %s' % (mac_intf, netns))
-
-            h0.cmd('ip netns exec %s ip link set %s up' % (netns, mac_intf))
 
             username = 'hostuser{}'.format(i)
             password = 'hostpass{}'.format(i)
@@ -506,11 +502,11 @@ eapol_flags=0
             h0.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, mac_intf))
 
     def tearDown(self):
-        h0 = self.clients[0]
+#        h0 = self.clients[0]
 
-        for mac_intf in list(self.mac_interfaces.values()):
-            netns = mac_intf + 'ns'
-            h0.cmd('ip netns del %s' % netns)
+#        for mac_intf in list(self.mac_interfaces.values()):
+#            netns = mac_intf + 'ns'
+#            h0.cmd('ip netns del %s' % netns)
         super(GasketMultiHostPerPortTest, self).tearDown()
 
     def get_macvlan_ip(self, h, intf):
@@ -540,11 +536,10 @@ class GasketSingleTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
         mac_intf = self.mac_interfaces['1']
         netns = mac_intf + 'ns'
-        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf, netns=netns)
+        self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf)
 
-        self.logon_dot1x(h0, intf=mac_intf, netns=netns)
-        h0.setIP('10.0.0.50', intf=mac_intf)
-        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf, netns=netns)
+        self.logon_dot1x(h0, intf=mac_intf)
+        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf)
 
         self.logoff_dot1x(h0)
         self.fail_ping_ipv4(h0, '10.0.0.2', retries=5)
@@ -669,7 +664,7 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
-    N_UNTAGGED = 5
+    N_UNTAGGED = 4
     max_hosts = N_UNTAGGED - 2
 
     CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
@@ -685,9 +680,9 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         """
         h0 = self.clients[0]
         h1 = self.clients[1]
-        h2 = self.clients[2]
+#        h2 = self.clients[2]
         interweb = self.net.hosts[1]
-        self.logon_dot1x(h2)
+#        self.logon_dot1x(h2)
         self.logon_dot1x(h1)
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
@@ -699,16 +694,13 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         # get each intf going.
         i = 0
         for intf, netns in mac_intfs.items():
-            self.logon_dot1x(h0, intf=intf, netns=netns)
-            ip = 50 + i
-            i += 1
-            h0.setIP('10.0.0.%d' % ip, intf=intf)
-            self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10, netns=netns)
+            self.logon_dot1x(h0, intf=intf)
+            self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10)
         print('first logons complete')
 
         for intf, netns in mac_intfs.items():
-            self.logoff_dot1x(h0, intf=intf, netns=netns)
-            self.fail_ping_ipv4(h0, h2.IP(), intf=intf, netns=netns)
+            self.logoff_dot1x(h0, intf=intf)
+            self.fail_ping_ipv4(h0, h1.IP(), intf=intf)
 
         print('logoffs complete')
         self.one_ipv4_ping(h0, interweb.IP())
@@ -723,7 +715,7 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
             try:
                 for intf, netns in mac_intfs.items():
                     print('ping after relogin')
-                    self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=1, netns=netns)
+                    self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=1)
                 # if it makes it to here all pings have succeeded.
                 passed = True
                 break
@@ -731,7 +723,8 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
                 print(e)
                 print('try ping again')
         self.assertTrue(passed)
-
+        # TODO remove. this is just here to check no exceptions occured before the teardown
+        self.verify_no_exception(self.env['faucet']['FAUCET_EXCEPTION_LOG'])
 
 class GasketNoLogOnTest(GasketSingleSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
