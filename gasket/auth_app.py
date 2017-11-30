@@ -52,7 +52,6 @@ class AuthApp(app_manager.RyuApp):
     OFP_VERSIONS = valve_of.OFP_VERSIONS
     _CONTEXTS = {'dpset': dpset.DPSet}
 
-
     config = None
     rule_man = None
     logger = None
@@ -67,7 +66,6 @@ class AuthApp(app_manager.RyuApp):
         self.config = AuthConfig(config_filename)
         self.logger = auth_app_utils.get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
-
 
     def _init_sockets(self):
         self._init_request_socket()
@@ -99,7 +97,6 @@ class AuthApp(app_manager.RyuApp):
         print('starting thread')
         self.threads.extend([
                         hub.spawn(thread) for thread in ( self.run, )])
-
 
     def run(self):
         """Main loop, waits for messages from hostapd ctl socket,
@@ -267,7 +264,6 @@ class AuthApp(app_manager.RyuApp):
             self.logger.debug('no port_num %s %s', type(port_num), port_num)
             return None
 
-
         self.logger.debug('none')
         return None
 
@@ -288,9 +284,10 @@ class AuthApp(app_manager.RyuApp):
             self.logger.debug('dp_name: %s', dp_name)
             if dp_name:
                 self.logger.debug('dp name was found.')
-
                 self.logger.debug('about to reset port')
+
                 self.rule_man.reset_port_acl(dp_name, port)
+
                 self.logger.debug('reset port completed')
                 #reset port acl.
         # if port and dpid are 1x ports
