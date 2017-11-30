@@ -287,7 +287,7 @@ class BaseFAUCET(Controller):
             tls_cargs.append(('--ofp-ssl-listen-port=%u' % ofctl_port))
         return ' '.join(tls_cargs)
 
-    def command_(self, env, tmpdir, name, args):
+    def _command(self, env, tmpdir, name, args):
         """Wrap controller startup command in shell script with environment."""
         env_vars = []
         for var, val in list(sorted(env.items())):
@@ -397,7 +397,7 @@ class FAUCET(BaseFAUCET):
             tmpdir,
             controller_intf,
             cargs=cargs,
-            command=self.command_(env, tmpdir, name, 'ryu.app.ofctl_rest faucet.faucet'),
+            command=self._command(env, tmpdir, name, 'ryu.app.ofctl_rest faucet.faucet'),
             port=port,
             **kwargs)
 
@@ -416,7 +416,7 @@ class Gauge(BaseFAUCET):
             tmpdir,
             controller_intf,
             cargs=self._tls_cargs(port, ctl_privkey, ctl_cert, ca_certs),
-            command=self.command_(env, tmpdir, name, 'faucet.gauge'),
+            command=self._command(env, tmpdir, name, 'faucet.gauge'),
             port=port,
             **kwargs)
 
@@ -428,7 +428,7 @@ class FaucetAPI(BaseFAUCET):
         super(FaucetAPI, self).__init__(
             name,
             tmpdir,
-            command=self.command_(env, tmpdir, name, 'faucet.faucet test_api.py'),
+            command=self._command(env, tmpdir, name, 'faucet.faucet test_api.py'),
             **kwargs)
 
 
@@ -453,7 +453,7 @@ class Gasket(BaseFAUCET):
             tmpdir,
             controller_intf,
             cargs=cargs,
-            command=self.command_(env, tmpdir, name, 'ryu.app.ofctl_rest gasket.auth_app faucet.faucet'),
+            command=self._command(env, tmpdir, name, 'ryu.app.ofctl_rest gasket.auth_app faucet.faucet'),
             port=port,
             **kwargs)
 
