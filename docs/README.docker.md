@@ -1,5 +1,17 @@
 # Running auth_app with docker & docker-compose
 
+## docker tests
+
+To run the docker based test suite run the following commands as root:
+
+```bash
+docker build -t gasket/tests -f Dockerfile.tests .
+apparmor_parser -R /etc/apparmor.d/usr.sbin.tcpdump
+modprobe openvswitch
+docker run --privileged -ti gasket/tests
+```
+
+
 ## docker-compose.yaml
 
 This contains an example docker-compose file that can be used in conjunction with a mininet network, to demonstrate 802.1X functionality with Faucet.
@@ -23,6 +35,12 @@ Run the following to connect hostapd to s1: (replace '<PROJECT_NAME>' with the n
 ```bash
 ovs-docker add-port s1 eth3 <PROJECT_NAME>_hostapd_1 --ipaddress=10.0.0.20/8
 ```
+
+When the hostapd docker container dies, run the following command to remove the above interface from the ovs switch.
+```bash
+ovs-docker del-port s1 eth3 <PROJECT_NAME>_hostapd_1
+```
+
 
 Wait a few seconds for the hostapd container to send a ping (so faucet learns where hostapd is) and start hostapd.
 
