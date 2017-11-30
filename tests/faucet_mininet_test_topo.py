@@ -239,11 +239,11 @@ class BaseFAUCET(Controller):
         self.tmpdir = tmpdir
         self.controller_intf = controller_intf
         cargs = self._add_cargs(cargs, name)
-        self.extra()
+        self.gasket_setup()
         super(BaseFAUCET, self).__init__(
             name, cargs=cargs, **kwargs)
 
-    def extra(self):
+    def gasket_setup(self):
         pass
 
     def _add_cargs(self, cargs, name):
@@ -470,7 +470,7 @@ class Gasket(BaseFAUCET):
         return 'u%s%s' % (
             id_chars[id_a], id_chars[id_b])
 
-    def extra(self):
+    def gasket_setup(self):
         """Starts the authentication controller app.
         Args:
             host (mininet.host): host to start app on (generally the controller)
