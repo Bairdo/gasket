@@ -1,5 +1,5 @@
 
-[![Build Status](https://travis-ci.org/bairdo/faucet.png)](https://travis-ci.org/bairdo/gasket)
+[![Build Status](https://travis-ci.org/Bairdo/faucet.png)](https://travis-ci.org/Bairdo/gasket)
 
 # Gasket
 ##### "Gaskets are the mechanical seals, or packings, used to prevent the leakage of a gas or fluids from [valves](https://github.com/faucetsdn/faucet)" - https://en.wikipedia.org/wiki/Valve#Gaskets
