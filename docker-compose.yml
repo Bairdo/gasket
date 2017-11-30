@@ -13,7 +13,7 @@ services:
             ip link set eth3 down;
             ip link set eth3 address 44:44:44:44:44:44;
             ip link set eth3 up;
-            ping 10.0.0.40 -c5 &&
+            ping 10.0.0.40 -c5;
             hostapd -ddt /etc/hostapd/wired.conf"
 
         networks:
@@ -40,12 +40,13 @@ services:
                 ipv4_address: 172.220.0.100
 
     freeradius:
-        image: 'marcelmaatkamp/freeradius'
+        build:
+            context: '.'
+            dockerfile: './Dockerfile.freeradius'
         volumes:
-            - "./docker-compose/freeradius/raddb/clients.conf:/etc/raddb/clients.conf"
-            - "./docker-compose/freeradius/raddb/users:/etc/raddb/users"
-            - "./docker-compose/freeradius/raddb/radiusd.conf:/etc/raddb/radiusd.conf"
-            - "./docker-compose/freeradius/raddb/dictionary:/etc/raddb/dictionary"
+            - "./docker-compose/freeradius/raddb/clients.conf:/etc/freeradius/clients.conf"
+            - "./docker-compose/freeradius/raddb/users:/etc/freeradius/users"
+            - "./docker-compose/freeradius/raddb/dictionary:/etc/freeradius/dictionary"
             - "./docker-compose/freeradius/log/radius-log:/var/log/radius/"
         networks:
             radius-net:

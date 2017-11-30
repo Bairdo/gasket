@@ -60,6 +60,8 @@ class AuthConfig(object):
 
         if 'socket_path' in data['hostapd']:
             self.hostapd_socket_path = data['hostapd']['socket_path']
+            self.hostapd_host = None
+            self.hostapd_port = None
         else:
             # can be ipv4, ipv6, or hostname
             self.hostapd_host = data['hostapd']['host']

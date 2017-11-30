@@ -14,18 +14,6 @@ RUN \
     build-essential \
     libssl-dev
 
-COPY ./ /gasket-src/
-
-RUN \
-  pip3 install --upgrade pip && \
-  pip3 install setuptools wheel virtualenv --upgrade && \
-  pip3 install -r /gasket-src/requirements.txt
-
-
-VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/", "/etc/hostapd"]
-
-EXPOSE 6653
-
 #
 # This hostapd contains several minor fixes for when running the internal radius server.
 # Otherwise it is the same as hostapd origin, at the time of the clone. ~15/9/17.
@@ -35,5 +23,17 @@ RUN \
   cd hostapd-d1xf/hostapd && \
   git checkout hostapd-master && \
   make && make install
+
+COPY ./ /gasket-src/
+
+RUN \
+  pip3 install --upgrade pip && \
+  pip3 install setuptools wheel virtualenv --upgrade && \
+  pip3 install -r /gasket-src/requirements.txt
+  pip3 install /gasket-src
+
+VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/", "/etc/hostapd"]
+
+EXPOSE 6653
 
 CMD ["/gasket-src/docker/runauth.sh"]

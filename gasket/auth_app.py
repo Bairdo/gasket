@@ -7,13 +7,22 @@ and sending it a SIGHUP.
 
 import argparse
 import logging
+import os
 import re
 import socket
 
-from auth_config import AuthConfig
-import rule_manager
-import auth_app_utils
-import hostapd_ctrl
+from ryu.base import app_manager
+from ryu.controller.handler import MAIN_DISPATCHER
+from ryu.controller.handler import set_ev_cls
+from ryu.controller import dpset
+from ryu.controller import ofp_event
+from ryu.lib import hub
+
+import faucet.valve_of as valve_of
+from gasket.auth_config import AuthConfig
+from gasket import rule_manager
+from gasket import auth_app_utils
+from gasket import hostapd_ctrl
 
 class Proto(object):
     """Class for protocol constants.
@@ -31,7 +40,7 @@ class Proto(object):
 FAUCET_ENTERPRISE_NUMBER = 12345
 FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE = 1
 
-class AuthApp(object):
+class AuthApp(app_manager.RyuApp):
     '''
     This class recieves messages hostapd_ctrl from the portal via
     UNIX DOMAIN sockets, about the a change of state of the users.
@@ -39,6 +48,9 @@ class AuthApp(object):
     The information is then passed on to rule_manager which
     installs/removes any appropriate rules.
     '''
+
+    OFP_VERSIONS = valve_of.OFP_VERSIONS
+    _CONTEXTS = {'dpset': dpset.DPSet}
 
     config = None
     rule_man = None
@@ -48,13 +60,12 @@ class AuthApp(object):
     hapd_req = None
     hapd_unsolicited = None
 
-    def __init__(self, args):
-
-        config_filename = args.config
+    def __init__(self, *args, **kwargs):
+        super(AuthApp, self).__init__(*args, **kwargs)
+        config_filename = os.getenv('GASKET_CONFIG', '/etc/ryu/faucet/gasket/auth.yaml')
         self.config = AuthConfig(config_filename)
         self.logger = auth_app_utils.get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
-        self._init_sockets()
 
     def _init_sockets(self):
         self._init_request_socket()
@@ -80,10 +91,20 @@ class AuthApp(object):
             self.hapd_req = hostapd_ctrl.request_socket_udp(
                 self.config.hostapd_host, self.config.hostapd_port, self.logger)
 
+    def start(self):
+        super(AuthApp, self).start()
+        self.logger.info('Starting threads')
+        print('starting thread')
+        self.threads.extend([
+                        hub.spawn(thread) for thread in ( self.run, )])
+
     def run(self):
         """Main loop, waits for messages from hostapd ctl socket,
         and processes them.
         """
+        self.logger.info('initiating sockets')
+        self._init_sockets()
+        self.logger.info('sockets initiated')
         while True:
             self.logger.info('waiting for receive')
             try:
@@ -122,17 +143,7 @@ class AuthApp(object):
              dp name & port number.
         """
         # query faucets promethues.
-        prom_txt = auth_app_utils.scrape_prometheus(self.config.prom_url)
-
-        prom_mac_table = []
-        prom_name_dpid = []
-        for line in prom_txt.splitlines():
-            if line.startswith('learned_macs'):
-                prom_mac_table.append(line)
-                self.logger.debug(line)
-            if line.startswith('faucet_config_dp_name'):
-                prom_name_dpid.append(line)
-                self.logger.debug(line)
+        prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['learned_macs', 'faucet_config_dp_name'])
 
         dpid_name = auth_app_utils.dpid_name_to_map(prom_name_dpid)
         self.logger.debug(dpid_name)
@@ -210,11 +221,76 @@ class AuthApp(object):
         # say they have not actually logged off.
         # EAP LOGOFF is a one way message (not ack-ed)
 
+    def is_port_managed(self, dpid, port_num):
+        """
+        Args:
+            dpid (int): datapath id.
+            port_num (int): port number.
+        Returns:
+            datapath name (str) if this dpid & port combo are managed (provide authentication). otherwise None
+        """
+        # query prometheus for the dpid -> name.
+        # use the name to look in auth.yaml for the datapath.
+        # if the dp is there, then use the port.
+        #    if the port is there and it is set to 'access' return true
+        # otherwise return false.
+        dp_names = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['faucet_config_dp_name'])[0]
+        self.logger.debug('scrapped prometheus')
+        dp_name = ''
+        for l in dp_names:
+            pattern = r'name="(.*)"}} {0}\.0'.format(dpid)
+            print(pattern)
+            self.logger.debug(type(l))
+            m = re.search(pattern, l)
+            if m:
+                dp_name = m.groups()[0]
+                break
+        self.logger.debug('regexp-ed for dp name %s', dp_name )
+        if dp_name in self.config.dp_port_mode:
+            self.logger.debug('%s', self.config.dp_port_mode[dp_name]['interfaces'])
+            if port_num in self.config.dp_port_mode[dp_name]['interfaces']:
+                if 'auth_mode' in self.config.dp_port_mode[dp_name]['interfaces'][port_num]:
+                    mode = self.config.dp_port_mode[dp_name]['interfaces'][port_num]['auth_mode']
+                    if mode == 'access':
+                        self.logger.debug('access')
+                        return dp_name
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', help='location of yaml configuration file')
-    auth_app = AuthApp(parser.parse_args())
-    auth_app.run()
+                    self.logger.debug('not access')
 
+                    return None
+                self.logger.debug('no auth mode for port')
 
+                return None
+            self.logger.debug('no port_num %s %s', type(port_num), port_num)
+            return None
+
+        self.logger.debug('none')
+        return None
+
+    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER) # pylint: disable=no-member
+    def port_status_handler(self, ryu_event):
+        print('port has changed')
+        self.logger.debug('port has changed status')
+        msg = ryu_event.msg
+        ryu_dp = msg.datapath
+        dpid = ryu_dp.id
+        port = msg.desc.port_no
+
+        port_status = msg.desc.state & msg.datapath.ofproto.OFPPS_LINK_DOWN
+        self.logger.debug('port_status: %s', port_status)
+        if port_status == True: # port is down
+
+            dp_name = self.is_port_managed(dpid, port)
+            self.logger.debug('dp_name: %s', dp_name)
+            if dp_name:
+                self.logger.debug('dp name was found.')
+                self.logger.debug('about to reset port')
+
+                self.rule_man.reset_port_acl(dp_name, port)
+
+                self.logger.debug('reset port completed')
+                #reset port acl.
+        # if port and dpid are 1x ports
+        #   remove all auth rules for that port. this can be restore base-orig.
+        # else 
+        #   do nothing.
