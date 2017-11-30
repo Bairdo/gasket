@@ -501,14 +501,6 @@ eapol_flags=0
 }''' % (username, username, password)
             h0.cmd('''echo '{0}' > {1}/{2}.conf'''.format(wpa_conf, self.tmpdir, mac_intf))
 
-    def tearDown(self):
-#        h0 = self.clients[0]
-
-#        for mac_intf in list(self.mac_interfaces.values()):
-#            netns = mac_intf + 'ns'
-#            h0.cmd('ip netns del %s' % netns)
-        super(GasketMultiHostPerPortTest, self).tearDown()
-
     def get_macvlan_ip(self, h, intf):
         '''Get the IP address of a macvlan that is in an netns
         '''
@@ -692,7 +684,6 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         mac_intfs = { mac: mac + 'ns' for mac in self.mac_interfaces.values()}
         
         # get each intf going.
-        i = 0
         for intf, netns in mac_intfs.items():
             self.logon_dot1x(h0, intf=intf)
             self.one_ipv4_ping(h0, interweb.IP(), intf=intf, retries=10)
