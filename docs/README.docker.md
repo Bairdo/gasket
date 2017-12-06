@@ -26,7 +26,12 @@ You will need to setup your network (mininet or real). [see below for mininet ex
 
 Start the containers
 ```bash
-docker-compose up freeradius hostapd faucet-auth
+docker-compose up freeradius hostapd gasket
+```
+
+To kill the gasket container, run the following to tidy up the hostapd control socket connections.
+```bash
+docker kill --signal 1 gasket_gasket_1
 ```
 
 At this time the hostapd container is not connected to your mininet network.
@@ -81,6 +86,12 @@ mn --topo=single --custom=topo.py --controller=remote,ip=172.222.0.100,port=6653
 ```
 mininet will take several minutes to start as the controller is not running yet.
 Alternatively run docker-compose up faucet-auth first.
+
+Add another controller to the OVS Switch. 6653 is for Faucet, & 6663 is for Gasket.
+```bash
+ovs-vsctl set-controller s1 tcp:172.222.0.100:6653 \
+tcp:172.222.0.100:6663
+```
 
 
 ## TODO

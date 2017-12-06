@@ -435,6 +435,7 @@ class RuleManager(object):
         """
 # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
         deletes = []
+        removed_macs = []
         for user, mac_d in self.authed_users.items():
             macs_counter = len(mac_d)
             for mac, dp_d in mac_d.items():
@@ -451,6 +452,7 @@ class RuleManager(object):
                             if port == port_num:
                                 port_counter -= 1
                                 deletes.append((user, mac, dp_n, port))
+                                removed_macs.append(mac)
                                 break
                                 # we can remove this.
                         if port_counter == 0:
@@ -479,6 +481,7 @@ class RuleManager(object):
                 del self.authed_users[delete[0]][delete[1]][delete[2]][delete[3]]
             else:
                 self.logger.warning('drm no supported length %s %d', str(delet), len(delet))
+        return removed_macs
 
     def remove_from_authed_dict(self, username, mac):
         """Remove the mac from the authed_users dictionary.
@@ -506,10 +509,13 @@ class RuleManager(object):
         Args:
             dp_name (str): name of datapath.
             port_num (int): port number.
+        Returns:
+            list of MAC addresses (str) that were on the port.
         """
         # TODO optimize the ording of this - do we want to signal faucet asap?
         # find the acl name for that port.
         acl_name = ""
+        removed_macs = []
         data = yaml.load(open(self.config.faucet_config_file, 'r'))
         if dp_name in data['dps']:
             self.logger.debug('found dp_name: %s in dps', dp_name)
@@ -531,7 +537,7 @@ class RuleManager(object):
                     self.backup_file(self.faucet_acl_filename)
                     self.swap_temp_file(self.faucet_acl_filename)
 
-                    self.remove_all_from_authed_dict(dp_name, port_num)
+                    removed_macs = self.remove_all_from_authed_dict(dp_name, port_num)
 
                     write_yaml(base, self.base_filename + '.tmp')
                     self.backup_file(self.base_filename)
@@ -545,13 +551,13 @@ class RuleManager(object):
                         end_count = self.get_faucet_reload_count()
                         if end_count > start_count:
                             self.logger.info('reset acl - faucet has reloaded.')
-                            return True
+                            return removed_macs
                         time.sleep(0.05)
                         self.logger.info('reset - waiting for faucet to process sighup config reload. %d', i)
                     self.logger.error('reset - faucet did not process sighup within 20 seconds. 0.05 * 400')
 
                     # send signal.
 
-
+        return removed_macs
 if __name__ == '__main__':
     main()

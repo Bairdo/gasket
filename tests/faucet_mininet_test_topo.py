@@ -239,12 +239,8 @@ class BaseFAUCET(Controller):
         self.tmpdir = tmpdir
         self.controller_intf = controller_intf
         cargs = self._add_cargs(cargs, name)
-        self.gasket_setup()
         super(BaseFAUCET, self).__init__(
             name, cargs=cargs, **kwargs)
-
-    def gasket_setup(self):
-        pass
 
     def _add_cargs(self, cargs, name):
         ofp_listen_host_arg = ''
@@ -437,7 +433,7 @@ class Gasket(BaseFAUCET):
 
     def __init__(self, name, tmpdir, controller_intf, env,
                  ctl_privkey, ctl_cert, ca_certs,
-                 ports_sock, port, test_name, prom_port, config_base_acl, **kwargs):
+                 ports_sock, gasket_port, test_name, prom_port, config_base_acl, faucet_pid_file, **kwargs):
         self.ofctl_port = faucet_mininet_test_util.find_free_port(
             ports_sock, test_name)
         self.ports_sock = ports_sock
@@ -445,20 +441,20 @@ class Gasket(BaseFAUCET):
         self.prom_port = prom_port
         self.CONFIG_BASE_ACL = config_base_acl
         cargs = ' '.join((
-            '--wsapi-host=%s' % faucet_mininet_test_util.LOCALHOST,
-            '--wsapi-port=%u' % self.ofctl_port,
-            self._tls_cargs(port, ctl_privkey, ctl_cert, ca_certs)))
+            self._tls_cargs(gasket_port, ctl_privkey, ctl_cert, ca_certs)))
+        self.tmpdir = tmpdir
+        self.faucet_pid_file = faucet_pid_file
+        self.gasket_setup()
+
         super(Gasket, self).__init__(
             name,
             tmpdir,
             controller_intf,
             cargs=cargs,
-            command=self._command(env, tmpdir, name, 'ryu.app.ofctl_rest gasket.auth_app faucet.faucet'),
-            port=port,
+            command=self._command(env, tmpdir, name, 'gasket.auth_app'),
+            port=gasket_port,
             **kwargs)
 
-    def listening(self):
-        return self.listen_port(self.ofctl_port) and super(Gasket, self).listening()
 
     def _get_sid_prefix(self, ports_served):
         """Return a unique switch/host prefix for a test."""
@@ -488,7 +484,7 @@ class Gasket(BaseFAUCET):
                 self.ports_sock, self.test_name)
         portal_name = self._get_sid_prefix(serial) + '1'
         config_values['intf'] = portal_name + '-eth0'  # self.net.hosts[0].defaultIntf().name # need to get this.
-        config_values['pid_file'] = self.pid_file
+        config_values['pid_file'] = self.faucet_pid_file
 
         open('%s/auth.yaml' % self.tmpdir, 'w').write(httpconfig % config_values)
         open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL) # need to get C_B_A

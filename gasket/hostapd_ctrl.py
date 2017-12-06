@@ -56,7 +56,8 @@ class HostapdCtrl(object):
         """
         if self.attached:
             d = self.request('DETACH')
-            return self._returned_ok(d)
+            self.attached = not self._returned_ok(d)
+            return self.attached
         return True
 
     def mib(self):
@@ -135,6 +136,7 @@ class HostapdCtrl(object):
         return 'PONG' in str(d)
 
     def _to_dict(self, d):
+        self.logger.debug(d)
         dic = {}
         for s in d.split('\\n'):
             try:
@@ -156,10 +158,15 @@ class HostapdCtrl(object):
     def close(self):
         """Close the underlying control socket.
         """
-        self.detach()
+        if self.detach():
+            self.logger.debug('detatched from socket')
+        else:
+            self.logger.warning('could not detatch from socket.')
         self.soc.close()
+        self.logger.debug('socket closed')
         if self.local_unix_sock_path:
             os.remove(self.local_unix_sock_path)
+            self.logger.debug('unix socket path removed')
 
     def set_timeout(self, secs):
         """Set the timeout of the socket
@@ -177,9 +184,7 @@ class HostapdCtrlUNIX(HostapdCtrl):
 
     def __init__(self, path, logger):
         self.logger = logger
-        logger.info('hctrl')
         self.soc = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        logger.info('connecting')
         if len(path) > 107:
             logger.critical('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s',
                             len(path), path)
@@ -191,14 +196,14 @@ class HostapdCtrlUNIX(HostapdCtrl):
             logger.error('Unable to connect to socket. FileNotFoundError %s' % path)
             raise
 
-        logger.info('connected')
+        logger.info('Connected to UNIX Socket: %s', path)
         tmpfile = '/tmp/auth-sock-%s' % datetime.now().microsecond #str(uuid.uuid4())
         self.local_unix_sock_path = tmpfile
         try:
             self.soc.bind(tmpfile)
-            logger.info('bound')
+            logger.info('Bound to UNIX Socket: %s', path)
         except OSError as e:
-            logger.error('Unable to bind to file: %s' % tmpfile)
+            logger.error('Unable to bind to UNIX Socket: %s' % tmpfile)
             raise e
 
     def connect(self, addr):
@@ -217,28 +222,26 @@ class HostapdCtrlUDP(HostapdCtrl):
 
     def __init__(self, family, sockaddr, logger):
         self.logger = logger
-        logger.info('hctrl')
         self.soc = socket.socket(family, socket.SOCK_DGRAM)
         logger.info('connecting')
         try:
             self.connect(sockaddr)
         # pytype: disable=name-error
         except ConnectionRefusedError as e:
-            logger.error('Unable to connect to udp socket. sockaddr %s' % sockaddr)
+            logger.error('Unable to connect to UDP socket. sockaddr %s' % sockaddr)
             raise
-        logger.info('connected')
+        logger.info('Connected to UDP Socket: %s', sockaddr)
 
     def connect(self, addr):
         for i in range(self.socket_attempts):
             try:
                 self.soc.connect(addr)
                 c = self.get_cookie()
-                self.logger.info('c is %s', c)
                 self.cookie = re.findall("=[0-9a-f]*'", c)[0][1:-1]
-                self.logger.info('cookie is %s', self.cookie)
+                self.logger.info('UDP Socket Cookie is %s', self.cookie)
                 return
             except ConnectionRefusedError:
-                self.logger.debug('couldnt connect to udp socket %s', addr)
+                self.logger.debug("Couldn't connect to UDP socket %s", addr)
                 time.sleep(pow(1.01,  i))
                 continue
         raise ConnectionRefusedError

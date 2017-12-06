@@ -1,5 +1,6 @@
 docs
-faucet/*pyc
+gasket/*pyc
 tests/*pyc
-faucet/*/*pyc
+gasket/*/*pyc
 tests/*/*pyc
+docker-compose/*

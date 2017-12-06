@@ -9,7 +9,9 @@ import argparse
 import logging
 import os
 import re
+import signal
 import socket
+import sys
 
 from ryu.base import app_manager
 from ryu.controller.handler import MAIN_DISPATCHER
@@ -97,6 +99,8 @@ class AuthApp(app_manager.RyuApp):
         print('starting thread')
         self.threads.extend([
                         hub.spawn(thread) for thread in ( self.run, )])
+
+        signal.signal(signal.SIGINT, self._handle_sigint)
 
     def run(self):
         """Main loop, waits for messages from hostapd ctl socket,
@@ -235,62 +239,56 @@ class AuthApp(app_manager.RyuApp):
         #    if the port is there and it is set to 'access' return true
         # otherwise return false.
         dp_names = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['faucet_config_dp_name'])[0]
-        self.logger.debug('scrapped prometheus')
         dp_name = ''
         for l in dp_names:
             pattern = r'name="(.*)"}} {0}\.0'.format(dpid)
-            print(pattern)
-            self.logger.debug(type(l))
             m = re.search(pattern, l)
             if m:
                 dp_name = m.groups()[0]
                 break
-        self.logger.debug('regexp-ed for dp name %s', dp_name )
+
         if dp_name in self.config.dp_port_mode:
-            self.logger.debug('%s', self.config.dp_port_mode[dp_name]['interfaces'])
             if port_num in self.config.dp_port_mode[dp_name]['interfaces']:
                 if 'auth_mode' in self.config.dp_port_mode[dp_name]['interfaces'][port_num]:
                     mode = self.config.dp_port_mode[dp_name]['interfaces'][port_num]['auth_mode']
                     if mode == 'access':
-                        self.logger.debug('access')
                         return dp_name
-
-                    self.logger.debug('not access')
-
-                    return None
-                self.logger.debug('no auth mode for port')
-
-                return None
-            self.logger.debug('no port_num %s %s', type(port_num), port_num)
-            return None
-
-        self.logger.debug('none')
         return None
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER) # pylint: disable=no-member
     def port_status_handler(self, ryu_event):
-        print('port has changed')
-        self.logger.debug('port has changed status')
+        """Deauthenticates all hosts on a port if the port has gone down.
+        """
         msg = ryu_event.msg
         ryu_dp = msg.datapath
         dpid = ryu_dp.id
         port = msg.desc.port_no
 
         port_status = msg.desc.state & msg.datapath.ofproto.OFPPS_LINK_DOWN
-        self.logger.debug('port_status: %s', port_status)
-        if port_status == True: # port is down
-
+        self.logger.info('DPID %d, Port %d has changed status: %d', dpid, port, port_status)
+        if port_status == 1: # port is down
             dp_name = self.is_port_managed(dpid, port)
             self.logger.debug('dp_name: %s', dp_name)
             if dp_name:
-                self.logger.debug('dp name was found.')
-                self.logger.debug('about to reset port')
-
-                self.rule_man.reset_port_acl(dp_name, port)
+                removed_macs = self.rule_man.reset_port_acl(dp_name, port)
+                self.logger.info('removed macs: %s', removed_macs)
+                for mac in removed_macs:
+                    self.logger.info('sending deauth for %s' % mac)
+                    self.hapd_req.deauthenticate(mac)
 
                 self.logger.debug('reset port completed')
-                #reset port acl.
-        # if port and dpid are 1x ports
-        #   remove all auth rules for that port. this can be restore base-orig.
-        # else 
-        #   do nothing.
+
+    def _handle_sigint(self, sigid, frame):
+        """Handles the SIGINT signal.
+        Closes the hostapd control interfaces, and kills the main thread ('self.run').
+        """
+        self.logger.info('SIGINT Received - closing hostapd sockets')
+        self.hapd_req.close()
+        self.hapd_unsolicited.close()
+        self.logger.info('hostapd sockets closed')
+        self.logger.info('Killing threads ...')
+        for t in self.threads:
+            t.kill()
+        self.logger.info('Threads killed')
+        sys.exit()
+

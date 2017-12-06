@@ -89,7 +89,7 @@ The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix'
 - Hostapd
 - RADIUS Server (Optional, can use the hostapd integrated one)
 - Faucet
-- auth_app
+- Gasket
 
 ### Overview
 A user can be in two states authenticated and unauthenticated.
@@ -132,7 +132,7 @@ $ git checkout faucet-con
 - Configure the build.
 The provided .config should suffice.
 However if you wish to modify it, we basically need the wired driver.
-CONFIG_CTRL_IFACE=udp shall be used for local UDP connections, CONFIG_CTRL_IFACE=udp-remote for UDP connections from another machine, or unspecify to use the Unix socket if operating hostapd on the same machine as auth_app.
+CONFIG_CTRL_IFACE=udp shall be used for local UDP connections, CONFIG_CTRL_IFACE=udp-remote for UDP connections from another machine, or unspecify to use the Unix socket if operating hostapd on the same machine as Gasket.
 - Build and install.
 
 ```
@@ -368,7 +368,7 @@ These configuration files are based on the network diagram at the top.
 - 'port_faucet-1_1' & 'port_faucet-1_2' show the rules that each 802.1X port ACL requires.
 
 - Change the mac address '08:00:27:00:03:02' to the mac address of the server that hostap is running on.
-In the future it should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port ACLs, however auth_app does not currently support multiple control sockets.
+In the future it should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port ACLs, however Gasket does not currently support multiple control sockets.
 
 
 
@@ -487,7 +487,7 @@ acls:
 ```
 
 ##### auth_app.py
-The Faucet repository contains auth_app.py which is used as the 'proxy' between the authentication servers and Faucet.
+The Gasket repository contains auth_app.py which is used as the 'proxy' between the authentication servers and Faucet.
 This must run on the same machine as Faucet, as the SIGHUP signal is used to reload the Faucet configuration.
 
 ###### auth.yaml
@@ -539,14 +539,14 @@ TODO add docker-compose for faucet-con stuff
 
 #### Controller
 
-##### Faucet + auth_app
+##### Faucet + Gasket
 
-To start Faucet and auth_app use Docker.auth:
+To start Faucet and Gasket use Dockerfile.auth:
 ```bash
-docker build -t /reannz/faucet-auth -f Dockerfile.auth .
-docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6653:6653 -p 9244:9244 -p 8080:8080 -ti reannz/faucet-auth
+docker build -t bairdo/gasket -f Dockerfile.auth .
+docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6663:6663 -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
 ```
-Port 6653 is used for OpenFlow, port 9244 is used for Prometheus and 8080 is used by the auth_app - port 9244 may be omitted if you do not need Prometheus.
+Ports 6653 & 6663 are the Openflow ports used by the Faucet and Gasket controllers respectivley, port 9244 is used for Prometheus and - port 9244 may be omitted if you do not need Prometheus.
 
 #### Authentication Server
 
