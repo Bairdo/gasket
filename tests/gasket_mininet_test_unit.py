@@ -887,3 +887,9 @@ class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+
+        self.logoff_dot1x(h0)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
+
+        self.relogon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
