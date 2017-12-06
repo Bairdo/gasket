@@ -229,7 +229,7 @@ class HostapdCtrlUDP(HostapdCtrl):
         # pytype: disable=name-error
         except ConnectionRefusedError as e:
             logger.error('Unable to connect to UDP socket. sockaddr %s' % sockaddr)
-            raise 
+            raise
         logger.info('Connected to UDP Socket: %s', sockaddr)
 
     def connect(self, addr):
@@ -241,7 +241,7 @@ class HostapdCtrlUDP(HostapdCtrl):
                 self.logger.info('UDP Socket Cookie is %s', self.cookie)
                 return
             except ConnectionRefusedError:
-                self.logger.debug('Couldnt connect to UDP socket %s', addr)
+                self.logger.debug("Couldn't connect to UDP socket %s", addr)
                 time.sleep(pow(1.01,  i))
                 continue
         raise ConnectionRefusedError
