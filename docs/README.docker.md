@@ -26,7 +26,12 @@ You will need to setup your network (mininet or real). [see below for mininet ex
 
 Start the containers
 ```bash
-docker-compose up freeradius hostapd faucet-auth
+docker-compose up freeradius hostapd gasket
+```
+
+To kill the gasket container, run the following to tidy up the hostapd control socket connections.
+```bash
+docker kill --signal 1 gasket_gasket_1
 ```
 
 At this time the hostapd container is not connected to your mininet network.
