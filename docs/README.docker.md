@@ -87,6 +87,12 @@ mn --topo=single --custom=topo.py --controller=remote,ip=172.222.0.100,port=6653
 mininet will take several minutes to start as the controller is not running yet.
 Alternatively run docker-compose up faucet-auth first.
 
+Add another controller to the OVS Switch. 6653 is for Faucet, & 6663 is for Gasket.
+```bash
+ovs-vsctl set-controller s1 tcp:172.222.0.100:6653 \
+tcp:172.222.0.100:6663
+```
+
 
 ## TODO
 - docker with real network.
