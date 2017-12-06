@@ -79,6 +79,7 @@ class FaucetTestBase(unittest.TestCase):
     prom_port = None
     net = None
     of_port = None
+    gasket_port = None
     ctl_privkey = None
     ctl_cert = None
     ca_certs = None
@@ -229,6 +230,9 @@ class FaucetTestBase(unittest.TestCase):
         else:
             self.of_port = faucet_mininet_test_util.find_free_port(
                 self.ports_sock, self._test_name())
+            if self.RUN_GASKET:
+                self.gasket_port = faucet_mininet_test_util.find_free_port(
+                self.ports_sock, self._test_name())
 
         self.prom_port = faucet_mininet_test_util.find_free_port(
             self.ports_sock, self._test_name())
@@ -342,34 +346,34 @@ class FaucetTestBase(unittest.TestCase):
             self._allocate_faucet_ports()
             self._set_vars()
             self._write_faucet_config()
+            self.net = Mininet(
+                self.topo, controller=faucet_mininet_test_topo.FAUCET(
+                    name='faucet', tmpdir=self.tmpdir,
+                    controller_intf=controller_intf,
+                    env=self.env['faucet'],
+                    ctl_privkey=self.ctl_privkey,
+                    ctl_cert=self.ctl_cert,
+                    ca_certs=self.ca_certs,
+                    ports_sock=self.ports_sock,
+                    port=self.of_port,
+                    test_name=self._test_name(),
+                    switch=self.topo.switches()[0]))
             if self.RUN_GASKET:
-                self.net = Mininet(
-                    self.topo, controller=faucet_mininet_test_topo.Gasket(
-                        name='faucet', tmpdir=self.tmpdir,
+                self.gasket_controller = faucet_mininet_test_topo.Gasket(
+                        name='gasket', tmpdir=self.tmpdir,
                         controller_intf=controller_intf,
                         env=self.env['faucet'],
                         ctl_privkey=self.ctl_privkey,
                         ctl_cert=self.ctl_cert,
                         ca_certs=self.ca_certs,
                         ports_sock=self.ports_sock,
-                        port=self.of_port,
+                        gasket_port=self.gasket_port,
                         test_name=self._test_name(),
                         switch=self.topo.switches()[0],
                         prom_port=self.prom_port,
-                        config_base_acl=self.CONFIG_BASE_ACL))
-            else:
-                self.net = Mininet(
-                    self.topo, controller=faucet_mininet_test_topo.FAUCET(
-                        name='faucet', tmpdir=self.tmpdir,
-                        controller_intf=controller_intf,
-                        env=self.env['faucet'],
-                        ctl_privkey=self.ctl_privkey,
-                        ctl_cert=self.ctl_cert,
-                        ca_certs=self.ca_certs,
-                        ports_sock=self.ports_sock,
-                        port=self.of_port,
-                        test_name=self._test_name(),
-                        switch=self.topo.switches()[0]))
+                        config_base_acl=self.CONFIG_BASE_ACL,
+                        faucet_pid_file=self.net.controller.pid_file)
+                self.net.addController(self.gasket_controller)
             if self.RUN_GAUGE:
                 self._allocate_gauge_ports()
                 self._write_gauge_config()
