@@ -3,4 +3,4 @@ networkx
 prometheus_client
 pyyaml
 ryu==4.19
-faucet==1.6.11
+faucet

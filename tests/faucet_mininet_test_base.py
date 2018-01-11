@@ -47,6 +47,7 @@ class FaucetTestBase(unittest.TestCase):
     LADVD = 'ladvd -e lo -f'
     ONEMBPS = (1024 * 1024)
     DB_TIMEOUT = 5
+    DP_NAME = 'faucet-1'
 
     ACL_CONFIG = ''
     CONFIG = ''
@@ -877,10 +878,18 @@ dbs:
         for prom_line in prom_lines:
             if not prom_line.startswith('#'):
                 prom_vars.append(prom_line)
-        return '\n'.join(prom_vars)
+        prom_txt = '\n'.join(prom_vars)
+        with open(os.path.join(self.tmpdir, '%s-prometheus.log' % controller), 'w') as prom_log:
+            prom_log.write(prom_txt)
+        return prom_txt
 
     def scrape_prometheus_var(self, var, labels=None, any_labels=False, default=None,
                               dpid=True, multiple=False, controller='faucet', retries=1):
+        if dpid:
+            if dpid is True:
+                dpid = long(self.dpid)
+            else:
+                dpid = long(dpid)
         label_values_re = r''
         if any_labels:
             label_values_re = r'\{[^\}]+\}'
@@ -888,34 +897,38 @@ dbs:
             if labels is None:
                 labels = {}
             if dpid:
-                labels.update({'dp_id': '0x%x' % long(self.dpid)})
+                labels.update({'dp_id': '0x%x' % dpid, 'dp_name': self.DP_NAME})
             if labels:
                 label_values = []
                 for label, value in sorted(list(labels.items())):
                     label_values.append('%s="%s"' % (label, value))
                 label_values_re = r'\{%s\}' % r'\S+'.join(label_values)
         var_re = r'^%s%s$' % (var, label_values_re)
+        prom_line_re = re.compile(r'^(.+)\s+([0-9\.\-]+)$')
         for _ in range(retries):
             results = []
             prom_lines = self.scrape_prometheus(controller)
             for prom_line in prom_lines.splitlines():
-                prom_var_data = prom_line.split(' ')
-                self.assertEqual(
-                    2, len(prom_var_data),
-                    msg='invalid prometheus line in %s' % prom_lines)
-                var, value = prom_var_data
-                var_match = re.search(var_re, var)
-                if var_match:
-                    value_int = long(float(value))
-                    results.append((var, value_int))
-                    if not multiple:
-                        break
+                prom_line_match = prom_line_re.match(prom_line)
+                self.assertIsNotNone(
+                    prom_line_match,
+                    msg='Invalid prometheus line %s in %s' % (prom_line, prom_lines))
+                prom_var = prom_line_match.group(1)
+                value = prom_line_match.group(2)
+                if prom_var.startswith(var):
+                    var_match = re.search(var_re, prom_var)
+                    if var_match:
+                        value_int = long(float(value))
+                        results.append((var, value_int))
+                        if not multiple:
+                            break
             if results:
                 if multiple:
                     return results
                 return results[0][1]
             time.sleep(1)
         return default
+
 
     def gauge_smoke_test(self):
         watcher_files = set([
