@@ -929,7 +929,6 @@ dbs:
             time.sleep(1)
         return default
 
-
     def gauge_smoke_test(self):
         watcher_files = set([
             self.monitor_stats_file,
