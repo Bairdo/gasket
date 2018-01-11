@@ -1,0 +1,32 @@
+FROM hypriot/rpi-alpine
+
+ENV APK="apk -q"
+ENV BUILDDEPS="gcc musl-dev python3-dev"
+ENV TESTDEPS="bitstring pytest setuptools wheel virtualenv"
+ENV PIP3="pip3 -q --no-cache-dir install --upgrade"
+
+RUN \
+  $APK update && \
+  $APK add -u \
+    python3 \
+    py-pip \
+    py-virtualenv \
+    git \
+    $BUILDDEPS
+
+COPY ./ /gasket-src/
+RUN  \
+    python3 -m ensurepip && \
+    $PIP3 pip && \
+    $PIP3 $TESTDEPS && \
+    $PIP3 -r /gasket-src/requirements.txt && \
+    $PIP3 /gasket-src && \
+    for i in $BUILDDEPS ; do $APK del $i ; done && \
+    find / -name \*pyc -delete
+  
+
+VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/"]
+
+EXPOSE 6653 6663 9302
+
+CMD ["/gasket-src/docker/runauth.sh"]
