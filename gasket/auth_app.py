@@ -41,6 +41,7 @@ class Proto(object):
     HTTP_PORT = 80
 FAUCET_ENTERPRISE_NUMBER = 12345
 FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE = 1
+LEARNED_MACS_REGEX = """learned_macs{dp_id="(0x[a-f0-9]+)",dp_name="([\w-]+)",n="(\d+)",port="(\d+)",vlan="(\d+)"}"""
 
 class AuthApp(app_manager.RyuApp):
     '''
@@ -68,6 +69,7 @@ class AuthApp(app_manager.RyuApp):
         self.config = AuthConfig(config_filename)
         self.logger = auth_app_utils.get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
+        self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
 
     def _init_sockets(self):
         self._init_request_socket()
@@ -149,9 +151,6 @@ class AuthApp(app_manager.RyuApp):
         # query faucets promethues.
         prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['learned_macs', 'faucet_config_dp_name'])
 
-        dpid_name = auth_app_utils.dpid_name_to_map(prom_name_dpid)
-        self.logger.debug(dpid_name)
-
         ret_port = -1
         ret_dp_name = ""
         dp_port_mode = self.config.dp_port_mode
@@ -161,8 +160,8 @@ class AuthApp(app_manager.RyuApp):
             self.logger.debug('float %s is mac %s', float_as_mac, macstr)
             if mac == macstr:
                 # if this is also an access port, we have found the dpid and the port
-                _, _, dpid, _, n, _, port, _, vlan, _ = re.split(r'\W+', labels)
-                dp_name = dpid_name[dpid]
+                values = self.learned_macs_compiled_regex.match(labels)
+                dpid, dp_name, n, port, vlan = values.groups()
                 if dp_name in dp_port_mode and \
                         'interfaces' in dp_port_mode[dp_name] and \
                         int(port) in dp_port_mode[dp_name]['interfaces'] and \
@@ -238,13 +237,13 @@ class AuthApp(app_manager.RyuApp):
         # if the dp is there, then use the port.
         #    if the port is there and it is set to 'access' return true
         # otherwise return false.
-        dp_names = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['faucet_config_dp_name'])[0]
+        dp_names = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['dp_status'])[0]
         dp_name = ''
         for l in dp_names:
-            pattern = r'name="(.*)"}} {0}\.0'.format(dpid)
+            pattern = r'dp_id="0x{:x}",dp_name="([\w-]+)"}}'.format(dpid)
             m = re.search(pattern, l)
             if m:
-                dp_name = m.groups()[0]
+                dp_name = m.group(1)
                 break
 
         if dp_name in self.config.dp_port_mode:
