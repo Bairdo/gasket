@@ -119,9 +119,17 @@ class AuthApp(app_manager.RyuApp):
                     self.logger.info('success message')
                     mac = data.split()[1].replace("'", '')
                     sta = self.hapd_req.get_sta(mac)
-                    radius_acl_list = sta['AccessAccept:Vendor-Specific:%d:%d'
+                    if 'AccessAccept:Vendor-Specific:%d:%d' \
+                                            % (FAUCET_ENTERPRISE_NUMBER,
+                                                FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE) in sta:
+                        radius_acl_list = sta['AccessAccept:Vendor-Specific:%d:%d'
                                             % (FAUCET_ENTERPRISE_NUMBER,
                                                 FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE)].split(',')
+                    else:
+                        self.logger.info('AccessAccept:Vendor-Specific:%d:%d not in mib'
+                                            % (FAUCET_ENTERPRISE_NUMBER,
+                                                FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE))
+                        continue
                     username = sta['dot1xAuthSessionUserName']
                     self.authenticate(mac, username, radius_acl_list)
                 elif 'AP-STA-DISCONNECTED' in data:
