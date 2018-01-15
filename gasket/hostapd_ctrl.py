@@ -220,11 +220,14 @@ class HostapdCtrlUDP(HostapdCtrl):
     """UDP socket interface class
     """
 
-    def __init__(self, family, sockaddr, logger):
+    def __init__(self, family, sockaddr, bind_address, bind_port, hsoc_type, logger):
         self.logger = logger
         self.soc = socket.socket(family, socket.SOCK_DGRAM)
+        if hsoc_type in ['portforward', 'ping-and-portforward']:
         logger.info('connecting')
         try:
+            if bind_address is not None and bind_port is not None:
+                self.bind((bind_address, bind_port))
             self.connect(sockaddr)
         # pytype: disable=name-error
         except ConnectionRefusedError as e:
@@ -254,7 +257,7 @@ class HostapdCtrlUDP(HostapdCtrl):
         return str(self.request('GET_COOKIE'))
 
 
-def request_socket_udp(host, port, logger):
+def request_socket_udp(host, port, bind_address, bind_port, hsoc_type, logger):
     """Create a HostapdCtrlUDP class.
     Args:
         host (str): ipv4/ipv6/hostname of remote.
@@ -266,10 +269,10 @@ def request_socket_udp(host, port, logger):
     # use the first addr found, if more than one
     # (such as the case with hostnames that resolve to both ipv6 and ipv4).
     addrinfo = socket.getaddrinfo(host, port, socktype=socket.SOCK_DGRAM)[0]
-    return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger)
+    return HostapdCtrlUDP(addrinfo[0], addrinfo[4], bind_address, bind_port, logger)
 
 
-def unsolicited_socket_udp(host, port, logger):
+def unsolicited_socket_udp(host, port, bind_port, hsoc_type, logger):
     """Create a HostapdCtrlUDP class, and attaches for receiveing
     unsolicited events.
     Args:
@@ -279,7 +282,7 @@ def unsolicited_socket_udp(host, port, logger):
     Returns:
         HostapdCtrlUDP object
     """
-    s = request_socket_udp(host, port, logger)
+    s = request_socket_udp(host, port, bind_address, bind_port, hsoc_type, logger)
     s.attach()
     return s
 
