@@ -82,8 +82,12 @@ class AuthApp(app_manager.RyuApp):
                 self.config.hostapd_socket_path, self.config.hostapd_unsol_timeout, self.logger)
         else:
             self.logger.info('using UDP socket for hostapd ctrl')
-            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp(
-                self.config.hostapd_host, self.config.hostapd_port, self.config.hostapd_unsol_timeout, self.logger)
+            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp,
+                self.config.hostapd_host, self.config.hostapd_port,
+                self.config.hostapd_unsol_timeout,
+                self.config.hostapd_unsol_bind_address, self.config.hostapd_unsol_bind_port,
+                self.ocnfig.hostapd_unsol_socket_type,
+                self.logger)
 
     def _init_request_socket(self):
         if self.config.hostapd_socket_path:
@@ -93,7 +97,11 @@ class AuthApp(app_manager.RyuApp):
         else:
             self.logger.info('using UDP socket for hostapd ctrl')
             self.hapd_req = hostapd_ctrl.request_socket_udp(
-                self.config.hostapd_host, self.config.hostapd_port, self.config.hostapd_req_timeout, self.logger)
+                self.config.hostapd_host, self.config.hostapd_port,
+                self.config.hostapd_req_timeout,
+                self.config.hostapd_req_bind_address, self.config.hostapd_req_bind_port,
+                self.config.hostapd_req_socket_type,
+                self.logger)
 
     def start(self):
         super(AuthApp, self).start()

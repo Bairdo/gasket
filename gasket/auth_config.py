@@ -77,3 +77,37 @@ class AuthConfig(object):
             self.hostapd_req_timeout = data['hostapd']['request_timeout']
         else:
             self.hostapd_req_timeout = None
+
+        if 'request_socket_type' in data['hostapd']:
+            s = data['hostapd']['request_socket_type']
+            if s in ['ping', 'port-forward', 'ping-and-portforward']:
+                self.hostapd_req_socket_type = s
+            else:
+                self.hostapd_socket_type = 'ping'
+
+        if 'unsolicited_socket_type' in data['hostapd']:
+            s = data['hostapd']['unsolicited_socket_type']
+            if s in ['ping', 'port-forward', 'ping-and-portforward']:
+                self.hostapd_unsol_socket_type = s
+            else:
+                self.hostapd_unsol_socket_type = 'ping'
+
+        if 'request_bind_port' in data['hostapd']:
+            self.hostapd_req_bind_port = int(data['hostapd']['request_bind_port'])
+        else:
+            self.hostapd_req_bind_port = None
+
+        if 'request_bind_address' in data['hostapd']:
+            self.hostapd_req_bind_address = data['hostapd']['request_bind_address']
+        else:
+            self.hostapd_req_bind_address = None
+
+        if 'unsolicited_bind_port' in data['hostapd']:
+            self.hostapd_unsol_bind_port = int(data['hostapd']['unsolicited_bind_port'])
+        else:
+            self.hostapd_unsol_bind_port = None
+
+        if 'unsolicited_bind_address' in data['hostapd']:
+            self.hostapd_unsol_bind_address = data['hostapd']['unsolicited_bind_address']
+        else:
+            self.hostapd_unsol_bind_address = None
