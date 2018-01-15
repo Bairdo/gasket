@@ -30,6 +30,9 @@ dps:
 hostapd:
     host: 172.220.0.101
     port: 8888
+    # timeout - see https://docs.python.org/3/library/socket.html#socket.socket.settimeout
+    request_timeout: 4
+    unsolicited_timeout: 4
     # in hostapd.conf 'ctl_interface...:udp:20000' might be how you specifiy what to do
     # socket_path: /path/to/hostapd/ctrl/socket # may also be used instead of host & port, when using the unix socket interface
 

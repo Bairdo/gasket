@@ -182,9 +182,10 @@ class HostapdCtrlUNIX(HostapdCtrl):
     """UNIX socket interface class.
     """
 
-    def __init__(self, path, logger):
+    def __init__(self, path, timeout, logger):
         self.logger = logger
         self.soc = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+        self.soc.settimeout(timeout)
         if len(path) > 107:
             logger.critical('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s',
                             len(path), path)
@@ -220,9 +221,10 @@ class HostapdCtrlUDP(HostapdCtrl):
     """UDP socket interface class
     """
 
-    def __init__(self, family, sockaddr, logger):
+    def __init__(self, family, sockaddr, timeout, logger):
         self.logger = logger
         self.soc = socket.socket(family, socket.SOCK_DGRAM)
+        self.soc.settimeout(timeout)
         logger.info('connecting')
         try:
             self.connect(sockaddr)
@@ -254,7 +256,7 @@ class HostapdCtrlUDP(HostapdCtrl):
         return str(self.request('GET_COOKIE'))
 
 
-def request_socket_udp(host, port, logger):
+def request_socket_udp(host, port, timeout, logger):
     """Create a HostapdCtrlUDP class.
     Args:
         host (str): ipv4/ipv6/hostname of remote.
@@ -266,7 +268,7 @@ def request_socket_udp(host, port, logger):
     # use the first addr found, if more than one
     # (such as the case with hostnames that resolve to both ipv6 and ipv4).
     addrinfo = socket.getaddrinfo(host, port, socktype=socket.SOCK_DGRAM)[0]
-    return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger)
+    return HostapdCtrlUDP(addrinfo[0], addrinfo[4], logger, bind_port=bind_port)
 
 
 def unsolicited_socket_udp(host, port, logger):
@@ -279,12 +281,12 @@ def unsolicited_socket_udp(host, port, logger):
     Returns:
         HostapdCtrlUDP object
     """
-    s = request_socket_udp(host, port, logger)
+    s = request_socket_udp(host, port, timeout, logger)
     s.attach()
     return s
 
 
-def request_socket_unix(path, logger):
+def request_socket_unix(path, timeout, logger):
     """Create a HostapdCtrlUNIX class.
     Args:
         path (str): pathname to UNIX socket.
@@ -292,10 +294,10 @@ def request_socket_unix(path, logger):
     Returns:
         HostapdCtrlUNIX object
     """
-    return HostapdCtrlUNIX(path, logger)
+    return HostapdCtrlUNIX(path, timeout, logger)
 
 
-def unsolicited_socket_unix(path, logger):
+def unsolicited_socket_unix(path, timeout, logger):
     """Create a HostapdCtrlUNIX class, and attaches for receiving
     unsolicited events.
     Args:
@@ -304,7 +306,6 @@ def unsolicited_socket_unix(path, logger):
     Returns:
         HostapdCtrlUNIX object
     """
-    s = request_socket_unix(path, logger)
+    s = request_socket_unix(path, timeout, logger)
     s.attach()
-    s.set_timeout(4)
     return s

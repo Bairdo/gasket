@@ -67,3 +67,13 @@ class AuthConfig(object):
             self.hostapd_host = data['hostapd']['host']
             self.hostapd_port = data['hostapd']['port']
             self.hostapd_socket_path = None
+	
+        if 'unsolicited_timeout' in data['hostapd']:
+            self.hostapd_unsol_timeout = data['hostapd']['unsolicited_timeout']
+        else:
+            self.hostapd_unsol_timeout = None
+
+        if 'request_timeout' in data['hostapd']:
+            self.hostapd_req_timeout = data['hostapd']['request_timeout']
+        else:
+            self.hostapd_req_timeout = None
