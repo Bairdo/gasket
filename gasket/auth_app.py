@@ -79,21 +79,21 @@ class AuthApp(app_manager.RyuApp):
         if self.config.hostapd_socket_path:
             self.logger.info('using unix socket for hostapd ctrl')
             self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_unix(
-                self.config.hostapd_socket_path, self.logger)
+                self.config.hostapd_socket_path, self.config.hostapd_unsol_timeout, self.logger)
         else:
             self.logger.info('using UDP socket for hostapd ctrl')
             self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp(
-                self.config.hostapd_host, self.config.hostapd_port, self.logger)
+                self.config.hostapd_host, self.config.hostapd_port, self.config.hostapd_unsol_timeout, self.logger)
 
     def _init_request_socket(self):
         if self.config.hostapd_socket_path:
             self.logger.info('using unix socket for hostapd ctrl')
             self.hapd_req = hostapd_ctrl.request_socket_unix(
-                self.config.hostapd_socket_path, self.logger)
+                self.config.hostapd_socket_path, self.config.hostapd_req_timeout, self.logger)
         else:
             self.logger.info('using UDP socket for hostapd ctrl')
             self.hapd_req = hostapd_ctrl.request_socket_udp(
-                self.config.hostapd_host, self.config.hostapd_port, self.logger)
+                self.config.hostapd_host, self.config.hostapd_port, self.config.hostapd_req_timeout, self.logger)
 
     def start(self):
         super(AuthApp, self).start()
@@ -139,13 +139,23 @@ class AuthApp(app_manager.RyuApp):
                 else:
                     self.logger.info('unknown message %s', data)
             except socket.timeout:
-                if not self.hapd_unsolicited.ping():
-                    self.logger.warn('no pong received from unsolicited socket')
-                    self.hapd_unsolicited.close()
+                try:
+                    if not self.hapd_unsolicited.ping():
+                        self.logger.warn('no pong received from unsolicited socket')
+                        self.hapd_unsolicited.close()
+                        self._init_unsolicited_socket()
+                except socket.timeout:
+                    # socket is probably not open dont close. e.g. before faucet starts.
+                    self.logger.warn('ping unsolicited socket timedout')
                     self._init_unsolicited_socket()
-                if not self.hapd_req.ping():
-                    self.logger.warn('no pong received from request (solicited) socket')
-                    self.hapd_req.close()
+                try:
+                    if not self.hapd_req.ping():
+                        self.logger.warn('no pong received from request (solicited) socket')
+                        self.hapd_req.close()
+                        self._init_request_socket()
+                except socket.timeout:
+                    # socket is probably no open dont close. e.g. before faucet starts.
+                    self.logger.warn('ping request (solicited) socket timedout')
                     self._init_request_socket()
 
     def _get_dp_name_and_port(self, mac):
