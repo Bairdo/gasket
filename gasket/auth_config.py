@@ -1,4 +1,4 @@
- """Configuration parser for authentication controller app."""
+"""Configuration parser for authentication controller app."""
 # pytype: disable=pyi-error
 import socket
 import yaml
