@@ -83,7 +83,9 @@ class AuthConfig(object):
             if s in ['ping', 'port-forward', 'ping-and-portforward']:
                 self.hostapd_req_socket_type = s
             else:
-                self.hostapd_socket_type = 'ping'
+                self.hostapd_req_socket_type = 'ping'
+        else:
+            self.hostapd_req_socket_type = 'ping'
 
         if 'unsolicited_socket_type' in data['hostapd']:
             s = data['hostapd']['unsolicited_socket_type']
@@ -91,6 +93,8 @@ class AuthConfig(object):
                 self.hostapd_unsol_socket_type = s
             else:
                 self.hostapd_unsol_socket_type = 'ping'
+        else:
+            self.hostapd_unsol_socket_type = 'ping'
 
         if 'request_bind_port' in data['hostapd']:
             self.hostapd_req_bind_port = int(data['hostapd']['request_bind_port'])

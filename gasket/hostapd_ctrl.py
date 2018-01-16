@@ -274,7 +274,7 @@ def request_socket_udp(host, port, bind_address, bind_port, hsoc_type, timeout, 
     return HostapdCtrlUDP(addrinfo[0], addrinfo[4], bind_address, bind_port, hsoc_type, timeout, logger)
 
 
-def unsolicited_socket_udp(host, port, bind_port, hsoc_type, logger):
+def unsolicited_socket_udp(host, port, bind_address, bind_port, hsoc_type, timeout, logger):
     """Create a HostapdCtrlUDP class, and attaches for receiveing
     unsolicited events.
     Args:
