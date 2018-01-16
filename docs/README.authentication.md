@@ -72,6 +72,7 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 - Authentication Servers can communicate with a RADIUS Server (FreeRADIUS, Cisco ISE, ...).
 - Support faucet.yaml 'include' option (see limitations below).
 - \>25 EAP methods supported - Thanks hostapd.
+- When Switch port goes down (disconnected) all clients on that port must reauthenticate when the port returns.
 
 ## Limitations
 - .yaml configuration files must have 'dps' & 'acls' as top level (no indentation) objects, and only declared once across all files.
@@ -125,10 +126,10 @@ echo 0 > /proc/sys/net/ipv4/ip_forward
 This contains a small number of bugfixes to the control interface socket.
 
 ```bash
-$ git clone https://github.com/bairdo/hostapd-d1xf.git
-$ git checkout faucet-con
+$ git clone https://github.com/bairdo/hostapd-d1xf.git -b faucet-con
 ```
 
+- Install SSL library - libssl-dev
 - Configure the build.
 The provided .config should suffice.
 However if you wish to modify it, we basically need the wired driver.
@@ -136,6 +137,7 @@ CONFIG_CTRL_IFACE=udp shall be used for local UDP connections, CONFIG_CTRL_IFACE
 - Build and install.
 
 ```
+cd hostapd-d1xf/hostapd
 make
 sudo make install
 ```
@@ -564,7 +566,4 @@ Start the RADIUS server according to your implementations instructions.
 - Captive Portal.
 
 - hostapd should support using its eap_server instead of an external RADIUS one. 
-
-- Link state events - if port goes down clients on that port should have to reauth.
-
 
