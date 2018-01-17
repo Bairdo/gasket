@@ -4,7 +4,7 @@
 First *read* over [main readme](README.authentication.md) for a general overview of Gasket's authentication, and the [link022 readme](https://github.com/google/link022).
 
 
-We will now use the [link022 demo](https://github.com/google/link022/tree/master/demo) with Gasket.
+We will use the [link022 demo](https://github.com/google/link022/tree/master/demo) and add an OpenFlow switch controlled by Gasket & Faucet in between the gateway and AP.
 
 
 ## Link022 AP
@@ -21,7 +21,6 @@ sudo make install
 
 This provides a default compile configuration, that includes the UDP-remote control interface, which is used by Gasket over the network.
 
-Setup of the Link022 AP is now complete.
 
 ## Link022 Gateway
 Follow the instructions [here](https://github.com/google/link022/blob/master/demo/README.md) to setup the gateway.
@@ -29,7 +28,7 @@ Follow the instructions [here](https://github.com/google/link022/blob/master/dem
 Two more configurations changes are needed:
 
 1. Add Faucet RADIUS type to 'dictionary', and 'Faucet-ACL-ID' attribute to users in the users file.
-Examples [here](docs/README.authentication.md#radius-server)
+Examples [here](./docs/README.authentication.md#radius-server)
 
 2. Add the 'vendor-config' configuration (see below) to the top level of[link022/demo/ap_config.json](https://github.com/google/link022/blob/master/demo/ap_config.json)
 
@@ -46,7 +45,7 @@ Examples [here](docs/README.authentication.md#radius-server)
         }
       ],
 
-  ###### Rest of standard link022 config.  ######
+  ###### Rest of standard link022 config.
   "hostname": "raspberrypi",
   "system":{
     "aaa":{
