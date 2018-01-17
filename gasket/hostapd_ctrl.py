@@ -185,7 +185,7 @@ class HostapdCtrlUNIX(HostapdCtrl):
     def __init__(self, path, timeout, logger):
         self.logger = logger
         self.soc = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        self.soc.settimeout(timeout)
+        self.set_timeout(timeout)
         if len(path) > 107:
             logger.critical('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was; %d bytes, %s',
                             len(path), path)
@@ -224,8 +224,7 @@ class HostapdCtrlUDP(HostapdCtrl):
     def __init__(self, family, sockaddr, bind_address, bind_port, hsoc_type, timeout, logger):
         self.logger = logger
         self.soc = socket.socket(family, socket.SOCK_DGRAM)
-        if hsoc_type in ['portforward', 'ping-and-portforward']:
-            self.soc.settimeout(timeout)
+        self.set_timeout(timeout)
         logger.info('connecting')
         try:
             if bind_address is not None and bind_port is not None:

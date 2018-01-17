@@ -16,8 +16,7 @@ def validate_port(port):
 
 
 def validate_socket_type(socket_type):
-    assert socket_type in ['ping', 'port-forward',
-                           'ping-and-portforward'], "invalid socket type: %s" % socket_type
+    assert socket_type in ['ping', 'ping-and-portforward'], "invalid socket type: %s" % socket_type
 
 
 class AuthConfig(object):
