@@ -4,7 +4,10 @@
 First *read* over [main readme](README.authentication.md) for a general overview of Gasket's authentication, and the [link022 readme](https://github.com/google/link022).
 
 
+![alt text](./link022-gasket-diagram.png)
+
 We will use the [link022 demo](https://github.com/google/link022/tree/master/demo) and add an OpenFlow switch controlled by Gasket & Faucet in between the gateway and AP.
+- The Controller is connected to both the dataplane (untagged) and the control plane.
 
 
 ## Link022 AP
@@ -30,13 +33,13 @@ Two more configurations changes are needed:
 1. Add Faucet RADIUS type to 'dictionary', and 'Faucet-ACL-ID' attribute to users in the users file.
 Examples [here](./docs/README.authentication.md#radius-server)
 
-2. Add the 'vendor-config' configuration (see below) to the top level of[link022/demo/ap_config.json](https://github.com/google/link022/blob/master/demo/ap_config.json)
+2. Add the 'vendor-config' configuration (see below) to the top level of [link022/demo/ap_config.json](https://github.com/google/link022/blob/master/demo/ap_config.json)
 
 ```json
 {
   "vendor-config": [
         {
-          "config-key": "ctrl-interface",
+          "config-key": "ctrl_interface",
           "config-value": "udp:8888"
         },
         { 
@@ -69,7 +72,11 @@ Configure auth.yaml to point to the hostapd on the Link022 AP.
 
 See [base-link022-acls.yaml](../etc/ryu/faucet/gasket/base-link022-acls.yaml) for an example ACL configuration.
 
-[Build and run Gasket](https://github.com/Bairdo/gasket/blob/master/docs/README.authentication.md#faucet--gasket)
+
+
+
+Build and run Gasket & Faucet as shown [here](https://github.com/Bairdo/gasket/blob/master/docs/README.authentication.md#faucet--gasket).
+If using a Raspberry pi use [Dockerfile.pi](https://github.com/bairdo/gasket/blob/master/Dockerfile.pi).
 
 
 
