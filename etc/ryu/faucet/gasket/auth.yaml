@@ -44,9 +44,8 @@ hostapd:
 
     # Specifies how UDP packets traverse (docker) firewall.
     # ping - gasket will send a ping. timeout variable must be set.
-    # portforward - socket will listen on a constant port. (set firewall to allow the port). must be used with the coresponding *_bind_address & *_bind_port above.
-    # ping-and-portforward - both of the above will be used.
-    # 
+    # ping-and-portforward - socket will listen on a constant port. (set firewall to allow the port). must be used with the coresponding *_bind_address & *_bind_port above.
+    #
     # Only 'ping' option is allowed when socket is a UNIX socket.
     unsolicited_socket_type: ping
     request_socket_type: ping
