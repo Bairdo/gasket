@@ -186,7 +186,7 @@ The hostapd integrated eap server does not currently support saving the Access-A
 
 For a simple FreeRADIUS configuration:
 
-dictionary
+raddb/dictionary
 ```ini
 ...
 VENDOR          Faucet          12345
@@ -196,7 +196,7 @@ BEGIN-VENDOR    Faucet
 END-VENDOR      Faucet
 ```
 
-users
+raddb/users
 ```ini
 ...
 host1user   Cleartext-Password := "host1pass"
