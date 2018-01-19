@@ -173,6 +173,14 @@ class HostapdCtrl(object):
         """
         self.soc.settimeout(secs)
 
+    def set_interface(self, interface):
+        d = self.request('IFNAME=%s' % interface)
+        return self._returned_ok(d)
+
+    def get_interfaces(self):
+        d = self.request('INTERFACES')
+        return self._to_dict(d)
+    
     @staticmethod
     def _returned_ok(d):
         return d == b'OK\n'
