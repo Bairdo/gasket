@@ -228,7 +228,7 @@ class HostapdCtrlUDP(HostapdCtrl):
         logger.info('connecting')
         try:
             if bind_address is not None and bind_port is not None:
-                self.bind((bind_address, bind_port))
+                self.soc.bind((bind_address, bind_port))
             self.connect(sockaddr)
         # pytype: disable=name-error
         except ConnectionRefusedError as e:
