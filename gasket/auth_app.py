@@ -8,23 +8,20 @@ and sending it a SIGHUP.
 import argparse
 import logging
 import os
+import queue
 import re
 import signal
 import socket
 import sys
-
-from ryu.base import app_manager
-from ryu.controller.handler import MAIN_DISPATCHER
-from ryu.controller.handler import set_ev_cls
-from ryu.controller import dpset
-from ryu.controller import ofp_event
-from ryu.lib import hub
+import threading
 
 import faucet.valve_of as valve_of
+
 from gasket.auth_config import AuthConfig
 from gasket import rule_manager
 from gasket import auth_app_utils
-from gasket import hostapd_ctrl
+from gasket import hostapd_socket_thread
+from gasket.work_item import AuthWorkItem, DeauthWorkItem
 
 class Proto(object):
     """Class for protocol constants.
@@ -39,11 +36,12 @@ class Proto(object):
     DHCP_SERVER_PORT = 67
     DNS_PORT = 53
     HTTP_PORT = 80
-FAUCET_ENTERPRISE_NUMBER = 12345
-FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE = 1
+
+
 LEARNED_MACS_REGEX = """learned_macs{dp_id="(0x[a-f0-9]+)",dp_name="([\w-]+)",n="(\d+)",port="(\d+)",vlan="(\d+)"}"""
 
-class AuthApp(app_manager.RyuApp):
+
+class AuthApp(object):
     '''
     This class recieves messages hostapd_ctrl from the portal via
     UNIX DOMAIN sockets, about the a change of state of the users.
@@ -52,8 +50,6 @@ class AuthApp(app_manager.RyuApp):
     installs/removes any appropriate rules.
     '''
 
-    OFP_VERSIONS = valve_of.OFP_VERSIONS
-    _CONTEXTS = {'dpset': dpset.DPSet}
 
     config = None
     rule_man = None
@@ -63,6 +59,10 @@ class AuthApp(app_manager.RyuApp):
     hapd_req = None
     hapd_unsolicited = None
 
+    work_queue = None
+
+    threads = []
+
     def __init__(self, *args, **kwargs):
         super(AuthApp, self).__init__(*args, **kwargs)
         config_filename = os.getenv('GASKET_CONFIG', '/etc/ryu/faucet/gasket/auth.yaml')
@@ -70,101 +70,31 @@ class AuthApp(app_manager.RyuApp):
         self.logger = auth_app_utils.get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
         self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
-
-    def _init_sockets(self):
-        self._init_request_socket()
-        self._init_unsolicited_socket()
-
-    def _init_unsolicited_socket(self):
-        if self.config.hostapd_socket_path:
-            self.logger.info('using unix socket for hostapd ctrl')
-            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_unix(
-                self.config.hostapd_socket_path, self.config.hostapd_unsol_timeout, self.logger)
-        else:
-            self.logger.info('using UDP socket for hostapd ctrl')
-            self.hapd_unsolicited = hostapd_ctrl.unsolicited_socket_udp(
-                self.config.hostapd_host, self.config.hostapd_port,
-                self.config.hostapd_unsol_bind_address, self.config.hostapd_unsol_bind_port,
-                self.config.hostapd_unsol_socket_type,
-                self.config.hostapd_unsol_timeout,
-                self.logger)
-
-    def _init_request_socket(self):
-        if self.config.hostapd_socket_path:
-            self.logger.info('using unix socket for hostapd ctrl')
-            self.hapd_req = hostapd_ctrl.request_socket_unix(
-                self.config.hostapd_socket_path, self.config.hostapd_req_timeout, self.logger)
-        else:
-            self.logger.info('using UDP socket for hostapd ctrl')
-            self.hapd_req = hostapd_ctrl.request_socket_udp(
-                self.config.hostapd_host, self.config.hostapd_port,
-                self.config.hostapd_req_bind_address, self.config.hostapd_req_bind_port,
-                self.config.hostapd_req_socket_type,
-                self.config.hostapd_req_timeout,
-                self.logger)
+        self.work_queue = queue.Queue()
 
     def start(self):
-        super(AuthApp, self).start()
         self.logger.info('Starting threads')
-        print('starting thread')
-        self.threads.extend([
-                        hub.spawn(thread) for thread in ( self.run, )])
+        print('starting hostapd socket threads')
+
+        for hostapd_name, conf in self.config.hostapds.items():
+            hst = hostapd_socket_thread.HostapdSocketThread(hostapd_name, conf, self.work_queue, self.config.logger_location)
+            hst.start()
+            self.threads.append(hst)
+            self.logger.info('thread running')
+
+        self.logger.info('starting worker thread.')
+
+        while True:
+            work_item = self.work_queue.get()
+            self.logger.info('got work from queue')
+            if isinstance(work_item, AuthWorkItem):
+                self.authenticate(work_item.mac, work_item.username, work_item.acllist)
+            elif isinstance(work_item, DeauthWorkItem):
+                self.deauthenticate(work_item.mac)
+
+
 
         signal.signal(signal.SIGINT, self._handle_sigint)
-
-    def run(self):
-        """Main loop, waits for messages from hostapd ctl socket,
-        and processes them.
-        """
-        self.logger.info('initiating sockets')
-        self._init_sockets()
-        self.logger.info('sockets initiated')
-        while True:
-            self.logger.info('waiting for receive')
-            try:
-                data = str(self.hapd_unsolicited.receive())
-                if 'CTRL-EVENT-EAP-SUCCESS' in data:
-                    self.logger.info('success message')
-                    mac = data.split()[1].replace("'", '')
-                    sta = self.hapd_req.get_sta(mac)
-                    if 'AccessAccept:Vendor-Specific:%d:%d' \
-                                            % (FAUCET_ENTERPRISE_NUMBER,
-                                                FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE) in sta:
-                        radius_acl_list = sta['AccessAccept:Vendor-Specific:%d:%d'
-                                            % (FAUCET_ENTERPRISE_NUMBER,
-                                                FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE)].split(',')
-                    else:
-                        self.logger.info('AccessAccept:Vendor-Specific:%d:%d not in mib'
-                                            % (FAUCET_ENTERPRISE_NUMBER,
-                                                FAUCET_RADIUS_ATTRIBUTE_ACL_TYPE))
-                        continue
-                    username = sta['dot1xAuthSessionUserName']
-                    self.authenticate(mac, username, radius_acl_list)
-                elif 'AP-STA-DISCONNECTED' in data:
-                    self.logger.info('%s disconnected message', data)
-                    mac = data.split()[1].replace("'", '')
-                    self.deauthenticate(mac)
-                else:
-                    self.logger.info('unknown message %s', data)
-            except socket.timeout:
-                try:
-                    if not self.hapd_unsolicited.ping():
-                        self.logger.warn('no pong received from unsolicited socket')
-                        self.hapd_unsolicited.close()
-                        self._init_unsolicited_socket()
-                except socket.timeout:
-                    # socket is probably not open dont close. e.g. before faucet starts.
-                    self.logger.warn('ping unsolicited socket timedout')
-                    self._init_unsolicited_socket()
-                try:
-                    if not self.hapd_req.ping():
-                        self.logger.warn('no pong received from request (solicited) socket')
-                        self.hapd_req.close()
-                        self._init_request_socket()
-                except socket.timeout:
-                    # socket is probably no open dont close. e.g. before faucet starts.
-                    self.logger.warn('ping request (solicited) socket timedout')
-                    self._init_request_socket()
 
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
@@ -230,10 +160,10 @@ class AuthApp(app_manager.RyuApp):
         #   - client 1x success, send to here.
         #   - can't find switch. return failure.
         #   - hostapd revokes auth, so now client is aware there was an error.
-        if not success:
+#        if not success:
             # TODO one or the other?
-            self.hapd_req.deauthenticate(mac)
-            self.hapd_req.disassociate(mac)
+#            self.hapd_req.deauthenticate(mac)
+#            self.hapd_req.disassociate(mac)
 
     def deauthenticate(self, mac, username=None):
         """Deauthenticates the mac and username by removing related acl rules
@@ -280,7 +210,6 @@ class AuthApp(app_manager.RyuApp):
                         return dp_name
         return None
 
-    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER) # pylint: disable=no-member
     def port_status_handler(self, ryu_event):
         """Deauthenticates all hosts on a port if the port has gone down.
         """
@@ -298,8 +227,8 @@ class AuthApp(app_manager.RyuApp):
                 removed_macs = self.rule_man.reset_port_acl(dp_name, port)
                 self.logger.info('removed macs: %s', removed_macs)
                 for mac in removed_macs:
-                    self.logger.info('sending deauth for %s' % mac)
-                    self.hapd_req.deauthenticate(mac)
+                    self.logger.info('sending deauth for %s', mac)
+#                    self.hapd_req.deauthenticate(mac)
 
                 self.logger.debug('reset port completed')
 
@@ -308,8 +237,8 @@ class AuthApp(app_manager.RyuApp):
         Closes the hostapd control interfaces, and kills the main thread ('self.run').
         """
         self.logger.info('SIGINT Received - closing hostapd sockets')
-        self.hapd_req.close()
-        self.hapd_unsolicited.close()
+#        self.hapd_req.close()
+#        self.hapd_unsolicited.close()
         self.logger.info('hostapd sockets closed')
         self.logger.info('Killing threads ...')
         for t in self.threads:
@@ -317,3 +246,11 @@ class AuthApp(app_manager.RyuApp):
         self.logger.info('Threads killed')
         sys.exit()
 
+
+
+if __name__ == "__main__":
+    print("cretaing aa")
+    aa = AuthApp()
+    print("starting aa")
+    aa.start()
+    print("ending aa")

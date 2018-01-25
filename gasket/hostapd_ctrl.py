@@ -221,11 +221,14 @@ class HostapdCtrlUDP(HostapdCtrl):
     """UDP socket interface class
     """
 
-    def __init__(self, family, sockaddr, bind_address, bind_port, hsoc_type, timeout, logger):
+    host = None
+
+    def __init__(self, family, sockaddr, bind_address, bind_port, timeout, logger):
         self.logger = logger
         self.soc = socket.socket(family, socket.SOCK_DGRAM)
         self.set_timeout(timeout)
         logger.info('connecting')
+
         try:
             if bind_address is not None and bind_port is not None:
                 self.soc.bind((bind_address, bind_port))
@@ -257,8 +260,11 @@ class HostapdCtrlUDP(HostapdCtrl):
         """
         return str(self.request('GET_COOKIE'))
 
+    def get_host(self):
+        return self.soc.host
 
-def request_socket_udp(host, port, bind_address, bind_port, hsoc_type, timeout, logger):
+
+def request_socket_udp(host, port, bind_address, bind_port, timeout, logger):
     """Create a HostapdCtrlUDP class.
     Args:
         host (str): ipv4/ipv6/hostname of remote.
@@ -269,11 +275,11 @@ def request_socket_udp(host, port, bind_address, bind_port, hsoc_type, timeout, 
     """
     # use the first addr found, if more than one
     # (such as the case with hostnames that resolve to both ipv6 and ipv4).
-    addrinfo = socket.getaddrinfo(host, port, socktype=socket.SOCK_DGRAM)[0]
-    return HostapdCtrlUDP(addrinfo[0], addrinfo[4], bind_address, bind_port, hsoc_type, timeout, logger)
+    addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_DGRAM)[0]
+    return HostapdCtrlUDP(addrinfo[0], addrinfo[4], bind_address, bind_port, timeout, logger)
 
 
-def unsolicited_socket_udp(host, port, bind_address, bind_port, hsoc_type, timeout, logger):
+def unsolicited_socket_udp(host, port, bind_address, bind_port, timeout, logger):
     """Create a HostapdCtrlUDP class, and attaches for receiveing
     unsolicited events.
     Args:
@@ -283,7 +289,7 @@ def unsolicited_socket_udp(host, port, bind_address, bind_port, hsoc_type, timeo
     Returns:
         HostapdCtrlUDP object
     """
-    s = request_socket_udp(host, port, bind_address, bind_port, hsoc_type, timeout, logger)
+    s = request_socket_udp(host, port, bind_address, bind_port, timeout, logger)
     s.attach()
     return s
 

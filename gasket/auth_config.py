@@ -1,22 +1,6 @@
 """Configuration parser for authentication controller app."""
 # pytype: disable=pyi-error
-import socket
 import yaml
-
-
-def validate_ip_address(addr):
-    try:
-        socket.inet_aton(addr)
-    except socket.error:
-        raise AssertionError("invalid ip address: %s" % addr)
-
-
-def validate_port(port):
-    assert port is None or 1 <= port <= 64000, "invalid port number: %s" % port
-
-
-def validate_socket_type(socket_type):
-    assert socket_type in ['ping', 'ping-and-portforward'], "invalid socket type: %s" % socket_type
 
 
 class AuthConfig(object):
@@ -45,44 +29,4 @@ class AuthConfig(object):
 
         self.rules = data["auth-rules"]["file"]
 
-        self.hostapd_socket_path = data.get(
-            "hostapd", {}).get("socket_path", None)
-
-        self.hostapd_host = None
-        self.hostapd_port = None
-        if self.hostapd_socket_path is None:
-            # can be ipv4, ipv6, or hostname
-            self.hostapd_host = data['hostapd']['host']
-            self.hostapd_port = data['hostapd']['port']
-
-        self.hostapd_unsol_timeout = data.get(
-            "hostapd", {}).get("unsolicited_timeout", None)
-        self.hostapd_req_timeout = data.get(
-            "hostapd", {}).get("request_timeout", None)
-        self.hostapd_req_socket_type = data.get(
-            "hostapd", {}).get("request_socket_type", "ping")
-        self.hostapd_unsol_socket_type = data.get(
-            "hostapd", {}).get("unsolicited_socket_type", "ping")
-        self.hostapd_req_bind_port = data.get(
-            "hostapd", {}).get("request_bind_port", None)
-        self.hostapd_req_bind_address = data.get(
-            "hostapd", {}).get("request_bind_address", None)
-        self.hostapd_unsol_bind_port = data.get(
-            "hostapd", {}).get("unsolicited_bind_port", None)
-        self.hostapd_unsol_bind_address = data.get(
-            "hostapd", {}).get("unsolicited_bind_address", None)
-
-        self.validate_config()
-
-    def validate_config(self):
-        validate_port(self.prom_port)
-        validate_port(self.hostapd_req_bind_port)
-        validate_port(self.hostapd_unsol_bind_port)
-
-        validate_ip_address(self.faucet_ip)
-        if self.hostapd_socket_path is None:
-            validate_ip_address(self.hostapd_host)
-            validate_port(self.hostapd_port)
-
-        validate_socket_type(self.hostapd_req_socket_type)
-        validate_socket_type(self.hostapd_unsol_socket_type)
+        self.hostapds = data["hostapds"]
