@@ -21,8 +21,8 @@ class HostapdSocketThread(gasket_conf.GasketConf, threading.Thread):
     """
     logger_location = None
     logger = None
-    hapd_req = None
-    hapd_unsol = None
+    request_sock = None
+    unsolicited_sock = None
     work_queue = None
     udp = True
 
@@ -119,11 +119,11 @@ class HostapdSocketThread(gasket_conf.GasketConf, threading.Thread):
             self.logger.info('waiting for receive')
             data = ""
             try:
-                data = str(self.hapd_unsol.receive())
+                data = str(self.unsolicited_sock.receive())
             except socket.timeout:
                 # icmp ping the hostapd server.
                 # if return ok server is reachable. but maybe app crashed.
-                self.ping(self.hapd_unsol)
+                self.ping(self.unsolicited_sock)
                 # restart the socket, will need new cookie.
                 # What to do if this ping fails. close? and restart.
                 continue
@@ -132,7 +132,7 @@ class HostapdSocketThread(gasket_conf.GasketConf, threading.Thread):
                 self.logger.info('success message')
                 mac = data.split()[1].replace("'", '')
                 try:
-                    sta = self.hapd_req.get_sta(mac)
+                    sta = self.request_sock.get_sta(mac)
                 except socket.timeout:
                     self.logger.warning('request socket timed out while getting mib for mac: %s' % mac)
                     continue
@@ -167,13 +167,13 @@ class HostapdSocketThread(gasket_conf.GasketConf, threading.Thread):
 
     def _init_udp_sockets(self):
         self.logger.info('initiating UDP socket for hostapd ctrl')
-        self.hapd_req = hostapd_ctrl.request_socket_udp(self.remote_host, self.remote_port,
+        self.request_sock = hostapd_ctrl.request_socket_udp(self.remote_host, self.remote_port,
                                               self.request_bind_address,
                                               self.request_bind_port,
                                               self.request_timeout,
                                               self.logger)
 
-        self.hapd_unsol = hostapd_ctrl.unsolicited_socket_udp(self.remote_host, self.remote_port,
+        self.unsolicited_sock = hostapd_ctrl.unsolicited_socket_udp(self.remote_host, self.remote_port,
                                                 self.unsolicited_bind_address,
                                                 self.unsolicited_bind_port,
                                                 self.unsolicited_timeout,
@@ -211,6 +211,6 @@ class HostapdSocketThread(gasket_conf.GasketConf, threading.Thread):
 
     def _init_unix_sockets(self):
         self.logger.info('initiating UNIX socket for hostapd ctrl')
-        self.hapd_req = self.request_socket_unix(self.unix_socket_path, self.request_timeout, self.logger)
-        self.hapd_unsol = self.unsolicited_socket_unix(self.unix_socket_path, self.unsolicited_timeout, self.logger)
+        self.request_sock = self.request_socket_unix(self.unix_socket_path, self.request_timeout, self.logger)
+        self.unsolicited_sock = self.unsolicited_socket_unix(self.unix_socket_path, self.unsolicited_timeout, self.logger)
 
