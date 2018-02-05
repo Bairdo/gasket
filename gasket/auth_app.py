@@ -20,8 +20,10 @@ import faucet.valve_of as valve_of
 from gasket.auth_config import AuthConfig
 from gasket import rule_manager
 from gasket import auth_app_utils
+from gasket.hostapd_conf import HostapdConf
 from gasket import hostapd_socket_thread
 from gasket.work_item import AuthWorkItem, DeauthWorkItem
+
 
 class Proto(object):
     """Class for protocol constants.
@@ -63,11 +65,10 @@ class AuthApp(object):
 
     threads = []
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config, logger, *args, **kwargs):
         super(AuthApp, self).__init__(*args, **kwargs)
-        config_filename = os.getenv('GASKET_CONFIG', '/etc/ryu/faucet/gasket/auth.yaml')
-        self.config = AuthConfig(config_filename)
-        self.logger = auth_app_utils.get_logger('auth_app', self.config.logger_location, logging.DEBUG, 1)
+        self.config = config
+        self.logger = logger
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
         self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
         self.work_queue = queue.Queue()
@@ -75,17 +76,26 @@ class AuthApp(object):
     def start(self):
         self.logger.info('Starting threads')
         print('starting hostapd socket threads')
+        try:
+            for hostapd_name, conf in self.config.hostapds.items():
+                hostapd_conf = HostapdConf(hostapd_name, conf)
+                hst = hostapd_socket_thread.HostapdSocketThread(hostapd_conf, self.work_queue, self.config.logger_location)
+                self.logger.info('starting thread %s', hst)
+                hst.start()
+                self.threads.append(hst)
+                self.logger.info('thread running')
 
-        for hostapd_name, conf in self.config.hostapds.items():
-            hst = hostapd_socket_thread.HostapdSocketThread(hostapd_name, conf, self.work_queue, self.config.logger_location)
-            hst.start()
-            self.threads.append(hst)
-            self.logger.info('thread running')
+            self.logger.info('starting worker thread.')
 
-        self.logger.info('starting worker thread.')
-
+        except Exception as e:
+            self.logger.exception(e)
+        print('started')
         while True:
-            work_item = self.work_queue.get()
+            try:
+                work_item = self.work_queue.get()
+            except Exception as e:
+                self.logger.exception(e)
+                continue
             self.logger.info('got work from queue')
             if isinstance(work_item, AuthWorkItem):
                 self.authenticate(work_item.mac, work_item.username, work_item.acllist)
@@ -105,8 +115,13 @@ class AuthApp(object):
              dp name & port number.
         """
         # query faucets promethues.
-        prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['learned_macs', 'faucet_config_dp_name'])
-
+        self.logger.info('querying prometheus')
+        try:
+            prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['learned_macs', 'faucet_config_dp_name'])
+        except Exception as e:
+            self.logger.exception(e)
+            raise
+        self.logger.info('queried prometheus. mac_table:\n%s\n\nname_dpid:\n%s' %(prom_mac_table, prom_name_dpid))
         ret_port = -1
         ret_dp_name = ""
         dp_port_mode = self.config.dp_port_mode
@@ -249,8 +264,20 @@ class AuthApp(object):
 
 
 if __name__ == "__main__":
-    print("cretaing aa")
-    aa = AuthApp()
-    print("starting aa")
-    aa.start()
-    print("ending aa")
+    print('Parsing args ...')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config', metavar='config', type=str, nargs=1, help='path to configuration file')
+    args = parser.parse_args()
+    config_filename = '/etc/ryu/faucet/gasket/auth.yaml'
+    if args.config:
+        config_filename = args.config[0]
+    print('Loading config %s' % config_filename)
+    config = AuthConfig(config_filename)
+    logger = auth_app_utils.get_logger('auth_app', config.logger_location, logging.DEBUG, 1)
+
+    aa = AuthApp(config, logger)
+    print('Running AuthApp')
+    try:
+        aa.start()
+    except Exception as e:
+        logger.exception(e)
