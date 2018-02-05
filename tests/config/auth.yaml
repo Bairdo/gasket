@@ -5,7 +5,7 @@ logger_location: %(logger_location)s
 
 faucet:
     prometheus_port: %(promport)d
-    ip: 127.0.0.1
+    ip: %(controller_ip)s
 
 files:
     controller_pid: %(pid_file)s
@@ -13,8 +13,12 @@ files:
     acl_config: %(tmpdir)s/faucet-acl.yaml
     base_config: %(tmpdir)s/base-acls.yaml
 
-hostapd:
-    socket_path: %(tmpdir)s/hostapd/%(intf)s
+hostapds:
+    hostapd-1:
+        unix_socket_path: %(tmpdir)s/hostapd/%(intf)s
+        request_timeout: 4
+        unsolicited_timeout: 4
+
 
 dps:
     faucet-1:
