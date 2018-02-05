@@ -15,7 +15,8 @@ services:
             ip link set eth3 up;
             ping 10.0.0.40 -c5;
             hostapd -ddt /etc/hostapd/wired.conf"
-
+        ports:
+            - "8892:8892/udp"
         networks:
             controller-portal-net:
                 ipv4_address: 172.220.0.101
