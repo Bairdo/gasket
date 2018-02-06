@@ -11,7 +11,7 @@ import os
 import random
 import re
 import shutil
-import signal
+import string
 import time
 import unittest
 
@@ -21,6 +21,7 @@ import yaml
 from mininet.log import error, output
 from mininet.net import Mininet
 from mininet.link import Intf
+from mininet.node import Node
 
 import faucet_mininet_test_base
 import faucet_mininet_test_util
@@ -29,11 +30,13 @@ import faucet_mininet_test_topo
 
 class GasketTest(faucet_mininet_test_base.FaucetTestBase):
     """Base class for the authentication tests """
-    RUN_GASKET = True
     RUN_GAUGE = False
     pids = {}
 
     max_hosts = 3
+
+    def setup(self):
+        super(GasketTest, self).setUp()
 
     def tearDown(self):
         if self.net is not None:
@@ -221,6 +224,7 @@ eapol_flags=0
             print(new_status)
 
         print('relogon took %d loops' % i)
+        # TODO change this (and similar loops) to use verify_hup_faucet(timeout=3)
         if wait:
             end_reload_count = 0
             for i in range(20):
@@ -305,7 +309,7 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
         self.pids['p0-ping'] = host.lastPid
 
     def run_freeradius(self, host):
-        host.cmd('freeradius -xx -i 127.0.0.1 -p 1812 -l %s/radius.log' % (self.tmpdir))
+        host.cmd('freeradius -xx -i 127.0.0.1 -p 1812 -l %s/radius.log &' % (self.tmpdir))
         self.pids['freeradius'] = host.lastPid
 
     def run_internet(self, host):
@@ -398,9 +402,59 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
             host.cmd(cmd)
         self.pids['tcpdump-%s-%s-%s' % (host.name, interface, direction)] = host.lastPid
 
-    def setup(self):
-        super(GasketTest, self).setUp()
+    def get_controller_number(self):
+        contr_num = int(self.net.controller.name.split('-')[1]) % 255
+        self.assertLess(int(contr_num), 255)
+        return contr_num
 
+    def init_gasket(self, host):
+
+        self.gasket_setup()
+
+        host.cmd('python3 -m gasket.auth_app {0}/auth.yaml > {0}/gasket.out &'.format(self.tmpdir))
+        self.pids['gasket'] = host.lastPid
+        print('Gasket started.')
+
+    def _get_sid_prefix(self, ports_served):
+        """Return a unique switch/host prefix for a test."""
+        # Linux tools require short interface names.
+        # pylint: disable=no-member
+        id_chars = string.letters + string.digits
+        id_a = int(ports_served / len(id_chars))
+        id_b = ports_served - (id_a * len(id_chars)) - 1
+        return 'u%s%s' % (
+            id_chars[id_a], id_chars[id_b])
+
+    def gasket_setup(self):
+        """Starts the authentication controller app.
+        Args:
+            host (mininet.host): host to start app on (generally the controller)
+        """
+        print('Setting up Gasket config.')
+        with open('/gasket-src/tests/config/auth.yaml', 'r') as f:
+            httpconfig = f.read()
+
+        config_values = {}
+        config_values['tmpdir'] = self.tmpdir
+        config_values['promport'] = self.prom_port
+        config_values['logger_location'] = self.tmpdir + '/auth_app.log'
+        serial = faucet_mininet_test_util.get_serialno(
+                self.ports_sock, self._test_name())
+        portal_name = self._get_sid_prefix(serial) + '1'
+        config_values['intf'] = portal_name + '-eth0'  # self.net.hosts[0].defaultIntf().name # need to get this.
+        config_values['pid_file'] = self.net.controller.pid_file
+        config_values['controller_ip'] = '127.0.0.1'
+
+        open('%s/auth.yaml' % self.tmpdir, 'w').write(httpconfig % config_values)
+        open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL) # need to get C_B_A
+
+        faucet_acl = self.tmpdir + '/faucet-acl.yaml'
+        base = self.tmpdir + '/base-acls.yaml'
+
+        os.system('python3.5 -m gasket.rule_manager {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
+        self.verify_hup_faucet()
+        print('Faucet successfully hup-ed')
+        time.sleep(1)
 
 class GasketSingleSwitchTest(GasketTest):
     """Base Test class for single switch topology
@@ -435,27 +489,32 @@ class GasketSingleSwitchTest(GasketTest):
         """
         # pylint: disable=unbalanced-tuple-unpacking
         portal, interweb = self.net.hosts[:2]
+        gasket_host = Node('gasket', inNamespace=False)
 
         # pylint: disable=no-member
-        contr_num = int(self.net.controller.name.split('-')[1]) % 255
-        self.assertLess(int(contr_num), 255)
-        self.net.addLink(
-            portal,
-            self.net.controller,
-            params1={'ip': '192.168.%s.2/24' % contr_num},
-            params2={'ip': '192.168.%s.3/24' % contr_num})
-        self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name))
+        contr_num = self.get_controller_number()
+        self.net.addLink(portal,
+                         gasket_host,
+                         params1={'ip': '192.168.%s.2/29' % contr_num},
+                         params2={'ip': '192.168.%s.3/29' % contr_num})
+        self.one_ipv4_ping(portal, '192.168.%s.3' % contr_num, intf=('%s-eth1' % portal.name), require_host_learned=False)
         portal.setMAC('70:6f:72:74:61:6c', portal.defaultIntf())
         # do not allow the portal to forward ip packets. Otherwise packets redirected to the portal will be forwarded,
         # and effectivley bypass the ACLs.
         portal.cmdPrint("echo '0' > /proc/sys/net/ipv4/ip_forward")
 
+        contr_num = int(contr_num) + 1
+
         self.start_tcpdump(self.net.controller)
+
         self.start_tcpdump(portal, interface='%s-eth0' % portal.name)
         self.start_tcpdump(portal, interface='%s-eth1' % portal.name)
         self.start_tcpdump(portal, interface='lo', expr='udp port 1812 or udp port 1813')
         self.start_tcpdump(interweb)
 
+        self.start_tcpdump(gasket_host, interface='%s-eth0' % gasket_host.name)
+
+        self.init_gasket(gasket_host)
         self.run_hostapd(portal)
         self.run_freeradius(portal)
 
@@ -463,7 +522,7 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
-        time.sleep(10)
+
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
@@ -593,7 +652,7 @@ class GasketMultiHostsBase(GasketSingleSwitchTest):
         # TODO implement.
         # Take a similar appraoch to test_multi_hosts_parallel's ThreadPool.
         # But have the job function randomise weather a host is going to log on, off, or do nothing.
-        # Repaat that for each host a number of times.
+        # Repeat that for each host a number of times.
 
 
 class GasketSingleTenHostsTest(GasketMultiHostsBase):
@@ -865,6 +924,7 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
+@unittest.skip('LinkState not currently supported')
 class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
     def test_dp_link_down_up(self):

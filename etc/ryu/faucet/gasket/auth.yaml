@@ -23,29 +23,37 @@ dps:
         interfaces:
             2:
                 auth_mode: access
+                #this port is managed by these hostapds.
+                hostapds: [hostapd-1]
+
             3:
                 auth_mode: access
+            4:
+                auth_mode: link022
+                hostapds: [hostapd-2]
 
+# top level hostapds contains the config info for connecting to the (many) hostapd interfaces.
+hostapds:
+    hostapd-1:
+        # either remote_host & remote_port must be used OR socket_path.
+        # address & port of hostapd instance for this config.
+        # in hostapd.conf: use 'ctl_interface:udp:8888' to setup the control socket interface.
+        remote_host: 172.220.0.101
+        remote_port: 8888
 
-hostapd:
-    host: 172.220.0.101
-    port: 8888
-    # timeout - see https://docs.python.org/3/library/socket.html#socket.socket.settimeout
-    request_timeout: 4
-    unsolicited_timeout: 4
-    # in hostapd.conf 'ctl_interface...:udp:20000' might be how you specifiy what to do
-    # socket_path: /path/to/hostapd/ctrl/socket # may also be used instead of host & port, when using the unix socket interface
-  
-    # bind_address & bind port must be used if udp port forwarding is used.
-    unsolicited_bind_address: 0.0.0.0
-    unsolicited_bind_port: 8890
-    request_bind_address: 0.0.0.0
-    request_bind_port: 8891
+        # may also be used instead of host & port, when using the unix socket interface.
+#        socket_path: /path/to/hostapd/ctrl/socket
+        # timeout seconds- can be a non negative float. If 0 socket will not block. If not specified defaults to 5 seconds.
+        request_timeout: 4
+        unsolicited_timeout: 4
+      
+        # bind_address & bind port must be used if udp port forwarding is used.
+        # Recommended (but optional) for unsolicited socket if running behind a firewall.
+        unsolicited_bind_address: 0.0.0.0
+        unsolicited_bind_port: 8892
+#        request_bind_address: 0.0.0.0
+#        request_bind_port: 8891
 
-    # Specifies how UDP packets traverse (docker) firewall.
-    # ping - gasket will send a ping. timeout variable must be set.
-    # ping-and-portforward - socket will listen on a constant port. (set firewall to allow the port). must be used with the coresponding *_bind_address & *_bind_port above.
-    #
-    # Only 'ping' option is allowed when socket is a UNIX socket.
-    unsolicited_socket_type: ping
-    request_socket_type: ping
+        # Name of the hostapd interface (NIC) this hostapd config will receive events for.
+        # Defaults to the default given by hostapd.
+#        ifname: wlan0

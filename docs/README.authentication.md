@@ -30,7 +30,7 @@ The **Authentication server** is a RADIUS server.
 
 The **Internet** is the rest of your network, e.g. Gateway, DNS Servers, more Switches & Hosts, e.t.c..
 
-The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/faucetsdn/faucet), and a process (auth_app.py) for managing authentication messages from the authenticator and  configuring Faucet across the network.
+The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/faucetsdn/faucet), and a process (gasket.auth_app.py) for managing authentication messages from the authenticator and  configuring Faucet across the network.
 
 The **OpenFlow Switch** is an OpenFlow 1.3 switch we currently use [OpenVSwitch](openvswitch.org).
 
@@ -77,7 +77,7 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 ## Limitations
 - .yaml configuration files must have 'dps' & 'acls' as top level (no indentation) objects, and only declared once across all files.
 - Weird things may happen if a user moves 'access' port, they should successfully reauthenticate, however they might have issues if a malicious user fakes the authenticated users MAC on the old port (poisoning the MAC-port learning table), and if they (malicious user) were to log off the behaviour is currently 'undefined'
-What is beleived (unconfrimed) to occur, is on the second logon hostapd will send a disconnect message at the start of the authentication process for that MAC address and the system will therefore log the mac off the old port.
+What is believed (unconfirmed) to occur, is on the second logon hostapd will send a disconnect message at the start of the authentication process for that MAC address and the system will therefore log the mac off the old port.
 The MAC will therefore only be authenticated on the current port.
 This behaviour however does allow fake users to logoff other users, by either cloning the MAC address of an authenticated client and either of A) sending a EAP-Logoff, or B) starting a new authentication (regardless of whether it is successful).
 The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix' may be availalble for 'B' that ignores the disconnect from unsuccessful logon attempts if the client is still active.
@@ -493,47 +493,8 @@ The Gasket repository contains auth_app.py which is used as the 'proxy' between 
 This must run on the same machine as Faucet, as the SIGHUP signal is used to reload the Faucet configuration.
 
 ###### auth.yaml
-auth.yaml is the configuration file used by auth_app. Note: the structure and content is subject to change.
-```yaml
----
-version: 0
-
-logger_location: auth_app.log
-
-faucet:
-    prometheus_port: 9244
-    ip: 127.0.0.1
-
-files:
-    # locations to various files.
-    # contr_pid only contains the Process ID (PID) of the Faucet process.
-    controller_pid: /etc/faucet/ryu/contr_pid 
-    faucet_config: /etc/ryu/faucet/faucet.yaml
-    acl_config: /etc/ryu/faucet/faucet-acls.yaml
-    base_config: /etc/ryu/faucet/base-acls.yaml
-
-# rules to be applied for a user once authenticated.
-auth-rules:
-    file: /gasket-src/rules.yaml
-
-# Each port that is to use 802.1X must have 'auth_mode' set to 'access'.
-# This is used to identify which port is directly connected to the machine authenticating.
-dps:
-    faucet-1:
-        interfaces:
-            1:
-                auth_mode: access
-            2:
-                auth_mode: access
-            3:
-                auth_mode: access
-
-hostapd:
-    host: hostapd
-    port: 8888
-
-```
-
+See [auth.yaml](./etc/ryu/faucet/gasket/auth.yaml) for acceptable configuration options and descriptions.
+Note: the structure and content is subject to change.
 
 ### Running
 
@@ -546,9 +507,9 @@ TODO add docker-compose for faucet-con stuff
 To start Faucet and Gasket use Dockerfile.auth:
 ```bash
 docker build -t bairdo/gasket -f Dockerfile.auth .
-docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6663:6663 -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
+docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
 ```
-Ports 6653 & 6663 are the Openflow ports used by the Faucet and Gasket controllers respectivley, port 9244 is used for Prometheus and - port 9244 may be omitted if you do not need Prometheus.
+Port 6653 is the Openflow port used by the Faucet, port 9244 is used for Prometheus and - port 9244 may be omitted if you do not need Prometheus.
 
 #### Authentication Server
 
@@ -567,3 +528,4 @@ Start the RADIUS server according to your implementations instructions.
 
 - hostapd should support using its eap_server instead of an external RADIUS one. 
 
+- see [github issues](https://github.com/bairdo/gasket/issues) for more.

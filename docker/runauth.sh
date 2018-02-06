@@ -16,7 +16,7 @@ python3 /gasket-src/gasket/rule_manager.py /etc/ryu/faucet/gasket/base-acls.yaml
 echo "Starting Faucet and Gasket"
 ryu-manager --pid-file=/var/run/faucet.pid --ofp-tcp-listen-port 6653 faucet.faucet &
 faucet=$!
-ryu-manager --pid-file=/var/run/gasket.pid --ofp-tcp-listen-port 6663 gasket.auth_app &
+python3 -m gasket.auth_app /etc/ryu/faucet/gasket/auth.yaml &
 gasket=$!
 echo "waiting for Gasket pid: $gasket"
 wait "$gasket"

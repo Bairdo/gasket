@@ -1,6 +1,7 @@
+faucet==1.6.19
 ipaddress
 networkx
 prometheus_client
 pyyaml
+requests
 ryu==4.19
-faucet
