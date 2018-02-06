@@ -10,4 +10,4 @@ def validate_ip_address(addr):
 
 
 def validate_port(port):
-    assert port is None or 1 <= port <= 64000, "invalid port number: %s" % port
+    assert port is None or 1 <= port <= 65535, "invalid port number: %s" % port
