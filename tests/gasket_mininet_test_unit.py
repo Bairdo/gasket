@@ -454,6 +454,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         os.system('python3.5 -m gasket.rule_manager {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
         self.verify_hup_faucet()
         print('Faucet successfully hup-ed')
+        time.sleep(1)
 
 class GasketSingleSwitchTest(GasketTest):
     """Base Test class for single switch topology
