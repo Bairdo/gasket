@@ -74,37 +74,35 @@ class AuthApp(object):
         self.work_queue = queue.Queue()
 
     def start(self):
-        self.logger.info('Starting threads')
-        print('starting hostapd socket threads')
-        try:
-            for hostapd_name, conf in self.config.hostapds.items():
-                hostapd_conf = HostapdConf(hostapd_name, conf)
-                hst = hostapd_socket_thread.HostapdSocketThread(hostapd_conf, self.work_queue, self.config.logger_location)
-                self.logger.info('starting thread %s', hst)
-                hst.start()
-                self.threads.append(hst)
-                self.logger.info('thread running')
 
-            self.logger.info('starting worker thread.')
+        signal.signal(signal.SIGINT, self._handle_sigint)
+        
+        self.logger.info('Starting hostapd socket threads')
+        print('Starting hostapd socket threads ...')
 
-        except Exception as e:
-            self.logger.exception(e)
-        print('started')
+        for hostapd_name, conf in self.config.hostapds.items():
+            hostapd_conf = HostapdConf(hostapd_name, conf)
+            hst = hostapd_socket_thread.HostapdSocketThread(hostapd_conf, self.work_queue, self.config.logger_location)
+            self.logger.info('Starting thread %s', hst)
+            hst.start()
+            self.threads.append(hst)
+            self.logger.info('Thread running')
+
+        print('Started socket Threads.')
+        self.logger.info('Starting worker thread.')
         while True:
             try:
                 work_item = self.work_queue.get()
             except Exception as e:
                 self.logger.exception(e)
                 continue
-            self.logger.info('got work from queue')
+            self.logger.info('Got work from queue')
             if isinstance(work_item, AuthWorkItem):
                 self.authenticate(work_item.mac, work_item.username, work_item.acllist)
             elif isinstance(work_item, DeauthWorkItem):
                 self.deauthenticate(work_item.mac)
-
-
-
-        signal.signal(signal.SIGINT, self._handle_sigint)
+            else: 
+                self.logger.warn("Unsupported WorkItem type: %s", type(work_item))
 
     def _get_dp_name_and_port(self, mac):
         """Queries the prometheus faucet client,
@@ -252,6 +250,7 @@ class AuthApp(object):
         Closes the hostapd control interfaces, and kills the main thread ('self.run').
         """
         self.logger.info('SIGINT Received - closing hostapd sockets')
+        # TODO restore these. And does this even work? - does hostapd detatch the socket.
 #        self.hapd_req.close()
 #        self.hapd_unsolicited.close()
         self.logger.info('hostapd sockets closed')

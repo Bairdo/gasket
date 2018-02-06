@@ -100,6 +100,12 @@ class HostapdSocketThread(threading.Thread):
             self.logger.exception(e)
             return
 
+    def kill(self):
+        self.request_sock.close()
+        self.unsolicited_sock.detach()
+        self.unsolicited_sock.close()
+        super().kill()
+
     def _init_udp_sockets(self):
         self.logger.info('initiating UDP socket for hostapd ctrl')
         self.request_sock = hostapd_ctrl.request_socket_udp(self.conf.ifname,
