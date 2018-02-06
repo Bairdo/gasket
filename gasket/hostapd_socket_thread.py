@@ -101,6 +101,7 @@ class HostapdSocketThread(threading.Thread):
             return
 
     def kill(self):
+        # TODO Does this even work? - does hostapd detatch the socket.
         self.request_sock.close()
         self.unsolicited_sock.detach()
         self.unsolicited_sock.close()
