@@ -42,9 +42,6 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
         if self.net is not None:
             host = self.net.hosts[0]
             print "about to kill everything"
-            print(os.system('ps aux'))
-            print(os.system('netstat -l -t -n -p'))
-            print(self.pids)
             for name, pid in self.pids.iteritems():
                 host.cmd('kill -s sigkill' + str(pid))
 
@@ -525,7 +522,7 @@ class GasketSingleSwitchTest(GasketTest):
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
         # TODO can this be removed/reduced/replaces with a poll.
-        time.sleep(10)
+        time.sleep(1)
 
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
@@ -928,6 +925,7 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
+#@unittest.skip('LinkState not currently supported')
 class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
     def test_dp_link_down_up(self):
