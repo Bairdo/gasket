@@ -58,11 +58,7 @@ class AuthApp(object):
     logger = None
     logname = 'auth_app'
 
-    hapd_req = None
-    hapd_unsolicited = None
-
     work_queue = None
-
     threads = []
 
     def __init__(self, config, logger, *args, **kwargs):
@@ -118,7 +114,7 @@ class AuthApp(object):
             prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['learned_macs', 'faucet_config_dp_name'])
         except Exception as e:
             self.logger.exception(e)
-            raise
+            return '', -1
         self.logger.info('queried prometheus. mac_table:\n%s\n\nname_dpid:\n%s' %(prom_mac_table, prom_name_dpid))
         ret_port = -1
         ret_dp_name = ""
@@ -249,17 +245,11 @@ class AuthApp(object):
         """Handles the SIGINT signal.
         Closes the hostapd control interfaces, and kills the main thread ('self.run').
         """
-        self.logger.info('SIGINT Received - closing hostapd sockets')
-        # TODO restore these. And does this even work? - does hostapd detatch the socket.
-#        self.hapd_req.close()
-#        self.hapd_unsolicited.close()
-        self.logger.info('hostapd sockets closed')
-        self.logger.info('Killing threads ...')
+        self.logger.info('SIGINT Received - Killing hostapd socket threads ...')
         for t in self.threads:
             t.kill()
         self.logger.info('Threads killed')
         sys.exit()
-
 
 
 if __name__ == "__main__":
