@@ -521,8 +521,6 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
-        # TODO can this be removed/reduced/replaces with a poll.
-        time.sleep(1)
 
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
@@ -925,7 +923,7 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
-#@unittest.skip('LinkState not currently supported')
+@unittest.skip('LinkState not currently supported')
 class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
     def test_dp_link_down_up(self):
