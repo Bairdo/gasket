@@ -24,8 +24,6 @@ class HostapdConf(gasket_conf.GasketConf):
     unsolicited_bind_port = None
     request_timeout = None
     unsolicited_timeout = None
-    server_pinging = None
-    ssid = None
     ifname = None
 
 
@@ -41,8 +39,6 @@ class HostapdConf(gasket_conf.GasketConf):
         'unsolicited_bind_port': None,
         'request_timeout': 5,
         'unsolicited_timeout': 5,
-        'server_pinging': True,
-        'ssid': None,
         'ifname': None,
     }
 
@@ -58,8 +54,6 @@ class HostapdConf(gasket_conf.GasketConf):
         'unsolicited_bind_port': int,
         'request_timeout': int,
         'unsolicited_timeout': int,
-        'server_pinging': bool,
-        'ssid': str,
         'ifname': str,
     }
 
