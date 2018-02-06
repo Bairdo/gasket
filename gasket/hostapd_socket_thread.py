@@ -22,6 +22,7 @@ class HostapdSocketThread(threading.Thread):
     unsolicited_sock = None
     work_queue = None
     udp = False
+    stop = False
 
     def __init__(self, conf, work_queue, logger_location):
         super().__init__()
@@ -50,7 +51,7 @@ class HostapdSocketThread(threading.Thread):
 
         try:
             self.logger.info('sockets initiated')
-            while True:
+            while not self.stop:
                 self.logger.info('waiting for receive')
                 data = ""
                 try:
@@ -105,7 +106,7 @@ class HostapdSocketThread(threading.Thread):
         self.request_sock.close()
         self.unsolicited_sock.detach()
         self.unsolicited_sock.close()
-        super().kill()
+        self.stop = True
 
     def _init_udp_sockets(self):
         self.logger.info('initiating UDP socket for hostapd ctrl')

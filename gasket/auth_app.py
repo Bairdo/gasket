@@ -7,15 +7,10 @@ and sending it a SIGHUP.
 
 import argparse
 import logging
-import os
 import queue
 import re
 import signal
-import socket
 import sys
-import threading
-
-import faucet.valve_of as valve_of
 
 from gasket.auth_config import AuthConfig
 from gasket import rule_manager
@@ -40,7 +35,7 @@ class Proto(object):
     HTTP_PORT = 80
 
 
-LEARNED_MACS_REGEX = """learned_macs{dp_id="(0x[a-f0-9]+)",dp_name="([\w-]+)",n="(\d+)",port="(\d+)",vlan="(\d+)"}"""
+LEARNED_MACS_REGEX = r"""learned_macs{dp_id="(0x[a-f0-9]+)",dp_name="([\w-]+)",n="(\d+)",port="(\d+)",vlan="(\d+)"}"""
 
 
 class AuthApp(object):
@@ -61,8 +56,8 @@ class AuthApp(object):
     work_queue = None
     threads = []
 
-    def __init__(self, config, logger, *args, **kwargs):
-        super(AuthApp, self).__init__(*args, **kwargs)
+    def __init__(self, config, logger):
+        super(AuthApp, self).__init__()
         self.config = config
         self.logger = logger
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
@@ -70,15 +65,20 @@ class AuthApp(object):
         self.work_queue = queue.Queue()
 
     def start(self):
+        """Starts separate thread for each hostapd socket.
+        And runs as the worker thread processing the (de)authentications/.
 
+        Main Worker thread.
+        """
         signal.signal(signal.SIGINT, self._handle_sigint)
-        
+
         self.logger.info('Starting hostapd socket threads')
         print('Starting hostapd socket threads ...')
 
         for hostapd_name, conf in self.config.hostapds.items():
             hostapd_conf = HostapdConf(hostapd_name, conf)
-            hst = hostapd_socket_thread.HostapdSocketThread(hostapd_conf, self.work_queue, self.config.logger_location)
+            hst = hostapd_socket_thread.HostapdSocketThread(hostapd_conf, self.work_queue,
+                                                            self.config.logger_location)
             self.logger.info('Starting thread %s', hst)
             hst.start()
             self.threads.append(hst)
@@ -87,17 +87,14 @@ class AuthApp(object):
         print('Started socket Threads.')
         self.logger.info('Starting worker thread.')
         while True:
-            try:
-                work_item = self.work_queue.get()
-            except Exception as e:
-                self.logger.exception(e)
-                continue
+            work_item = self.work_queue.get()
+
             self.logger.info('Got work from queue')
             if isinstance(work_item, AuthWorkItem):
                 self.authenticate(work_item.mac, work_item.username, work_item.acllist)
             elif isinstance(work_item, DeauthWorkItem):
                 self.deauthenticate(work_item.mac)
-            else: 
+            else:
                 self.logger.warn("Unsupported WorkItem type: %s", type(work_item))
 
     def _get_dp_name_and_port(self, mac):
@@ -111,11 +108,13 @@ class AuthApp(object):
         # query faucets promethues.
         self.logger.info('querying prometheus')
         try:
-            prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['learned_macs', 'faucet_config_dp_name'])
+            prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
+                                                                                   ['learned_macs', 'faucet_config_dp_name'])
         except Exception as e:
             self.logger.exception(e)
             return '', -1
-        self.logger.info('queried prometheus. mac_table:\n%s\n\nname_dpid:\n%s' %(prom_mac_table, prom_name_dpid))
+        self.logger.info('queried prometheus. mac_table:\n%s\n\nname_dpid:\n%s',
+                         prom_mac_table, prom_name_dpid)
         ret_port = -1
         ret_dp_name = ""
         dp_port_mode = self.config.dp_port_mode
@@ -195,7 +194,8 @@ class AuthApp(object):
             dpid (int): datapath id.
             port_num (int): port number.
         Returns:
-            datapath name (str) if this dpid & port combo are managed (provide authentication). otherwise None
+            datapath name (str) if this dpid & port combo are managed (provide authentication).
+             otherwise None
         """
         # query prometheus for the dpid -> name.
         # use the name to look in auth.yaml for the datapath.
@@ -206,9 +206,9 @@ class AuthApp(object):
         dp_name = ''
         for l in dp_names:
             pattern = r'dp_id="0x{:x}",dp_name="([\w-]+)"}}'.format(dpid)
-            m = re.search(pattern, l)
-            if m:
-                dp_name = m.group(1)
+            match = re.search(pattern, l)
+            if match:
+                dp_name = match.group(1)
                 break
 
         if dp_name in self.config.dp_port_mode:
@@ -255,18 +255,19 @@ class AuthApp(object):
 if __name__ == "__main__":
     print('Parsing args ...')
     parser = argparse.ArgumentParser()
-    parser.add_argument('config', metavar='config', type=str, nargs=1, help='path to configuration file')
+    parser.add_argument('config', metavar='config', type=str,
+                        nargs=1, help='path to configuration file')
     args = parser.parse_args()
     config_filename = '/etc/ryu/faucet/gasket/auth.yaml'
     if args.config:
         config_filename = args.config[0]
     print('Loading config %s' % config_filename)
-    config = AuthConfig(config_filename)
-    logger = auth_app_utils.get_logger('auth_app', config.logger_location, logging.DEBUG, 1)
+    auth_config = AuthConfig(config_filename)
+    log = auth_app_utils.get_logger('auth_app', auth_config.logger_location, logging.DEBUG, 1)
 
-    aa = AuthApp(config, logger)
+    aa = AuthApp(auth_config, log)
     print('Running AuthApp')
     try:
         aa.start()
     except Exception as e:
-        logger.exception(e)
+        log.exception(e)
