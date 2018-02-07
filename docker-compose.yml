@@ -26,6 +26,21 @@ services:
         - net.ipv4.conf.all.send_redirects=0
         - net.ipv4.ip_forward=0
 
+    faucet:
+        image: 'faucet/faucet'
+        volumes:
+            - '/var/log/ryu/faucet:/var/log/ryu/faucet'
+            - '/etc/ryu/faucet:/etc/ryu/faucet'
+        ports:
+            - '6653:6653'
+            - '9302'
+        environment:
+            FAUCET_CONFIG_STAT_RELOAD: '${FAUCET_CONFIG_STAT_RELOAD}'
+            FAUCET_EVENT_SOCK: '${FAUCET_EVENT_SOCK}'
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.103
+
     gasket:
         build:
             context: '.'
@@ -33,7 +48,6 @@ services:
         volumes:
             - './docker-compose/gasket/log/ryu/faucet:/var/log/ryu/faucet'
             - './etc/ryu/faucet:/etc/ryu/faucet'
-
         networks:
             control-plane-net:
                 ipv4_address: 172.222.0.100
@@ -52,6 +66,27 @@ services:
         networks:
             radius-net:
                 ipv4_address: 172.221.0.102
+
+    rabbitmq_adapter:
+        restart: always
+        depends_on:
+            - faucet
+        image: 'faucet/faucet-event-adapter-rabbitmq'
+        volumes_from:
+            - faucet
+        environment:
+            FAUCET_EVENT_SOCK: '${FAUCET_EVENT_SOCK}'
+            FA_RABBIT_HOST: '${FA_RABBIT_HOST}'
+            FA_RABBIT_PORT: '${FA_RABBIT_PORT}'
+            FA_RABBIT_EXCHANGE: '${FA_RABBIT_EXCHANGE}'
+            FA_RABBIT_EXCHANGE_TYPE: '${FA_RABBIT_EXCHANGE_TYPE}'
+            FA_RABBIT_ROUTING_KEY: '${FA_RABBIT_ROUTING_KEY}'
+
+    rabbitmq_server:
+        restart: always
+        image: 'rabbitmq:3-management'
+        ports:
+            - "5672:5672"
 
 networks:
     control-plane-net:
