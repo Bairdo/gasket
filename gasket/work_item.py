@@ -1,6 +1,9 @@
 
 
 class WorkItem(object):
+    pass
+
+class AuthenticationWorkItem(WorkItem):
 
     mac = None
     hostapd_name = None
@@ -10,7 +13,7 @@ class WorkItem(object):
         self.hostapd_name = hostapd_name
 
 
-class AuthWorkItem(WorkItem):
+class AuthWorkItem(AuthenticationWorkItem):
     """Class that represents an authentication item of work .
     """
     username = None
@@ -22,8 +25,45 @@ class AuthWorkItem(WorkItem):
         self.acllist = acllist
 
 
-class DeauthWorkItem(WorkItem):
+class DeauthWorkItem(AuthenticationWorkItem):
     """Class that represents a deauthentication item of work,
     """
     def __init__(self, mac, hostapd_name):
         super().__init__(mac, hostapd_name)
+
+
+class RabbitWorkItem(WorkItem):
+
+    dp_name = None
+    dp_id = None
+
+    def __init__(self, dp_name, dp_id):
+        self.dp_name = dp_name
+        self.dp_id = dp_id
+
+
+class PortChangeWorkItem(RabbitWorkItem):
+
+    port_no = None
+    reason = None
+    status = None
+
+    def __init__(self, dp_name, dp_id, port_no, reason, status):
+        super().__init__(dp_name, dp_id)
+        self.port_no = port_no
+        self.reason = reason
+        self.status = status
+
+class L2LearnWorkItem(RabbitWorkItem):
+
+    mac = None
+    port = None
+    vid = None
+    ip = None
+
+    def __init__(self, dp_name, dp_id, port, vid, mac, ip):
+        super().__init__(dp_name, dp_id)
+        self.mac = mac
+        self.port = port
+        self.vid = vid
+        self.ip = ip

@@ -17,8 +17,9 @@ from gasket import rule_manager
 from gasket import auth_app_utils
 from gasket.hostapd_conf import HostapdConf
 from gasket import hostapd_socket_thread
-from gasket.work_item import AuthWorkItem, DeauthWorkItem
-
+from gasket import work_item
+from gasket import rabbitmq
+from gasket import host
 
 class Proto(object):
     """Class for protocol constants.
@@ -56,6 +57,9 @@ class AuthApp(object):
     work_queue = None
     threads = []
 
+    dps = {}
+    macs = {}
+
     def __init__(self, config, logger):
         super(AuthApp, self).__init__()
         self.config = config
@@ -63,6 +67,7 @@ class AuthApp(object):
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
         self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
         self.work_queue = queue.Queue()
+
 
     def start(self):
         """Starts separate thread for each hostapd socket.
@@ -84,58 +89,37 @@ class AuthApp(object):
             self.threads.append(hst)
             self.logger.info('Thread running')
 
+        rt = rabbitmq.RabbitMQ(self.work_queue, self.config.logger_location)
+        try:
+            rt.start()
+            self.threads.append(rt)
+        except Exception as e:
+            self.logger.exception(e)
+
         print('Started socket Threads.')
         self.logger.info('Starting worker thread.')
         while True:
-            work_item = self.work_queue.get()
+            work = self.work_queue.get()
 
             self.logger.info('Got work from queue')
-            if isinstance(work_item, AuthWorkItem):
-                self.authenticate(work_item.mac, work_item.username, work_item.acllist)
-            elif isinstance(work_item, DeauthWorkItem):
-                self.deauthenticate(work_item.mac)
+            if isinstance(work, work_item.AuthWorkItem):
+                self.authenticate(work.mac, work.username, work.acllist)
+            elif isinstance(work, work_item.DeauthWorkItem):
+                self.deauthenticate(work.mac)
+            elif isinstance(work, work_item.L2LearnWorkItem):
+                self.l2learn(work)
+            elif isinstance(work, work_item.PortChangeWorkItem):
+                self.port_status_handler(work)
             else:
-                self.logger.warn("Unsupported WorkItem type: %s", type(work_item))
+                self.logger.warn("Unsupported WorkItem type: %s", type(work))
 
-    def _get_dp_name_and_port(self, mac):
-        """Queries the prometheus faucet client,
-         and returns the 'access port' that the mac address is connected on.
-        Args:
-             mac MAC address to find port for.
-        Returns:
-             dp name & port number.
-        """
-        # query faucets promethues.
-        self.logger.info('querying prometheus')
-        try:
-            prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
-                                                                                   ['learned_macs', 'faucet_config_dp_name'])
-        except Exception as e:
-            self.logger.exception(e)
-            return '', -1
-        self.logger.info('queried prometheus. mac_table:\n%s\n\nname_dpid:\n%s',
-                         prom_mac_table, prom_name_dpid)
-        ret_port = -1
-        ret_dp_name = ""
-        dp_port_mode = self.config.dp_port_mode
-        for line in prom_mac_table:
-            labels, float_as_mac = line.split(' ')
-            macstr = auth_app_utils.float_to_mac(float_as_mac)
-            self.logger.debug('float %s is mac %s', float_as_mac, macstr)
-            if mac == macstr:
-                # if this is also an access port, we have found the dpid and the port
-                values = self.learned_macs_compiled_regex.match(labels)
-                dpid, dp_name, n, port, vlan = values.groups()
-                if dp_name in dp_port_mode and \
-                        'interfaces' in dp_port_mode[dp_name] and \
-                        int(port) in dp_port_mode[dp_name]['interfaces'] and \
-                        'auth_mode' in dp_port_mode[dp_name]['interfaces'][int(port)] and \
-                        dp_port_mode[dp_name]['interfaces'][int(port)]['auth_mode'] == 'access':
-                    ret_port = int(port)
-                    ret_dp_name = dp_name
-                    break
-        self.logger.info("name: %s port: %d", ret_dp_name, ret_port)
-        return ret_dp_name, ret_port
+    def l2learn(self, host_wi):
+        # TODO support case where host being learnt is already authenticated.
+        h = host.Host(host_wi.mac, host_wi.ip, host_wi.dp_name, host_wi.dp_id, host_wi.port, host_wi.vid)
+        self.macs[host_wi.mac] = h
+        if not host_wi.dp_name in self.dps:
+            self.dps[host_wi.dp_name] = {}
+        self.dps[host_wi.dp_name][host_wi.port] = h
 
     def authenticate(self, mac, user, acl_list):
         """Authenticates the user as specifed by adding ACL rules
@@ -147,9 +131,14 @@ class AuthApp(object):
         """
         self.logger.info("****authenticated: %s %s", mac, user)
 
-        switchname, switchport = self._get_dp_name_and_port(mac)
+        host = self.macs[mac]
 
-        if switchname == '' or switchport == -1:
+        host.username = user
+        host.acl_list = acl_list
+
+        switchname = host.dp_name
+        switchport = host.port
+        if switchname is None  or switchport == -1:
             self.logger.warn(
                 "Error switchname '%s' or switchport '%d' is unknown. Cannot generate acls for authed user '%s' on MAC '%s'",
                 switchname, switchport, user, mac)
@@ -188,51 +177,34 @@ class AuthApp(object):
         # say they have not actually logged off.
         # EAP LOGOFF is a one way message (not ack-ed)
 
-    def is_port_managed(self, dpid, port_num):
+    def is_port_managed(self, dp_name, port_num):
         """
         Args:
-            dpid (int): datapath id.
+            dp_name (str): datapath name.
             port_num (int): port number.
         Returns:
-            datapath name (str) if this dpid & port combo are managed (provide authentication).
-             otherwise None
+            bool - True if this dpid & port combo are managed (provide authentication).
+             otherwise False
         """
-        # query prometheus for the dpid -> name.
-        # use the name to look in auth.yaml for the datapath.
-        # if the dp is there, then use the port.
-        #    if the port is there and it is set to 'access' return true
-        # otherwise return false.
-        dp_names = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['dp_status'])[0]
-        dp_name = ''
-        for l in dp_names:
-            pattern = r'dp_id="0x{:x}",dp_name="([\w-]+)"}}'.format(dpid)
-            match = re.search(pattern, l)
-            if match:
-                dp_name = match.group(1)
-                break
-
         if dp_name in self.config.dp_port_mode:
             if port_num in self.config.dp_port_mode[dp_name]['interfaces']:
                 if 'auth_mode' in self.config.dp_port_mode[dp_name]['interfaces'][port_num]:
                     mode = self.config.dp_port_mode[dp_name]['interfaces'][port_num]['auth_mode']
                     if mode == 'access':
-                        return dp_name
-        return None
+                        return True
+        return False
 
-    def port_status_handler(self, ryu_event):
+    def port_status_handler(self, port_change):
         """Deauthenticates all hosts on a port if the port has gone down.
         """
-        msg = ryu_event.msg
-        ryu_dp = msg.datapath
-        dpid = ryu_dp.id
-        port = msg.desc.port_no
-
-        port_status = msg.desc.state & msg.datapath.ofproto.OFPPS_LINK_DOWN
+        dpid = port_change.dp_id
+        port = port_change.port_no
+        port_status = port_change.status
+        dp_name = port_change.dp_name
         self.logger.info('DPID %d, Port %d has changed status: %d', dpid, port, port_status)
         if port_status == 1: # port is down
-            dp_name = self.is_port_managed(dpid, port)
-            self.logger.debug('dp_name: %s', dp_name)
-            if dp_name:
+            if self.is_port_managed(dp_name, port):
+                self.logger.debug('DP %s is mananged.', dp_name)
                 removed_macs = self.rule_man.reset_port_acl(dp_name, port)
                 self.logger.info('removed macs: %s', removed_macs)
                 for mac in removed_macs:
