@@ -28,9 +28,11 @@ services:
 
     faucet:
         image: 'faucet/faucet'
+
         volumes:
-            - '/var/log/ryu/faucet:/var/log/ryu/faucet'
-            - '/etc/ryu/faucet:/etc/ryu/faucet'
+            - './var/log/ryu/faucet:/var/log/ryu/faucet'
+            - './etc/ryu/faucet:/etc/ryu/faucet'
+
         ports:
             - '6653:6653'
             - '9302'
@@ -48,6 +50,7 @@ services:
         volumes:
             - './docker-compose/gasket/log/ryu/faucet:/var/log/ryu/faucet'
             - './etc/ryu/faucet:/etc/ryu/faucet'
+            - '/var/run/:/var/run/'
         networks:
             control-plane-net:
                 ipv4_address: 172.222.0.100
