@@ -19,7 +19,9 @@ from gasket.hostapd_conf import HostapdConf
 from gasket import hostapd_socket_thread
 from gasket import work_item
 from gasket import rabbitmq
-from gasket import host
+from gasket.host import Host
+from gasket.port import Port
+from gasket.datapath import Datapath
 
 class Proto(object):
     """Class for protocol constants.
@@ -58,7 +60,9 @@ class AuthApp(object):
     threads = []
 
     dps = {}
+    # dp_name : Datapath
     macs = {}
+    # mac : Host
 
     def __init__(self, config, logger):
         super(AuthApp, self).__init__()
@@ -101,7 +105,7 @@ class AuthApp(object):
         while True:
             work = self.work_queue.get()
 
-            self.logger.info('Got work from queue')
+            self.logger.info('Got %s work from queue ', type(work))
             if isinstance(work, work_item.AuthWorkItem):
                 self.authenticate(work.mac, work.username, work.acllist)
             elif isinstance(work, work_item.DeauthWorkItem):
@@ -115,11 +119,31 @@ class AuthApp(object):
 
     def l2learn(self, host_wi):
         # TODO support case where host being learnt is already authenticated.
-        h = host.Host(host_wi.mac, host_wi.ip, host_wi.dp_name, host_wi.dp_id, host_wi.port, host_wi.vid)
-        self.macs[host_wi.mac] = h
-        if not host_wi.dp_name in self.dps:
-            self.dps[host_wi.dp_name] = {}
-        self.dps[host_wi.dp_name][host_wi.port] = h
+
+        dp_name = host_wi.dp_name
+        dp_id = host_wi.dp_id
+        mac = host_wi.mac
+        ip = host_wi.ip
+        vid = host_wi.vid
+        port_no = host_wi.port
+
+        host = Host(mac, ip, dp_name, dp_id, port_no, vid)
+        self.macs[mac] = host
+
+        self.logger.debug('size of dps: %d', len(self.dps))
+        if not dp_name in self.dps:
+            dp = Datapath(dp_id, dp_name)
+            self.dps[dp_name] = dp
+            self.logger.debug('added dp %s to dps', dp)
+
+        dp = self.dps[dp_name]
+
+        if not port_no in self.dps[dp_name].ports:
+            self.logger.debug('adding port')
+            dp.add_port(Port(port_no, dp))
+
+        self.logger.debug('adding learn')
+        dp.ports[port_no].add_learn_host(host)
 
     def authenticate(self, mac, user, acl_list):
         """Authenticates the user as specifed by adding ACL rules
@@ -150,7 +174,8 @@ class AuthApp(object):
         self.logger.info('found mac')
 
         success = self.rule_man.authenticate(user, mac, switchname, switchport, acl_list)
-
+        if success:
+            self.dps[switchname].ports[switchport].add_authed_host(host)
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.
         # Perhaps look into the CoA radius thing, so that process looks like:
@@ -197,6 +222,7 @@ class AuthApp(object):
     def port_status_handler(self, port_change):
         """Deauthenticates all hosts on a port if the port has gone down.
         """
+        self.logger.info('port status changed')
         dpid = port_change.dp_id
         port = port_change.port_no
         port_status = port_change.status

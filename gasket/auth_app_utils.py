@@ -6,13 +6,16 @@ from logging.handlers import WatchedFileHandler
 import re
 import requests
 
+import docker
+
+
 def get_logger(logname, logfile, loglevel, propagate):
     """Create and return a logger object."""
     logger = logging.getLogger(logname)
     logger_handler = WatchedFileHandler(logfile)
     log_fmt = '%(asctime)s-%(msecs)d %(name)-6s %(levelname)-8s %(message)s'
     logger_handler.setFormatter(
-                                logging.Formatter(log_fmt, '%b %d %H:%M:%S'))
+        logging.Formatter(log_fmt, '%b %d %H:%M:%S'))
     logger.addHandler(logger_handler)
     logger.propagate = propagate
     logger.setLevel(loglevel)
@@ -113,3 +116,12 @@ def scrape_prometheus_vars(prom_url, variables):
                 matches.append(line)
         ret.append(matches)
     return ret
+
+def signal_docker_container(container_name, signal=None):
+    """Sends a signal to a docker container.
+    Args:
+        container_name (str): id or name of container.
+        signal (str or int): if None  SIGKILL will be sent.
+    """
+    client = docker.from_env()
+    client.containers.get(container_name).kill(signal)

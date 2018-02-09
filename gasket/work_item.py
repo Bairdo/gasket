@@ -1,7 +1,10 @@
 
 
 class WorkItem(object):
-    pass
+
+    def __str__(self):
+        attrs = vars(self)
+        return type(self) + ', '.join('%s: %s' % item for item in attrs.items())
 
 class AuthenticationWorkItem(WorkItem):
 
@@ -50,7 +53,8 @@ class PortChangeWorkItem(RabbitWorkItem):
 
     def __init__(self, dp_name, dp_id, port_no, reason, status):
         super().__init__(dp_name, dp_id)
-        self.port_no = port_no
+
+        self.port_no = str(port_no)
         self.reason = reason
         self.status = status
 
@@ -64,6 +68,9 @@ class L2LearnWorkItem(RabbitWorkItem):
     def __init__(self, dp_name, dp_id, port, vid, mac, ip):
         super().__init__(dp_name, dp_id)
         self.mac = mac
-        self.port = port
+        if not isinstance(port, str):
+            self.port = str(port)
+        else:
+            self.port = port
         self.vid = vid
         self.ip = ip

@@ -1,9 +1,11 @@
-
+"""Represntation of a network (end)host"""
 
 class Host(object):
-
+    """Stores state related to a (end)host.
+    """
     mac = None
     ip = None
+    # TODO handle case where host can be on many ports.
     dp_name = None
     dp_id = None
     port = None

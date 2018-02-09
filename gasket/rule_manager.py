@@ -210,7 +210,9 @@ class RuleManager(object):
             self.swap_temp_file(self.faucet_acl_filename)
             # sighup.
             start_count = self.get_faucet_reload_count()
-            self.send_signal(signal.SIGHUP)
+
+            auth_app_utils.signal_docker_container(self.config.container_name, signal.SIGHUP)
+
             self.logger.info('auth signal sent.')
             for i in range(400):
                 end_count = self.get_faucet_reload_count()
@@ -324,7 +326,7 @@ class RuleManager(object):
                 self.swap_temp_file(self.faucet_acl_filename)
                 # sighup.
                 start_count = self.get_faucet_reload_count()
-                self.send_signal(signal.SIGHUP)
+                auth_app_utils.signal_docker_container(self.config.container_name, signal.SIGHUP)
                 self.logger.info('deauth signal sent')
                 for i in range(400):
                     end_count = self.get_faucet_reload_count()
@@ -480,7 +482,7 @@ class RuleManager(object):
                 # port can be deleted
                 del self.authed_users[delete[0]][delete[1]][delete[2]][delete[3]]
             else:
-                self.logger.warning('drm no supported length %s %d', str(delet), len(delet))
+                self.logger.warning('drm no supported length %s %d', str(delete), len(delete))
         return removed_macs
 
     def remove_from_authed_dict(self, username, mac):
@@ -545,7 +547,7 @@ class RuleManager(object):
 
                     # sighup.
                     start_count = self.get_faucet_reload_count()
-                    self.send_signal(signal.SIGHUP)
+                    auth_app_utils.signal_docker_container(self.config.container_name, signal.SIGHUP)
                     self.logger.info('reset acl signal sent.')
                     for i in range(400):
                         end_count = self.get_faucet_reload_count()
