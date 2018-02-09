@@ -5,7 +5,8 @@ logger_location: /var/log/ryu/faucet/gasket/auth_app.log
 
 faucet:
     prometheus_port: 9302
-    ip: 127.0.0.1
+    ip: 172.222.0.103
+    container_name: gasket_faucet_1
 
 files:
     # the location of files. pid should contain the process id (pid) of the main faucet-process (ryu-manager)
