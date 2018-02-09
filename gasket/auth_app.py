@@ -227,7 +227,7 @@ class AuthApp(object):
         port = port_change.port_no
         port_status = port_change.status
         dp_name = port_change.dp_name
-        self.logger.info('DPID %d, Port %d has changed status: %d', dpid, port, port_status)
+        self.logger.info('DPID %d, Port %s has changed status: %d', dpid, port, port_status)
         if port_status == 1: # port is down
             if self.is_port_managed(dp_name, port):
                 self.logger.debug('DP %s is mananged.', dp_name)
