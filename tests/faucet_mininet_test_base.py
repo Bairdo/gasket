@@ -126,7 +126,7 @@ class FaucetTestBase(unittest.TestCase):
         self.event_sock = os.path.join(tempfile.mkdtemp(), 'event.sock')
         self._set_var('faucet', 'FAUCET_EVENT_SOCK', self.event_sock)
         self._set_var('faucet', 'FA_RABBIT_HOST', '172.222.0.104')
-        self._set_var('faucet', 'FA_RABBIT_PORT', 5672)
+        self._set_var('faucet', 'FA_RABBIT_PORT', '5672')
         self._set_var_path('faucet', 'FAUCET_CONFIG', 'faucet.yaml')
         self._set_var_path('faucet', 'FAUCET_ACL_CONFIG', 'faucet-acl.yaml')
         self._set_var_path('faucet', 'FAUCET_LOG', 'faucet.log')
