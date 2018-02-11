@@ -369,6 +369,15 @@ class RuleManager(object):
         # make new tmp the current.
         os.rename(filename + '.tmp', filename)
 
+    def send_signal(self, signal_type):
+        ''' Send a signal to the controller to indicate a change in config file
+        Args:
+            signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
+        '''
+        with open(self.config.contr_pid_file, 'r') as pid_file:
+            contr_pid = int(pid_file.read())
+            os.kill(contr_pid, signal_type)
+
     def is_authenticated(self, mac, username=None, switch=None, port=None):
         '''Checks if a username is already authenticated with the MAC address on the switch & port.
         Args:
