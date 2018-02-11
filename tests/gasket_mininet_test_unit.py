@@ -268,7 +268,7 @@ eapol_flags=0
 
     def run_rabbit_adapter(self, host):        
         envs = {}
-        envs['FAUCET_EVENT_SOCK'] = host.event_sock
+        envs['FAUCET_EVENT_SOCK'] = self.event_sock
         envs['FA_RABBIT_HOST'] = '172.222.0.104'
         envs['FA_RABBIT_PORT'] = 5672
 
