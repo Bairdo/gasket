@@ -210,8 +210,7 @@ class RuleManager(object):
             self.swap_temp_file(self.faucet_acl_filename)
             # sighup.
             start_count = self.get_faucet_reload_count()
-
-            auth_app_utils.signal_docker_container(self.config.container_name, signal.SIGHUP)
+            self.send_signal(signal.SIGHUP)
 
             self.logger.info('auth signal sent.')
             for i in range(400):
@@ -326,7 +325,7 @@ class RuleManager(object):
                 self.swap_temp_file(self.faucet_acl_filename)
                 # sighup.
                 start_count = self.get_faucet_reload_count()
-                auth_app_utils.signal_docker_container(self.config.container_name, signal.SIGHUP)
+                self.send_signal(signal.SIGHUP)
                 self.logger.info('deauth signal sent')
                 for i in range(400):
                     end_count = self.get_faucet_reload_count()
@@ -374,9 +373,12 @@ class RuleManager(object):
         Args:
             signal_type: SIGUSR1 for dot1xforwarder, SIGUSR2 for CapFlow
         '''
-        with open(self.config.contr_pid_file, 'r') as pid_file:
-            contr_pid = int(pid_file.read())
-            os.kill(contr_pid, signal_type)
+        if self.config.container_name:
+            auth_app_utils.signal_docker_container(self.config.container_name, signal_type)
+        else:
+            with open(self.config.contr_pid_file, 'r') as pid_file:
+                contr_pid = int(pid_file.read())
+                os.kill(contr_pid, signal_type)
 
     def is_authenticated(self, mac, username=None, switch=None, port=None):
         '''Checks if a username is already authenticated with the MAC address on the switch & port.
@@ -547,7 +549,7 @@ class RuleManager(object):
 
                     # sighup.
                     start_count = self.get_faucet_reload_count()
-                    auth_app_utils.signal_docker_container(self.config.container_name, signal.SIGHUP)
+                    self.send_dignal(signal.SIGHUP)
                     self.logger.info('reset acl signal sent.')
                     for i in range(400):
                         end_count = self.get_faucet_reload_count()
