@@ -11,6 +11,7 @@ import os
 import random
 import re
 import shutil
+import socket
 import string
 import time
 import unittest
@@ -265,6 +266,19 @@ eapol_flags=0
                 return True
         return False
 
+    def run_rabbit_adapter(self, host):        
+        envs = {}
+        envs['FAUCET_EVENT_SOCK'] = host.event_sock
+        envs['FA_RABBIT_HOST'] = '172.222.0.104'
+        envs['FA_RABBIT_PORT'] = 5672
+
+        vols_from [socket.gethostname()]
+
+        client = docker.from_env()
+        client.containers.run('faucet/faucet-event-adpater-rabbitmq',
+                              environment=envs,
+                              detach=True, name=(host.name + '-adapter'),
+                              network='control-plane-net', volumes_from=vols_from)
 
     def run_hostapd(self, host):
         """Compiles and starts the hostapd process.
@@ -515,6 +529,7 @@ class GasketSingleSwitchTest(GasketTest):
         self.start_tcpdump(gasket_host, interface='%s-eth0' % gasket_host.name)
 
         self.init_gasket(gasket_host)
+        self.run_rabbit_adapter(self.net.controller)
         self.run_hostapd(portal)
         self.run_freeradius(portal)
 

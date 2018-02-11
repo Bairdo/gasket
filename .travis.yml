@@ -31,4 +31,6 @@ script:
   - docker build -t ${FAUCET_TEST_IMG} -f Dockerfile.tests .
   - docker images
   - if [[ ${TRAVIS_BRANCH} == "master" ]] && [[ ${TRAVIS_PULL_REQUEST} == "false" ]]; then mkdir -p $(dirname ${DOCKER_CACHE_FILE}) ; docker save ubuntu:latest | gzip > ${DOCKER_CACHE_FILE} ; fi
-  - sudo docker run --privileged -t -e FAUCET_TESTS="" ${FAUCET_TEST_IMG}
+  - sudo docker-compose up rabbitmq_server
+  - sudo docker run -itd --network=control-plane-net --privileged -t -v /var/run/:/var/run -e FAUCET_TESTS="" ${FAUCET_TEST_IMG}
+  - sudo docker-compose kill rabbitmq_server

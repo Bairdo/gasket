@@ -14,6 +14,7 @@ import random
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 import unittest
 import yaml
@@ -92,7 +93,7 @@ class FaucetTestBase(unittest.TestCase):
     config_ports = {}
     env = collections.defaultdict(dict)
     rand_dpids = set()
-
+    event_sock = None
 
     def __init__(self, name, config, root_tmpdir, ports_sock, max_test_load):
         super(FaucetTestBase, self).__init__(name)
@@ -120,6 +121,12 @@ class FaucetTestBase(unittest.TestCase):
         self._set_var(name, 'FAUCET_PROMETHEUS_ADDR', faucet_mininet_test_util.LOCALHOST)
 
     def _set_static_vars(self):
+        if self.event_sock and os.path.exists(self.event_sock):
+            shutil.rmtree(os.path.dirname(self.event_sock))
+        self.event_sock = os.path.join(tempfile.mkdtemp(), 'event.sock')
+        self._set_var('faucet', 'FAUCET_EVENT_SOCK', self.event_sock)
+        self._set_var('faucet', 'FA_RABBIT_HOST', '172.222.0.104')
+        self._set_var('faucet', 'FA_RABBIT_PORT', 5672)
         self._set_var_path('faucet', 'FAUCET_CONFIG', 'faucet.yaml')
         self._set_var_path('faucet', 'FAUCET_ACL_CONFIG', 'faucet-acl.yaml')
         self._set_var_path('faucet', 'FAUCET_LOG', 'faucet.log')
@@ -258,6 +265,8 @@ class FaucetTestBase(unittest.TestCase):
         if self.net is not None:
             self.net.stop()
             self.net = None
+        if os.path.exists(self.event_sock):
+            shutil.rmtree(os.path.dirname(self.event_sock))
         faucet_mininet_test_util.return_free_ports(
             self.ports_sock, self._test_name())
         if 'OVS_LOGDIR' in os.environ:
@@ -458,6 +467,10 @@ class FaucetTestBase(unittest.TestCase):
         for controller in self.net.controllers:
             if not controller.healthy():
                 return False
+
+        if self.event_sock and not os.path.exists(self.event_sock):
+            error('event socket %s not created\n' % self.event_sock)
+            return False
         return True
 
     def _controllers_connected(self):
