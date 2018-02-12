@@ -276,6 +276,8 @@ eapol_flags=0
         vols_from = [socket.gethostname()]
 
         client = docker.from_env()
+        print('docker images')
+        print(client.images.list())
         client.containers.run('faucet/faucet-event-adpater-rabbitmq',
                               environment=envs,
                               detach=True, name=(host.name + '-adapter'),
