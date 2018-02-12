@@ -272,7 +272,7 @@ eapol_flags=0
         envs['FA_RABBIT_HOST'] = '172.222.0.104'
         envs['FA_RABBIT_PORT'] = 5672
 
-        vols_from [socket.gethostname()]
+        vols_from = [socket.gethostname()]
 
         client = docker.from_env()
         client.containers.run('faucet/faucet-event-adpater-rabbitmq',
