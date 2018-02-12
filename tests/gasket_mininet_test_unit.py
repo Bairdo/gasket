@@ -16,6 +16,7 @@ import string
 import time
 import unittest
 
+import docker
 import ipaddress
 import yaml
 
