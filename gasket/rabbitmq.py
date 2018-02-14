@@ -12,6 +12,7 @@ from gasket.work_item import L2LearnWorkItem, PortChangeWorkItem
 
 class RabbitMQ(threading.Thread):
 
+    channel = None
     work_queue = None
 
     def __init__(self, work_queue, logger_location):
@@ -34,18 +35,18 @@ class RabbitMQ(threading.Thread):
                 except Exception as e:
                     self.logger.info('cannot connect to rabbitmq server')
                     time.sleep(1)
-            channel = connection.channel()
+            self.channel = connection.channel()
             self.logger.info("channeled")
-            channel.exchange_declare(exchange='topic_recs', exchange_type='topic')
-            result = channel.queue_declare(exclusive=True)
+            self.channel.exchange_declare(exchange='topic_recs', exchange_type='topic')
+            result = self.channel.queue_declare(exclusive=True)
 
             self.logger.info("declared")
             queue_name = result.method.queue
-            channel.queue_bind(exchange='topic_recs', queue=queue_name, routing_key='FAUCET.Event')
+            self.channel.queue_bind(exchange='topic_recs', queue=queue_name, routing_key='FAUCET.Event')
 
-            channel.basic_consume(self.callback, queue=queue_name, no_ack=True)
+            self.channel.basic_consume(self.callback, queue=queue_name, no_ack=True)
             self.logger.info('start consuming')
-            channel.start_consuming()
+            self.channel.start_consuming()
         except Exception as e:
             self.logger.exception(e)
 
@@ -72,3 +73,5 @@ class RabbitMQ(threading.Thread):
                 self.work_queue.put(L2LearnWorkItem(dp_name,dp_id,
                                                     port_no, vid,
                                                     eth_src, l3_src_ip))
+    def kill(self):
+        self.channel.close()

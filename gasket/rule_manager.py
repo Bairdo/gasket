@@ -10,6 +10,8 @@ import time
 # pytype: disable=pyi-error
 import yaml
 
+import requests
+
 from gasket.rule_generator import RuleGenerator
 from gasket import auth_app_utils
 
@@ -229,7 +231,17 @@ class RuleManager(object):
         Returns:
             number of times faucet has reloaded
         """
-        txt = auth_app_utils.scrape_prometheus(self.config.prom_url)
+
+        self.logger.debug('getting reload count')
+        for i in range(5):
+            try:
+                txt = auth_app_utils.scrape_prometheus(self.config.prom_url)
+                break
+            except requests.exceptions.ConnectionError:
+                self.logger.warn('connection refused while trying to query prometheus.')
+                time.sleep(1)
+
+        self.logger.debug('got reload count')
         for l in txt.splitlines():
             if l.startswith('faucet_config_reload_requests'):
                 return int(float(l.split()[1]))
