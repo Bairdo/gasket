@@ -6,6 +6,7 @@ These tests use the https://github.com/faucetsdn/faucet base test classes as the
 # pylint: disable=missing-docstring
 # pylint: disable=too-many-arguments
 
+import datetime
 from concurrent import futures
 import os
 import random
@@ -13,6 +14,7 @@ import re
 import shutil
 import socket
 import string
+import subprocess
 import time
 import unittest
 
@@ -37,6 +39,9 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
 
     max_hosts = 3
 
+    rabbit_adapter_stdout = None
+    rabbit_adapter_process = None
+
     def setup(self):
         super(GasketTest, self).setUp()
 
@@ -49,6 +54,9 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
 
             self.net.stop()
         super(GasketTest, self).tearDown()
+        self.rabbit_adapter_stdout.flush()
+        self.rabbit_adapter_process.kill()
+        self.rabbit_adapter_stdout.flush()
 
     def setup_hosts(self, hosts):
         """Create wpa_supplicant config file for each authenticating host.
@@ -116,6 +124,7 @@ eapol_flags=0
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
+                print('logoff configure')
                 time.sleep(0.25)
             self.assertGreater(end_reload_count, start_reload_count)
 
@@ -166,6 +175,7 @@ eapol_flags=0
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
+                print('logon configure')
                 time.sleep(0.5)
             # this in only an indicator, it could be possible for another host to successfully logon (and reconfigure faucet), thus increasing the counter.
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
@@ -233,6 +243,7 @@ eapol_flags=0
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
+                print('relogon configure')
                 time.sleep(0.5)
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.\nOld Status: %s' % (host, intf, host.MAC(), new_status, old_status))
             self.assertLess(i, 3, 'relogon has taken %d to reload. max allowable time 1.5seconds' % i)
@@ -268,20 +279,14 @@ eapol_flags=0
         return False
 
     def run_rabbit_adapter(self, host):        
-        envs = {}
-        envs['FAUCET_EVENT_SOCK'] = self.event_sock
-        envs['FA_RABBIT_HOST'] = '172.222.0.104'
-        envs['FA_RABBIT_PORT'] = 5672
+        os.system('ping -c1 172.222.0.104')
 
-        vols_from = [socket.gethostname()]
+        with open('/etc/hosts' , 'a') as hosts_file:
+            hosts_file.write('172.222.0.104 rabbit-server\n')
 
-        client = docker.from_env()
-        print('docker images')
-        print(client.images.list())
-        client.containers.run('faucet/faucet-event-adpater-rabbitmq',
-                              environment=envs,
-                              detach=True, name=(host.name + '-adapter'),
-                              network='control-plane-net', volumes_from=vols_from)
+        self.rabbit_adapter_stdout = open('%s/adapter.log' % self.tmpdir, 'wr') 
+        self.rabbit_adapter_process = subprocess.Popen(['env', 'FAUCET_EVENT_SOCK={0}'.format(self.event_sock), 'FA_RABBIT_HOST=rabbit-server', 'python3', '/gasket-src/adapters/vendors/rabbitmq/rabbit.py'],
+                                stdout=self.rabbit_adapter_stdout, stderr=subprocess.STDOUT)
 
     def run_hostapd(self, host):
         """Compiles and starts the hostapd process.
@@ -540,7 +545,7 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
-
+        time.sleep(15)
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
@@ -626,6 +631,7 @@ class GasketMultiHostsBase(GasketSingleSwitchTest):
         interweb = self.net.hosts[1]
         error_point = 0
         try:
+            # TODO remove this line when support finding location out later.
             self.logon_dot1x(host)
             error_point = 1
             self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
@@ -942,7 +948,7 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
-@unittest.skip('LinkState not currently supported')
+#@unittest.skip('LinkState not currently supported')
 class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
     def test_dp_link_down_up(self):
