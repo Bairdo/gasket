@@ -99,7 +99,7 @@ class AuthApp(object):
             self.threads.append(rt)
         except Exception as e:
             self.logger.exception(e)
-
+        self.get_prometheus_mac_learning()
         print('Started socket Threads.')
         self.logger.info('Starting worker thread.')
         while True:
@@ -155,46 +155,30 @@ class AuthApp(object):
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
         self.logger.error('mac learned %s' % self.macs[mac])
 
-    def _get_dp_name_and_port(self, mac):
+    def get_prometheus_mac_learning(self):
         """Queries the prometheus faucet client,
-         and returns the 'access port' that the mac address is connected on.
-        Args:
-             mac MAC address to find port for.
-        Returns:
-             dp name & port number.
+        And creates L2Learn work for macs already learnt.
         """
         # query faucets promethues.
         self.logger.info('querying prometheus')
         try:
             prom_mac_table = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
-                                                                   ['learned_macs'])
+                                                                   ['learned_macs'])[0]
         except Exception as e:
             self.logger.exception(e)
             return '', -1
         self.logger.info('queried prometheus. mac_table:\n%s\n',
                          prom_mac_table)
-        ret_port = -1
-        ret_dp_name = ""
-        dp_port_mode = self.config.dp_port_mode
+
         for line in prom_mac_table:
             labels, float_as_mac = line.split(' ')
             macstr = auth_app_utils.float_to_mac(float_as_mac)
             self.logger.debug('float %s is mac %s', float_as_mac, macstr)
-            if mac == macstr:
-                # if this is also an access port, we have found the dpid and the port
-                values = self.learned_macs_compiled_regex.match(labels)
-                dpid, dp_name, n, port, vlan = values.groups()
-                if dp_name in dp_port_mode and \
-                        'interfaces' in dp_port_mode[dp_name] and \
-                        int(port) in dp_port_mode[dp_name]['interfaces'] and \
-                        'auth_mode' in dp_port_mode[dp_name]['interfaces'][int(port)] and \
-                        dp_port_mode[dp_name]['interfaces'][int(port)]['auth_mode'] == 'access':
-                    ret_port = int(port)
-                    ret_dp_name = dp_name
-                    break
-        self.logger.info("name: %s port: %d", ret_dp_name, ret_port)
-        return ret_dp_name, ret_port
 
+            # if this is also an access port, we have found the dpid and the port
+            values = self.learned_macs_compiled_regex.match(labels)
+            dpid, dp_name, n, port, vlan = values.groups()
+            self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port), int(vlan), macstr, None))
 
     def authenticate(self, mac, user, acl_list):
         """Authenticates the user as specifed by adding ACL rules

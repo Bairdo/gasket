@@ -235,6 +235,9 @@ class RuleManager(object):
             except requests.exceptions.ConnectionError:
                 self.logger.warn('connection refused while trying to query prometheus.')
                 time.sleep(1)
+        else:
+            self.logger.error('Failed to scrape prometheus after 5 attempts')
+            return 0
 
         self.logger.debug('got reload count')
         for l in txt.splitlines():

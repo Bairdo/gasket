@@ -8,7 +8,7 @@ class Host(object):
     ip = None
     # TODO handle case where host can be on many ports.
     learn_ports = None
-
+    ordered_learn_ports = None
     rule_man = None
     logger = None
 
@@ -18,7 +18,9 @@ class Host(object):
     acl_list = None
 
     def __init__(self, authed, host=None, logger=logger, rule_man=None, mac=None, ip=None,
-                 learn_ports=None, learn_port=None, auth_port=None, username=None, acl_list=None):
+                 learn_ports=None, ordered_learn_ports=None, learn_port=None,
+                 auth_port=None, username=None, acl_list=None):
+        self.ordered_learn_ports = []
         self.learn_ports = {}
         if host:
             self.rule_man = host.rule_man
@@ -26,6 +28,7 @@ class Host(object):
             self.mac = host.mac
             self.ip = host.ip
             self.learn_ports = host.learn_ports
+            self.ordered_learn_ports = host.ordered_learn_ports
             self.auth_port = host.auth_port
             self.username = host.username
             self.acl_list = host.acl_list
@@ -45,6 +48,7 @@ class Host(object):
             self.learn_ports = learn_ports
         if learn_port:
             self.learn_ports[learn_port.number] = learn_port
+            self.ordered_learn_ports.append(learn_port.number)
         if auth_port:
             self.auth_port = auth_port
         if username:
@@ -53,13 +57,14 @@ class Host(object):
             self.acl_list = acl_list
 
     def get_authing_learn_ports(self):
-        """Finds the first port that this host is learnt on that is mode 'access'.
+        """Finds the last learnt port that this host is learnt on that is mode 'access'.
         Returns:
-            first found port that is mode 'access'.
+            last learnt port that is mode 'access'.
             Otherwise None
         """
         self.logger.error('host is on ports %s' % self.learn_ports)
-        for port in self.learn_ports.values():
+        for port_no in reversed(self.ordered_learn_ports):
+            port = self.learn_ports[port_no]
             self.logger.error('port mode %s' % port.auth_mode)
             if port.auth_mode == 'access':
                 self.logger.error('host has a learned port access %s' % port)
@@ -78,11 +83,12 @@ class Host(object):
         pass
 
     def __str__(self):
-        return "{} mac: {}, ip: {}, learn_ports: {}, auth_port: {}".format(self.__class__,
-                                                                           self.mac,
-                                                                           self.ip,
-                                                                           self.learn_ports,
-                                                                           self.auth_port)
+        return "{} mac: {}, ip: {}, learn_ports: {}, ordered_learn_ports {} , auth_port: {}".format(self.__class__,
+                                                                                                    self.mac,
+                                                                                                    self.ip,
+                                                                                                    self.learn_ports,
+                                                                                                    self.ordered_learn_ports,
+                                                                                                    self.auth_port)
 
 
 class UnlearntAuthenticatedHost(Host):
@@ -92,9 +98,11 @@ class UnlearntAuthenticatedHost(Host):
     """
 
     def __init__(self, host=None, logger=None, rule_man=None, mac=None, ip=None,
-                 learn_ports=None, learn_port=None, auth_port=None, username=None, acl_list=None):
+                 learn_ports=None, ordered_learn_ports=None, learn_port=None,
+                 auth_port=None, username=None, acl_list=None):
         super().__init__(True, host=host, logger=logger, rule_man=rule_man, mac=mac, ip=ip,
-                         learn_ports=learn_ports, learn_port=learn_port, auth_port=auth_port,
+                         learn_ports=learn_ports, ordered_learn_ports=ordered_learn_ports,
+                         learn_port=learn_port, auth_port=auth_port,
                          username=username, acl_list=acl_list)
 
     def authenticate(self, username, port, acl_list):
@@ -124,6 +132,7 @@ class UnlearntAuthenticatedHost(Host):
         #    authenticate (apply rules)
         # return new LearntAuthedHost.
         self.learn_ports[port.number] = port
+        self.ordered_learn_ports.append(port.number)
         self.logger.error('ua learn port %s' % port)
 
         self.auth_port = self.get_authing_learn_ports()
@@ -155,9 +164,11 @@ class LearntAuthenticatedHost(Host):
     """
 
     def __init__(self, host=None, logger=None, rule_man=None, mac=None, ip=None,
-                 learn_ports=None, learn_port=None, auth_port=None, username=None, acl_list=None):
+                 learn_ports=None, ordered_learn_ports=None, learn_port=None,
+                 auth_port=None, username=None, acl_list=None):
         super().__init__(True, host=host, logger=logger, rule_man=rule_man, mac=mac, ip=ip,
-                         learn_ports=learn_ports, learn_port=learn_port, auth_port=auth_port,
+                         learn_ports=learn_ports, ordered_learn_ports=ordered_learn_ports,
+                         learn_port=learn_port, auth_port=auth_port,
                          username=username, acl_list=acl_list)
 
     def authenticate(self, username, port, acl_list):
@@ -165,6 +176,11 @@ class LearntAuthenticatedHost(Host):
         # deauth on olf.
         # add dp/port to current
         # return self object.
+
+        if port == self.auth_port and username == self.username and acl_list == self.acl_list:
+            # if nothing has changed no need to deauth and reload.
+            return self
+
         if self.auth_port:
             self.logger.info('la has authed port already')
             self.auth_port.del_authed_host(self.mac)
@@ -191,6 +207,7 @@ class LearntAuthenticatedHost(Host):
     def learn(self, port):
         # add current to learn.
         self.learn_ports[port.number] = port
+        self.ordered_learn_ports.append(port.number)
         port.add_learn_host(self.mac)
         self.logger.error('la learn')
         return self
@@ -202,8 +219,10 @@ class LearntAuthenticatedHost(Host):
         #   return new unlearntAuthedHost
         # return self object
         port.del_learn_host(self.mac)
-        self.learn_ports.pop(port.number, None)
-        if len(self.learn_ports) == 0:
+        p = self.learn_ports.pop(port.number, None)
+        if p is not None:
+            self.ordered_learn_ports.remove(port.number)
+        if not self.learn_ports:
             self.logger.error('la unlearn now ua')
             return UnlearntAuthenticatedHost(host=self)
         self.logger.error('la unlearn still has learn_ports')
@@ -216,9 +235,11 @@ class LearntUnauthenticatedHost(Host):
     """
 
     def __init__(self, host=None, logger=None, rule_man=None, mac=None, ip=None,
-                 learn_ports=None, learn_port=None, auth_port=None, username=None, acl_list=None):
+                 learn_ports=None, ordered_learn_ports=None, learn_port=None,
+                 auth_port=None, username=None, acl_list=None):
         super().__init__(False, host=host, logger=logger, rule_man=rule_man, mac=mac, ip=ip,
-                         learn_ports=learn_ports, learn_port=learn_port, auth_port=auth_port,
+                         learn_ports=learn_ports, ordered_learn_ports=ordered_learn_ports,
+                         learn_port=learn_port, auth_port=auth_port,
                          username=username, acl_list=acl_list)
 
     def authenticate(self, username, port, acl_list):
@@ -244,6 +265,7 @@ class LearntUnauthenticatedHost(Host):
         # add current to learn
         port.add_learn_host(self.mac)
         self.learn_ports[port.number] = port
+        self.ordered_learn_ports.append(port.number)
         self.logger.error('lu learn')
         return self
 
@@ -253,7 +275,9 @@ class LearntUnauthenticatedHost(Host):
         #   return new unlearntAuthedHost
         # return self object
         port.del_learn_host(self.mac)
-        self.learn_ports.pop(port.number, None)
+        p = self.learn_ports.pop(port.number, None)
+        if p is not None:
+            self.ordered_learn_ports.remove(port.number)
         if not self.learn_ports:
             self.logger.error('lu unlearnt all')
             return UnlearntUnauthenticatedHost(host=self)
@@ -267,17 +291,19 @@ class UnlearntUnauthenticatedHost(Host):
     """
 
     def __init__(self, host=None, logger=None, rule_man=None, mac=None, ip=None,
-                 learn_ports=None, learn_port=None, auth_port=None, username=None, acl_list=None):
+                 learn_ports=None, ordered_learn_ports=None, learn_port=None,
+                 auth_port=None, username=None, acl_list=None):
         super().__init__(False, host=host, logger=logger, rule_man=rule_man, mac=mac, ip=ip,
-                         learn_ports=learn_ports, learn_port=learn_port, auth_port=auth_port,
+                         learn_ports=learn_ports, ordered_learn_ports=ordered_learn_ports,
+                         learn_port=learn_port, auth_port=auth_port,
                          username=username, acl_list=acl_list)
-        if not self.learn_ports:
+        if self.learn_ports:
             self.logger.error('learn ports can only be 0')
 
     def authenticate(self, username, port, acl_list):
         self.acl_list = acl_list
 
-        self.rule_man.deauthenticate(self.username, self.mac)
+#        self.rule_man.deauthenticate(self.username, self.mac)
         # In theory the user could have changed.
         self.username = username
         return UnlearntAuthenticatedHost(host=self)
@@ -290,6 +316,7 @@ class UnlearntUnauthenticatedHost(Host):
         # add current to learn
         assert port is not None
         self.learn_ports[port.number] = port
+        self.ordered_learn_ports.append(port.number)
         port.add_learn_host(self.mac)
         return LearntUnauthenticatedHost(host=self)
 
