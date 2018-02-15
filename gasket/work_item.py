@@ -54,9 +54,9 @@ class PortChangeWorkItem(RabbitWorkItem):
     def __init__(self, dp_name, dp_id, port_no, reason, status):
         super().__init__(dp_name, dp_id)
 
-        self.port_no = str(port_no)
+        self.port_no = int(port_no)
         self.reason = reason
-        self.status = status
+        self.status = bool(status)
 
 class L2LearnWorkItem(RabbitWorkItem):
 
@@ -71,6 +71,6 @@ class L2LearnWorkItem(RabbitWorkItem):
         #if not isinstance(port, str):
         #    self.port = str(port)
         #else:
-        self.port = port
-        self.vid = vid
+        self.port = int(port)
+        self.vid = int(vid)
         self.ip = ip

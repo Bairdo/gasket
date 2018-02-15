@@ -254,15 +254,12 @@ class AuthApp(object):
         port_status = port_change.status
         dp_name = port_change.dp_name
         self.logger.info('DPID %d, Port %s has changed status: %d', dpid, port, port_status)
-        if port_status == 1: # port is down
+        if not port_status: # port is down
             if self.is_port_managed(dp_name, port):
                 self.logger.debug('DP %s is mananged.', dp_name)
-                removed_macs = self.rule_man.reset_port_acl(dp_name, port)
-                self.logger.info('removed macs: %s', removed_macs)
-                for mac in removed_macs:
-                    self.logger.info('sending deauth for %s', mac)
-#                    self.hapd_req.deauthenticate(mac)
-
+                for mac in list(self.dps[dp_name].ports[port].authed_hosts):
+                    self.logger.debug('mac: %s deauthed via port down' % mac)
+                    self.macs[mac] = self.macs[mac].deauthenticate(self.dps[dp_name].ports[port])
                 self.logger.debug('reset port completed')
 
     def _handle_sigint(self, sigid, frame):
