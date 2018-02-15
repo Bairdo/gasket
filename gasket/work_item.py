@@ -68,9 +68,9 @@ class L2LearnWorkItem(RabbitWorkItem):
     def __init__(self, dp_name, dp_id, port, vid, mac, ip):
         super().__init__(dp_name, dp_id)
         self.mac = mac
-        if not isinstance(port, str):
-            self.port = str(port)
-        else:
-            self.port = port
+        #if not isinstance(port, str):
+        #    self.port = str(port)
+        #else:
+        self.port = port
         self.vid = vid
         self.ip = ip

@@ -19,7 +19,7 @@ from gasket.hostapd_conf import HostapdConf
 from gasket import hostapd_socket_thread
 from gasket import work_item
 from gasket import rabbitmq
-from gasket.host import Host
+from gasket.host import UnlearntUnauthenticatedHost
 from gasket.port import Port
 from gasket.datapath import Datapath
 
@@ -126,9 +126,13 @@ class AuthApp(object):
         ip = host_wi.ip
         vid = host_wi.vid
         port_no = host_wi.port
+        self.logger.error('learning mac %s at port: %d' % (mac, port_no))
+        if not mac in self.macs:
+            self.logger.error('learning new host %s' % mac)
+            self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, ip=ip,
+                                                         logger=self.logger, rule_man=self.rule_man)
 
-        host = Host(mac, ip, dp_name, dp_id, port_no, vid)
-        self.macs[mac] = host
+        host = self.macs[mac]
 
         self.logger.debug('size of dps: %d', len(self.dps))
         if not dp_name in self.dps:
@@ -139,11 +143,58 @@ class AuthApp(object):
         dp = self.dps[dp_name]
 
         if not port_no in self.dps[dp_name].ports:
-            self.logger.debug('adding port')
-            dp.add_port(Port(port_no, dp))
+            self.logger.debug('adding port %s' % port_no)
+            self.logger.error(self.config.dp_port_mode[dp_name]['interfaces'])
+            conf_port = self.config.dp_port_mode[dp_name]['interfaces'].get(port_no, None)
+            access_mode = None
+            if conf_port:
+                access_mode = conf_port['auth_mode']
 
-        self.logger.debug('adding learn')
-        dp.ports[port_no].add_learn_host(host)
+            dp.add_port(Port(port_no, dp, access_mode))
+        self.logger.error('before mac learned %s' % self.macs[mac])
+        self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
+        self.logger.error('mac learned %s' % self.macs[mac])
+
+    def _get_dp_name_and_port(self, mac):
+        """Queries the prometheus faucet client,
+         and returns the 'access port' that the mac address is connected on.
+        Args:
+             mac MAC address to find port for.
+        Returns:
+             dp name & port number.
+        """
+        # query faucets promethues.
+        self.logger.info('querying prometheus')
+        try:
+            prom_mac_table = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
+                                                                   ['learned_macs'])
+        except Exception as e:
+            self.logger.exception(e)
+            return '', -1
+        self.logger.info('queried prometheus. mac_table:\n%s\n',
+                         prom_mac_table)
+        ret_port = -1
+        ret_dp_name = ""
+        dp_port_mode = self.config.dp_port_mode
+        for line in prom_mac_table:
+            labels, float_as_mac = line.split(' ')
+            macstr = auth_app_utils.float_to_mac(float_as_mac)
+            self.logger.debug('float %s is mac %s', float_as_mac, macstr)
+            if mac == macstr:
+                # if this is also an access port, we have found the dpid and the port
+                values = self.learned_macs_compiled_regex.match(labels)
+                dpid, dp_name, n, port, vlan = values.groups()
+                if dp_name in dp_port_mode and \
+                        'interfaces' in dp_port_mode[dp_name] and \
+                        int(port) in dp_port_mode[dp_name]['interfaces'] and \
+                        'auth_mode' in dp_port_mode[dp_name]['interfaces'][int(port)] and \
+                        dp_port_mode[dp_name]['interfaces'][int(port)]['auth_mode'] == 'access':
+                    ret_port = int(port)
+                    ret_dp_name = dp_name
+                    break
+        self.logger.info("name: %s port: %d", ret_dp_name, ret_port)
+        return ret_dp_name, ret_port
+
 
     def authenticate(self, mac, user, acl_list):
         """Authenticates the user as specifed by adding ACL rules
@@ -154,28 +205,19 @@ class AuthApp(object):
             acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
         """
         self.logger.info("****authenticated: %s %s", mac, user)
+        if not mac in self.macs:
+            self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, logger=self.logger,
+                                                         rule_man=self.rule_man)
 
         host = self.macs[mac]
+        self.logger.error('authenticate host type: %s' % type(host))
+        port = host.get_authing_learn_ports()
+        self.logger.error('auth_port %s' % port)
+        host = host.authenticate(user, port, acl_list)
+        self.logger.error("type at end %s" % type(host))
+        self.macs[mac] = host
+        self.logger.error(self.macs)
 
-        host.username = user
-        host.acl_list = acl_list
-
-        switchname = host.dp_name
-        switchport = host.port
-        if switchname is None  or switchport == -1:
-            self.logger.warn(
-                "Error switchname '%s' or switchport '%d' is unknown. Cannot generate acls for authed user '%s' on MAC '%s'",
-                switchname, switchport, user, mac)
-            # TODO one or the other?
-#            self.hapd_req.deauthenticate(mac)
-#            self.hapd_req.disassociate(mac)
-            return
-
-        self.logger.info('found mac')
-
-        success = self.rule_man.authenticate(user, mac, switchname, switchport, acl_list)
-        if success:
-            self.dps[switchname].ports[switchport].add_authed_host(host)
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.
         # Perhaps look into the CoA radius thing, so that process looks like:
@@ -195,8 +237,8 @@ class AuthApp(object):
             username (str): username to deauth.
         """
         self.logger.info('---deauthenticated: %s %s', mac, username)
-
-        self.rule_man.deauthenticate(username, mac)
+        host = self.macs[mac]
+        host.deauthenticate(None)
         # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
         # will likley think it has logged off, so is there anything we can do from hostapd to
         # say they have not actually logged off.

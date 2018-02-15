@@ -4,7 +4,7 @@
 class Datapath(object):
     """Stores state related to a datapath (switch)
     """
- 
+
     dp_id = None
     dp_name = None
 

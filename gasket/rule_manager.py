@@ -140,9 +140,6 @@ class RuleManager(object):
         self.base_filename = self.config.base_filename
         self.faucet_acl_filename = self.config.acl_config_file
 
-        # TODO do we want to use another datastructure? and keep more data in memory.
-        self.authed_users = {} # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
-
     def add_to_base_acls(self, filename, rules, user, mac):
         '''Adds rules to the base acl file (and writes).
         Args:
@@ -193,38 +190,36 @@ class RuleManager(object):
         Returns:
             True if rules are found and faucet reloads or already authenticated. False otherwise.
         """
-        self.logger.debug('authenticate  authed_users')
-        self.logger.debug(self.authed_users)
-        # get rules to apply
-        if not self.is_authenticated(mac, username, switch, port):
-            self.add_to_authed_dict(username, mac, switch, port)
-            rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac, acl_list)
-            if rules is None:
-                self.logger.warn('cannot authenticate user: %s, mac: %s no rules found.',
-                                 username, mac)
-                return False
-            # update base
-            base = self.add_to_base_acls(self.base_filename, rules, username, mac)
-            # update faucet
-            final = create_faucet_acls(base, self.logger)
-            write_yaml(final, self.faucet_acl_filename + '.tmp', True)
-            self.backup_file(self.faucet_acl_filename)
-            self.swap_temp_file(self.faucet_acl_filename)
-            # sighup.
-            start_count = self.get_faucet_reload_count()
-            self.send_signal(signal.SIGHUP)
+        self.logger.debug('rule-man authenticate')
 
-            self.logger.info('auth signal sent.')
-            for i in range(400):
-                end_count = self.get_faucet_reload_count()
-                if end_count > start_count:
-                    self.logger.info('auth - faucet has reloaded.')
-                    return True
-                time.sleep(0.05)
-                self.logger.info('auth - waiting for faucet to process sighup config reload. %d', i)
-            self.logger.error('auth - faucet did not process sighup within 20 seconds. 0.05 * 400')
+        # get rules to apply
+
+        rules = self.rule_gen.get_rules(username, 'port_' + switch + '_' + str(port), mac, acl_list)
+        if rules is None:
+            self.logger.warn('cannot authenticate user: %s, mac: %s no rules found.',
+                             username, mac)
             return False
-        return True
+        # update base
+        base = self.add_to_base_acls(self.base_filename, rules, username, mac)
+        # update faucet
+        final = create_faucet_acls(base, self.logger)
+        write_yaml(final, self.faucet_acl_filename + '.tmp', True)
+        self.backup_file(self.faucet_acl_filename)
+        self.swap_temp_file(self.faucet_acl_filename)
+        # sighup.
+        start_count = self.get_faucet_reload_count()
+        self.send_signal(signal.SIGHUP)
+
+        self.logger.info('auth signal sent.')
+        for i in range(400):
+            end_count = self.get_faucet_reload_count()
+            if end_count > start_count:
+                self.logger.info('auth - faucet has reloaded.')
+                return True
+            time.sleep(0.05)
+            self.logger.info('auth - waiting for faucet to process sighup config reload. %d', i)
+        self.logger.error('auth - faucet did not process sighup within 20 seconds. 0.05 * 400')
+        return False
 
     def get_faucet_reload_count(self):
         """Queries faucet prometheus and finds the number of time faucet has been reloaded.
@@ -319,35 +314,32 @@ class RuleManager(object):
             True if a client that is authed has rules removed, or if client is not authed.
             other wise false (faucet fails to reload)
         """
-        self.logger.debug('deauthenticate  authed_users')
-        self.logger.debug(self.authed_users)
+        self.logger.debug('deauthenticate %s %s' % (username, mac))
 
-        if self.is_authenticated(mac, username):
-            self.logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
-            self.remove_from_authed_dict(username, mac)
-            # update base
-            base, changed = self.remove_from_base(username, mac)
-            # update faucet only if config has changed
-            if changed:
-                self.logger.info('base has changed. removing from faucet')
-                final = create_faucet_acls(base, self.logger)
-                write_yaml(final, self.faucet_acl_filename + '.tmp', True)
+        self.logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
+        # update base
+        base, changed = self.remove_from_base(username, mac)
+        # update faucet only if config has changed
+        if changed:
+            self.logger.info('base has changed. removing from faucet')
+            final = create_faucet_acls(base, self.logger)
+            write_yaml(final, self.faucet_acl_filename + '.tmp', True)
 
-                self.backup_file(self.faucet_acl_filename)
-                self.swap_temp_file(self.faucet_acl_filename)
-                # sighup.
-                start_count = self.get_faucet_reload_count()
-                self.send_signal(signal.SIGHUP)
-                self.logger.info('deauth signal sent')
-                for i in range(400):
-                    end_count = self.get_faucet_reload_count()
-                    if end_count > start_count:
-                        self.logger.info('deauth - faucet has reloaded.')
-                        return True
-                    time.sleep(0.05)
-                    self.logger.info('deauth - waiting for faucet to process sighup config reload on. %d', i)
-                self.logger.error('deauth - faucet did not process sighup within 400 * 0.05 seconds.')
-                return False
+            self.backup_file(self.faucet_acl_filename)
+            self.swap_temp_file(self.faucet_acl_filename)
+            # sighup.
+            start_count = self.get_faucet_reload_count()
+            self.send_signal(signal.SIGHUP)
+            self.logger.info('deauth signal sent')
+            for i in range(400):
+                end_count = self.get_faucet_reload_count()
+                if end_count > start_count:
+                    self.logger.info('deauth - faucet has reloaded.')
+                    return True
+                time.sleep(0.05)
+                self.logger.info('deauth - waiting for faucet to process sighup config reload on. %d', i)
+            self.logger.error('deauth - faucet did not process sighup within 400 * 0.05 seconds.')
+            return False
         return True
 
     @staticmethod
@@ -392,134 +384,6 @@ class RuleManager(object):
                 contr_pid = int(pid_file.read())
                 os.kill(contr_pid, signal_type)
 
-    def is_authenticated(self, mac, username=None, switch=None, port=None):
-        '''Checks if a username is already authenticated with the MAC address on the switch & port.
-        Args:
-            username (str): optional
-            mac (str)
-            switch (str): optional
-            port (str): optional. if switch is used so should port and vice versa.
-        Returns:
-            True if already authenticated. False otherwise.
-        '''
-        # TODO There might be a bug in here where passed the mac and username, but not the switch and port.
-        #  this will always return false.
-        # {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
-        if username and username != '(null)':
-            if username in self.authed_users:
-                if mac in self.authed_users[username]:
-                    if switch in self.authed_users[username][mac]:
-                        if port in self.authed_users[username][mac][switch]:
-                            return True
-        else:
-            for user, dic in list(self.authed_users.items()):
-                if mac in list(dic):
-                    return True
-        return False
-
-    def add_to_authed_dict(self, username, mac, switch, port):
-        """Add an authenticted user, ... to the authed_users dictionary
-        Args:
-            username (str)
-            mac (str): MAC address.
-            switch (str): the name of the switch username has authenticated on.
-            port (str): the port the username has authenticated on.
-        """
-        if username not in self.authed_users:
-            self.authed_users[username] = {}
-            self.authed_users[username][mac] = {}
-            self.authed_users[username][mac][switch] = {}
-            self.authed_users[username][mac][switch][port] = 1
-        else:
-            if mac not in self.authed_users[username]:
-                self.authed_users[username][mac] = {}
-                self.authed_users[username][mac][switch] = {}
-                self.authed_users[username][mac][switch][port] = 1
-            else:
-                if switch not in self.authed_users[username][mac]:
-                    self.authed_users[username][mac][switch] = {}
-                    self.authed_users[username][mac][switch][port] = 1
-                else:
-                    if port not in self.authed_users[username][mac][switch]:
-                        self.authed_users[username][mac][switch][port] = 1
-
-    def remove_all_from_authed_dict(self, dp_name, port_num):
-        """Removes all users that are on coressponding dp and port.
-        Args:
-            dp_name (str): name of datapath.
-            port_num (int): port number
-        """
-# {mike: {aa:aa:aa:aa:aa:aa: {faucet-1: {p1: 1. p2: 1}}}}
-        deletes = []
-        removed_macs = []
-        for user, mac_d in self.authed_users.items():
-            macs_counter = len(mac_d)
-            for mac, dp_d in mac_d.items():
-                # TODO if user is authed on multiple ports dont delete the mac/user
-                #  if there are not on multiple ports delete user.
-
-                # if only one port and it is going to be removed, remove switch also.
-                # if no siwtches remove user, remove mac.
-                dp_counter = len(dp_d)
-                for dp_n, port_d in dp_d.items():
-                    if dp_n == dp_name:
-                        port_counter = len(port_d)
-                        for port, _ in port_d.items():
-                            if port == port_num:
-                                port_counter -= 1
-                                deletes.append((user, mac, dp_n, port))
-                                removed_macs.append(mac)
-                                break
-                                # we can remove this.
-                        if port_counter == 0:
-                            # port_d can be removed.
-                            dp_counter -= 1
-                            deletes.append((user, mac, dp_n))
-                if dp_counter == 0:
-                    #dp_d can be removed
-                    macs_counter -= 1
-                    deletes.append((user, mac))
-            if macs_counter == 0:
-                deletes.append((user,))
-
-        for delete in deletes:
-            if len(delete) == 1:
-                # user can be deleted
-                del self.authed_users[delete[0]]
-            elif len(delete) == 2:
-                # mac can be deleted
-                del self.authed_users[delete[0]][delete[1]]
-            elif len(delete) == 3:
-                # dp can be deleted
-                del self.authed_users[delete[0]][delete[1]][delete[2]]
-            elif len(delete) == 4:
-                # port can be deleted
-                del self.authed_users[delete[0]][delete[1]][delete[2]][delete[3]]
-            else:
-                self.logger.warning('drm no supported length %s %d', str(delete), len(delete))
-        return removed_macs
-
-    def remove_from_authed_dict(self, username, mac):
-        """Remove the mac from the authed_users dictionary.
-        If username is None or '(null)' as is the case with some deauthentications,
-        the mac is removed regardless of the user.
-        Args:
-            username (str): may be None or '(null)'.
-            mac (str): MAC address,
-        """
-        if username and username != '(null)':
-            if username in self.authed_users:
-                self.logger.info('removing user %s' % username)
-                del self.authed_users[username][mac]
-        else:
-            remove_users = []
-            for user, usermac in list(self.authed_users.items()):
-                if mac in usermac:
-                    remove_users.append(user)
-            for user in remove_users:
-                self.logger.info('removing mac %s. wildcard user' % mac)
-                del self.authed_users[user][mac]
-
     def reset_port_acl(self, dp_name, port_num):
         """Reset the port acl back to the original state (where nothing is authenticated)
         Args:
@@ -553,7 +417,7 @@ class RuleManager(object):
                     self.backup_file(self.faucet_acl_filename)
                     self.swap_temp_file(self.faucet_acl_filename)
 
-                    removed_macs = self.remove_all_from_authed_dict(dp_name, port_num)
+                    #removed_macs = self.remove_all_from_authed_dict(dp_name, port_num)
 
                     write_yaml(base, self.base_filename + '.tmp')
                     self.backup_file(self.base_filename)
@@ -561,7 +425,7 @@ class RuleManager(object):
 
                     # sighup.
                     start_count = self.get_faucet_reload_count()
-                    self.send_dignal(signal.SIGHUP)
+                    self.send_signal(signal.SIGHUP)
                     self.logger.info('reset acl signal sent.')
                     for i in range(400):
                         end_count = self.get_faucet_reload_count()

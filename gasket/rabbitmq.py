@@ -1,10 +1,8 @@
-import datetime
+
 import json
 import logging
-import socket
 import threading
 import time
-
 import pika
 
 from gasket import auth_app_utils
@@ -42,7 +40,8 @@ class RabbitMQ(threading.Thread):
 
             self.logger.info("declared")
             queue_name = result.method.queue
-            self.channel.queue_bind(exchange='topic_recs', queue=queue_name, routing_key='FAUCET.Event')
+            self.channel.queue_bind(exchange='topic_recs', queue=queue_name,
+                                    routing_key='FAUCET.Event')
 
             self.channel.basic_consume(self.callback, queue=queue_name, no_ack=True)
             self.logger.info('start consuming')
@@ -70,7 +69,7 @@ class RabbitMQ(threading.Thread):
                 eth_src = l2l['eth_src']
                 l3_src_ip = l2l['l3_src_ip']
 
-                self.work_queue.put(L2LearnWorkItem(dp_name,dp_id,
+                self.work_queue.put(L2LearnWorkItem(dp_name, dp_id,
                                                     port_no, vid,
                                                     eth_src, l3_src_ip))
     def kill(self):

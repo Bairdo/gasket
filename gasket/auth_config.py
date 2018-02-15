@@ -17,7 +17,7 @@ class AuthConfig(object):
         self.faucet_ip = data['faucet']['ip']
         self.prom_url = 'http://{}:{}'.format(self.faucet_ip, self.prom_port)
 
-        self.container_name = data['faucet']['container_name']
+        self.container_name = data['faucet'].get('container_name', '')
 
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
