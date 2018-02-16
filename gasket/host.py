@@ -71,17 +71,6 @@ class Host(object):
                 return port
         return None
 
-    def is_on_port(self, dp_id, port):
-        """Is this host active on the port?
-        """
-        pass
-
-    def is_authed_on_port(self, dp_id, port):
-        """Is this host authenticated on this dp_id and port.
-        """
-        # can change the implementation of authed dp/port easily --> that port group idea.
-        pass
-
     def __str__(self):
         return "{} mac: {}, ip: {}, learn_ports: {}, ordered_learn_ports {} , auth_port: {}".format(self.__class__,
                                                                                                     self.mac,
@@ -106,10 +95,9 @@ class UnlearntAuthenticatedHost(Host):
                          username=username, acl_list=acl_list)
 
     def authenticate(self, username, port, acl_list):
-        # Host only allowed to auth on single port.
-        # Deauth on old.
-        # add dp/port to current.
-        # Apply new rules.
+        """deauthenticates host from old port.
+
+        """
         assert port is None
         self.acl_list = acl_list
 

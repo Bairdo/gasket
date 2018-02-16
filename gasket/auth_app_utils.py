@@ -15,7 +15,7 @@ def get_logger(logname, logfile, loglevel, propagate):
     logger_handler = WatchedFileHandler(logfile)
     log_fmt = '%(asctime)s-%(msecs)d %(name)-6s %(levelname)-8s %(message)s'
     logger_handler.setFormatter(
-        logging.Formatter(log_fmt, '%b %d %H:%M:%S'))
+                                logging.Formatter(log_fmt, '%b %d %H:%M:%S'))
     logger.addHandler(logger_handler)
     logger.propagate = propagate
     logger.setLevel(loglevel)

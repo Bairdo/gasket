@@ -72,7 +72,6 @@ class AuthApp(object):
         self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
         self.work_queue = queue.Queue()
 
-
     def start(self):
         """Starts separate thread for each hostapd socket.
         And runs as the worker thread processing the (de)authentications/.
@@ -99,6 +98,7 @@ class AuthApp(object):
             self.threads.append(rt)
         except Exception as e:
             self.logger.exception(e)
+        self.setup_datapath()
         self.get_prometheus_mac_learning()
         print('Started socket Threads.')
         self.logger.info('Starting worker thread.')
@@ -117,9 +117,31 @@ class AuthApp(object):
             else:
                 self.logger.warn("Unsupported WorkItem type: %s", type(work))
 
-    def l2learn(self, host_wi):
-        # TODO support case where host being learnt is already authenticated.
+    def setup_datapath(self):
+        """Builds the datpath/ports this instance of gasket is aware of.
+        """
+        for dp_name, datapath in self.config.dp_port_mode.items():
+            dp_id = datapath['id']
+            if not dp_name in self.dps:
+                dp = Datapath(dp_id, dp_name)
+                self.dps[dp_name] = dp
+                self.logger.debug('added dp %s to dps', dp)
 
+            dp = self.dps[dp_name]
+            for port_no, conf_port in datapath['interfaces'].items():
+                if not port_no in self.dps[dp_name].ports:
+                    self.logger.debug('adding port %s' % port_no)
+                    access_mode = None
+                    if conf_port:
+                        access_mode = conf_port.get('auth_mode', None)
+
+                    dp.add_port(Port(port_no, dp, access_mode))
+
+    def l2learn(self, host_wi):
+        """Learns a host, if host is already authenticated rules are applied.
+        Args:
+            host_wi (work_item.L2LearnWorkItem): the host to learn
+        """
         dp_name = host_wi.dp_name
         dp_id = host_wi.dp_id
         mac = host_wi.mac
@@ -134,23 +156,6 @@ class AuthApp(object):
 
         host = self.macs[mac]
 
-        self.logger.debug('size of dps: %d', len(self.dps))
-        if not dp_name in self.dps:
-            dp = Datapath(dp_id, dp_name)
-            self.dps[dp_name] = dp
-            self.logger.debug('added dp %s to dps', dp)
-
-        dp = self.dps[dp_name]
-
-        if not port_no in self.dps[dp_name].ports:
-            self.logger.debug('adding port %s' % port_no)
-            self.logger.error(self.config.dp_port_mode[dp_name]['interfaces'])
-            conf_port = self.config.dp_port_mode[dp_name]['interfaces'].get(port_no, None)
-            access_mode = None
-            if conf_port:
-                access_mode = conf_port['auth_mode']
-
-            dp.add_port(Port(port_no, dp, access_mode))
         self.logger.error('before mac learned %s' % self.macs[mac])
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
         self.logger.error('mac learned %s' % self.macs[mac])
@@ -228,38 +233,22 @@ class AuthApp(object):
         # say they have not actually logged off.
         # EAP LOGOFF is a one way message (not ack-ed)
 
-    def is_port_managed(self, dp_name, port_num):
-        """
-        Args:
-            dp_name (str): datapath name.
-            port_num (int): port number.
-        Returns:
-            bool - True if this dpid & port combo are managed (provide authentication).
-             otherwise False
-        """
-        if dp_name in self.config.dp_port_mode:
-            if port_num in self.config.dp_port_mode[dp_name]['interfaces']:
-                if 'auth_mode' in self.config.dp_port_mode[dp_name]['interfaces'][port_num]:
-                    mode = self.config.dp_port_mode[dp_name]['interfaces'][port_num]['auth_mode']
-                    if mode == 'access':
-                        return True
-        return False
-
     def port_status_handler(self, port_change):
         """Deauthenticates all hosts on a port if the port has gone down.
         """
         self.logger.info('port status changed')
         dpid = port_change.dp_id
-        port = port_change.port_no
+        port_no = port_change.port_no
         port_status = port_change.status
         dp_name = port_change.dp_name
-        self.logger.info('DPID %d, Port %s has changed status: %d', dpid, port, port_status)
+        self.logger.info('DPID %d, Port %s has changed status: %d', dpid, port_no, port_status)
         if not port_status: # port is down
-            if self.is_port_managed(dp_name, port):
+            port = self.dps[dp_name].ports[port_no]
+            if port.auth_mode == 'access':
                 self.logger.debug('DP %s is mananged.', dp_name)
-                for mac in list(self.dps[dp_name].ports[port].authed_hosts):
+                for mac in list(port.authed_hosts):
                     self.logger.debug('mac: %s deauthed via port down' % mac)
-                    self.macs[mac] = self.macs[mac].deauthenticate(self.dps[dp_name].ports[port])
+                    self.macs[mac] = self.macs[mac].deauthenticate(port)
                 self.logger.debug('reset port completed')
 
     def _handle_sigint(self, sigid, frame):
