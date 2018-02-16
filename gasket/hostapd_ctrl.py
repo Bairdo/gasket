@@ -127,7 +127,7 @@ class HostapdCtrl(object):
         """
         try:
             d = self.request('PING')
-        except socket.timeout:
+        except (socket.timeout, ConnectionRefusedError):
             self.logger.debug('ping timed out.')
             return False
         self.logger.debug('PING - "%s"', d)

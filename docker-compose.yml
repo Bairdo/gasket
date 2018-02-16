@@ -26,6 +26,23 @@ services:
         - net.ipv4.conf.all.send_redirects=0
         - net.ipv4.ip_forward=0
 
+    faucet:
+        image: 'faucet/faucet'
+
+        volumes:
+            - './var/log/ryu/faucet:/var/log/ryu/faucet'
+            - './etc/ryu/faucet:/etc/ryu/faucet'
+
+        ports:
+            - '6653:6653'
+            - '9302'
+        environment:
+            FAUCET_CONFIG_STAT_RELOAD: '${FAUCET_CONFIG_STAT_RELOAD}'
+            FAUCET_EVENT_SOCK: '${FAUCET_EVENT_SOCK}'
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.103
+
     gasket:
         build:
             context: '.'

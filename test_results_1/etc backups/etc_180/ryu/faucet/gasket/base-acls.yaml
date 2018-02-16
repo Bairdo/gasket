@@ -1,0 +1,37 @@
+aauth: {}
+acls:
+  allow_all:
+  - rule:
+      actions:
+        allow: 1
+  port_faucet-1_2:
+  - rule:
+      actions:
+        allow: 1
+        output:
+          dl_dst: '44:44:44:44:44:44'
+      dl_type: 34958
+  - authed-rules
+  - rule:
+      actions:
+        allow: 1
+        output:
+          dl_dst: '44:44:44:44:44:44'
+  port_faucet-1_3:
+  - rule:
+      actions:
+        allow: 1
+        output:
+          dl_dst: '44:44:44:44:44:44'
+      dl_type: 34958
+  - authed-rules
+  - rule:
+      actions:
+        allow: 1
+        output:
+          dl_dst: '44:44:44:44:44:44'
+  port_faucet-1_4:
+  - authed-rules
+  - rule:
+      actions:
+        allow: 1
