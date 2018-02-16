@@ -21,7 +21,9 @@ auth-rules:
     file: /etc/ryu/faucet/gasket/rules.yaml
 dps:
     faucet-1:
+        id: 0x1
         interfaces:
+            1:
             2:
                 auth_mode: access
                 #this port is managed by these hostapds.

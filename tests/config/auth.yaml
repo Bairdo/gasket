@@ -22,7 +22,10 @@ hostapds:
 
 dps:
     faucet-1:
+        id: %(dp_id)s
         interfaces:
+            1:
+            2:
             3:
                 auth_mode: access
             4:

@@ -46,6 +46,7 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
         super(GasketTest, self).setUp()
 
     def tearDown(self):
+        print(datetime.datetime.now())
         if self.net is not None:
             host = self.net.hosts[0]
             print "about to kill everything"
@@ -128,7 +129,7 @@ eapol_flags=0
                 time.sleep(0.25)
             self.assertGreater(end_reload_count, start_reload_count)
 
-    def logon_dot1x(self, host, intf=None, netns=None, wait=True):
+    def logon_dot1x(self, host, intf=None, netns=None, wait=False):
         """Log on a host using dot1x
         Args:
             host (mininet.host): host to logon.
@@ -466,6 +467,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         config_values['intf'] = portal_name + '-eth0'  # self.net.hosts[0].defaultIntf().name # need to get this.
         config_values['pid_file'] = self.net.controller.pid_file
         config_values['controller_ip'] = '127.0.0.1'
+        config_values['dp_id'] = self.dpid
 
         open('%s/auth.yaml' % self.tmpdir, 'w').write(httpconfig % config_values)
         open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL) # need to get C_B_A
@@ -476,7 +478,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         os.system('python3.5 -m gasket.rule_manager {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
         self.verify_hup_faucet()
         print('Faucet successfully hup-ed')
-        time.sleep(1)
+        time.sleep(10)
 
 class GasketSingleSwitchTest(GasketTest):
     """Base Test class for single switch topology
@@ -881,13 +883,8 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
 
         with open('%s/base-acls.yaml' % self.tmpdir, 'rw') as f:
             start_base = f.read()
-        try:
-            self.logon_dot1x(h0)
-        except AssertionError:
-            print('logon didnt reload config')
-            pass
-        else:
-            self.assertTrue(False, 'logon should have assertion failed due to config being reloaded, when should be same as before (therefore no reload).')
+
+        self.logon_dot1x(h0)
 
         with open('%s/auth_app.log' % self.tmpdir, 'r') as auth_log:
             matches = re.findall('authenticated', auth_log.read())
@@ -904,9 +901,8 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertTrue(start_base == end_base)
 
     def test_same_user_mac_logon_2_diff_port(self):
-        """Tests that the same username and the same MAC address can logon on the different ports.
-        The system is ambiguous in that the first port to authenticate may or may not be logged off,
-        when the second start the authentication process. TODO need to clarify what correct behavoiur should be.
+        """Tests that the same username and the same MAC address cannot be logged on on two ports at the same time..
+        The first port to logon should be logged off, and the second logged on.
         """
         h0, h1 = self.clients[0:2]
         interweb = self.net.hosts[1]
@@ -919,11 +915,10 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         h1.cmd('sed -i -e s/hostuser1/hostuser0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
-        self.logon_dot1x(h1)
+        self.logon_dot1x(h1, wait=False)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
         self.one_ipv4_ping(h1, interweb.IP(), retries=5)
 
-        # TODO 
-        # self.one_ipv4_ping(h0, interweb.IP())
         count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         self.assertGreaterEqual(count, 2)
 
