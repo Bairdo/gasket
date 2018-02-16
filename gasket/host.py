@@ -1,4 +1,8 @@
-"""Represntation of a network (end)host"""
+"""Represntation of a network (end)host
+ TODO Could add another role authorised - rules have been applied.
+ TODO Could add another role for hosts that are allowed to be authenticated over many ports.
+"""
+
 
 class Host(object):
     """Stores state related to a (end)host.
@@ -311,19 +315,3 @@ class UnlearntUnauthenticatedHost(Host):
     def unlearn(self, port):
         # shouldnt be possible
         return self
-
-
-## could add a authorised role. so (un)learn-(un)authenticated-(un)authorised Host
-
-# host could be (assuming only on one dp & port.):
-#  - unlearnt/authenticated
-#  - learnt/authenticated
-#  - learnt/unauthenticated
-#  - unlearnt/unauthenticated - is this one possible?
-
-
-# Allow auth over multiple ports - captive portal
-#  - unlearnt/authenticated - connected to unprotected wifi, but already authed via portal.
-#  - learnt/authenticated
-#  - learnt/unauthenticated
-#  - unlearnt/unauthenticated - is this one possible?

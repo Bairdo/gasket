@@ -23,6 +23,7 @@ from gasket.host import UnlearntUnauthenticatedHost
 from gasket.port import Port
 from gasket.datapath import Datapath
 
+
 class Proto(object):
     """Class for protocol constants.
     """
