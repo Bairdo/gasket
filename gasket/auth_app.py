@@ -149,17 +149,14 @@ class AuthApp(object):
         ip = host_wi.ip
         vid = host_wi.vid
         port_no = host_wi.port
-        self.logger.error('learning mac %s at port: %d' % (mac, port_no))
+        self.logger.info('learning mac %s at port: %d' % (mac, port_no))
         if not mac in self.macs:
-            self.logger.error('learning new host %s' % mac)
+            self.logger.info('learning new host %s' % mac)
             self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, ip=ip,
                                                          logger=self.logger, rule_man=self.rule_man)
 
         host = self.macs[mac]
-
-        self.logger.error('before mac learned %s' % self.macs[mac])
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
-        self.logger.error('mac learned %s' % self.macs[mac])
 
     def get_prometheus_mac_learning(self):
         """Queries the prometheus faucet client,
@@ -200,13 +197,9 @@ class AuthApp(object):
                                                          rule_man=self.rule_man)
 
         host = self.macs[mac]
-        self.logger.error('authenticate host type: %s' % type(host))
         port = host.get_authing_learn_ports()
-        self.logger.error('auth_port %s' % port)
         host = host.authenticate(user, port, acl_list)
-        self.logger.error("type at end %s" % type(host))
         self.macs[mac] = host
-        self.logger.error(self.macs)
 
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.
