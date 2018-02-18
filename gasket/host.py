@@ -36,7 +36,7 @@ class Host(object):
             self.auth_port = host.auth_port
             self.username = host.username
             self.acl_list = host.acl_list
-            self.logger.error('created new host from %s' % type(host))
+            self.logger.debug('created new host %s from %s', self.__class__, type(host))
 
         self.authenticated = authed
 
@@ -66,12 +66,10 @@ class Host(object):
             last learnt port that is mode 'access'.
             Otherwise None
         """
-        self.logger.error('host is on ports %s' % self.learn_ports)
+        self.logger.debug('host is on ports %s' % self.learn_ports)
         for port_no in reversed(self.ordered_learn_ports):
             port = self.learn_ports[port_no]
-            self.logger.error('port mode %s' % port.auth_mode)
             if port.auth_mode == 'access':
-                self.logger.error('host has a learned port access %s' % port)
                 return port
         return None
 
@@ -108,14 +106,14 @@ class UnlearntAuthenticatedHost(Host):
         self.rule_man.deauthenticate(self.username, self.mac)
         # In theory the user could have changed.
         self.username = username
-        self.logger.error('ua authed')
+        self.logger.info('ua authed')
         return self
 
     def deauthenticate(self, port):
         self.rule_man.deauthenticate(self.username, self.mac)
 
         self.auth_port = None
-        self.logger.error('ua deauth should be now uu')
+        self.logger.info('ua deauth should be now uu')
         return UnlearntUnauthenticatedHost(host=self)
 
     def learn(self, port):
@@ -125,27 +123,27 @@ class UnlearntAuthenticatedHost(Host):
         # return new LearntAuthedHost.
         self.learn_ports[port.number] = port
         self.ordered_learn_ports.append(port.number)
-        self.logger.error('ua learn port %s' % port)
+        self.logger.info('ua learn port %s' % port)
 
         self.auth_port = self.get_authing_learn_ports()
-        self.logger.error('ua auth port %s' % self.auth_port)
+        self.logger.info('ua auth port %s' % self.auth_port)
         if self.auth_port == port:
             port.add_authed_host(self.mac)
 
-            self.logger.error('ua learn, can apply rules to the port')
+            self.logger.info('ua learn, can apply rules to the port')
             self.rule_man.authenticate(self.username, self.mac,
                                        self.auth_port.datapath.dp_name,
                                        self.auth_port.number, self.acl_list)
 
         port.add_learn_host(self.mac)
 
-        self.logger.error('ua learn')
-        self.logger.error('ua auth_port %s' % self.auth_port)
+        self.logger.info('ua learn')
+        self.logger.info('ua auth_port %s' % self.auth_port)
         return LearntAuthenticatedHost(host=self)
 
     def unlearn(self, port):
         # this shouldnt be possible - already unlearnt
-        self.logger.error('ua cant unlearn')
+        self.logger.info('ua cant unlearn')
         return self
 
 
@@ -185,7 +183,7 @@ class LearntAuthenticatedHost(Host):
         self.auth_port.add_authed_host(self.mac)
         self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
                                    self.auth_port.number, self.acl_list)
-        self.logger.error('la authed')
+        self.logger.info('la authed')
         return self
 
     def deauthenticate(self, port):
@@ -193,7 +191,7 @@ class LearntAuthenticatedHost(Host):
         self.auth_port.del_authed_host(self.mac)
         self.auth_port = None
         self.rule_man.deauthenticate(self.username, self.mac)
-        self.logger.error('la deauth now uu')
+        self.logger.info('la deauth now uu')
         return LearntUnauthenticatedHost(host=self)
 
     def learn(self, port):
@@ -201,7 +199,7 @@ class LearntAuthenticatedHost(Host):
         self.learn_ports[port.number] = port
         self.ordered_learn_ports.append(port.number)
         port.add_learn_host(self.mac)
-        self.logger.error('la learn')
+        self.logger.info('la learn')
         return self
 
     def unlearn(self, port):
@@ -215,9 +213,9 @@ class LearntAuthenticatedHost(Host):
         if p is not None:
             self.ordered_learn_ports.remove(port.number)
         if not self.learn_ports:
-            self.logger.error('la unlearn now ua')
+            self.logger.info('la unlearn now ua')
             return UnlearntAuthenticatedHost(host=self)
-        self.logger.error('la unlearn still has learn_ports')
+        self.logger.info('la unlearn still has learn_ports')
         return self
 
 
@@ -244,13 +242,13 @@ class LearntUnauthenticatedHost(Host):
         self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
                                    self.auth_port.number, self.acl_list)
         port.add_authed_host(self.mac)
-        self.logger.error('lu auth')
+        self.logger.info('lu auth')
         self.logger.info('lu auth_port %s' % self.auth_port)
         return LearntAuthenticatedHost(host=self)
 
     def deauthenticate(self, port):
         # shouldnt be possible
-        self.logger.error('lu deauth shouldnt happen')
+        self.logger.info('lu deauth shouldnt happen')
         return self
 
     def learn(self, port):
@@ -258,7 +256,7 @@ class LearntUnauthenticatedHost(Host):
         port.add_learn_host(self.mac)
         self.learn_ports[port.number] = port
         self.ordered_learn_ports.append(port.number)
-        self.logger.error('lu learn')
+        self.logger.info('lu learn')
         return self
 
     def unlearn(self, port):
@@ -271,9 +269,9 @@ class LearntUnauthenticatedHost(Host):
         if p is not None:
             self.ordered_learn_ports.remove(port.number)
         if not self.learn_ports:
-            self.logger.error('lu unlearnt all')
+            self.logger.info('lu unlearnt all')
             return UnlearntUnauthenticatedHost(host=self)
-        self.logger.error('ul still know some ports')
+        self.logger.info('ul still know some ports')
         return self
 
 
