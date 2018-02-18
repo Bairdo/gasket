@@ -420,8 +420,6 @@ class RuleManager(object):
                     self.backup_file(self.faucet_acl_filename)
                     self.swap_temp_file(self.faucet_acl_filename)
 
-                    #removed_macs = self.remove_all_from_authed_dict(dp_name, port_num)
-
                     write_yaml(base, self.base_filename + '.tmp')
                     self.backup_file(self.base_filename)
                     self.swap_temp_file(self.base_filename)
