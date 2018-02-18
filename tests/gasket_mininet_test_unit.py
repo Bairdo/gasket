@@ -478,7 +478,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         os.system('python3.5 -m gasket.rule_manager {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
         self.verify_hup_faucet()
         print('Faucet successfully hup-ed')
-        time.sleep(10)
+
 
 class GasketSingleSwitchTest(GasketTest):
     """Base Test class for single switch topology
@@ -548,6 +548,7 @@ class GasketSingleSwitchTest(GasketTest):
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
         time.sleep(15)
+
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
     """Config has multiple authenticating hosts on the same port.
@@ -633,7 +634,6 @@ class GasketMultiHostsBase(GasketSingleSwitchTest):
         interweb = self.net.hosts[1]
         error_point = 0
         try:
-            # TODO remove this line when support finding location out later.
             self.logon_dot1x(host)
             error_point = 1
             self.one_ipv4_ping(host, interweb.IP(), retries=self.LOGON_RETRIES, print_flag=False)
@@ -943,7 +943,6 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
-#@unittest.skip('LinkState not currently supported')
 class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
     def test_dp_link_down_up(self):
