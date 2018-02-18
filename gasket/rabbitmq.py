@@ -1,3 +1,4 @@
+"""Module for connecting to a RabbitMQ server"""
 
 import json
 import logging
@@ -8,8 +9,11 @@ import pika
 from gasket import auth_app_utils
 from gasket.work_item import L2LearnWorkItem, PortChangeWorkItem
 
-class RabbitMQ(threading.Thread):
 
+class RabbitMQ(threading.Thread):
+    """Thread that adds relevant Faucet events from a RabbitMQ server to 
+    the work queue.
+    """
     channel = None
     work_queue = None
 
@@ -23,6 +27,8 @@ class RabbitMQ(threading.Thread):
         self.logger.info('inited')
 
     def run(self):
+        """Main run method. start_consuming() blocks 'forever'
+        """
         try:
             self.logger.info("running")
             while True:
@@ -32,6 +38,7 @@ class RabbitMQ(threading.Thread):
                     break
                 except Exception as e:
                     self.logger.info('cannot connect to rabbitmq server')
+                    self.logger.exception(e)
                     time.sleep(1)
             self.channel = connection.channel()
             self.logger.info("channeled")
@@ -50,6 +57,9 @@ class RabbitMQ(threading.Thread):
             self.logger.exception(e)
 
     def callback(self, chan, method, properties, body):
+        """Callback method used by channel.basic_consume.
+        See: http://pika.readthedocs.io/en/0.10.0/examples/blocking_consume.html?highlight=basic_consume
+        """
         self.logger.info(' [x] %r:%r', method.routing_key, body)
         for line in body.splitlines():
             d = json.loads(line.decode())
