@@ -35,5 +35,5 @@ script:
   - sudo docker pull faucet/faucet-event-adapter-rabbitmq
   - docker images
   - CONTROL_NETWORK="$(sudo docker network ls |grep control-plane | cut -c 1-12)"
-  - sudo docker run --network=$CONTROL_NETWORK --privileged -t -v /var/run/:/var/run -e FAUCET_TESTS="" ${FAUCET_TEST_IMG}
+  - sudo docker run --network=$CONTROL_NETWORK --privileged -t -e FAUCET_TESTS="" ${FAUCET_TEST_IMG}
   - sudo docker-compose kill rabbitmq_server
