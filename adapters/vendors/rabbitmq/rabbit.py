@@ -65,7 +65,7 @@ class RabbitAdapter:
         """Make connection to rabbit to send events"""
         # check if a rabbit host was specified
         if not self.host:
-            print('host none')
+            print('Not connecting to any RabbitMQ, host is None.')
             return False
 
         # create connection to rabbit
@@ -92,7 +92,7 @@ class RabbitAdapter:
         """Make connection to sock to receive events"""
         # check if socket events are enabled
         if not self.event_sock:
-            print('event_sock none')
+            print('Not connecting to any socket, FA_EVENT_SOCK is none.')
             return False
 
         # create connection to unix socket
@@ -114,13 +114,11 @@ class RabbitAdapter:
             self.sock.setblocking(0)
             recv_data = True
             buffer = b''
-            print('aaaa')
 
             # get events from socket
             while recv_data:
                 if not buffer:
                     read_ready, _, _ = select.select([self.sock], [], [])
-                    print('bbbb')
 
                     if self.sock in read_ready:
                         continue_recv = True
@@ -131,7 +129,6 @@ class RabbitAdapter:
                                 if err.errno != errno.EWOULDBLOCK:
                                     recv_data = False
                                 continue_recv = False
-                    print('ccc')
 
                 # send events to rabbit
                 try:
@@ -142,7 +139,6 @@ class RabbitAdapter:
                                                    delivery_mode = 2,
                                                ))
                     buffer = b''
-                    print('ddd')
                 except pika.exceptions.AMQPError as err:
                     print("Unable to send event to RabbitMQ because: %s" % err)
                     print("The following event will be retried: %r" % buffer)
@@ -152,11 +148,7 @@ class RabbitAdapter:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    print('running rabbit.py')
-    try:
-        RABBIT_ADAPTER = RabbitAdapter()
-        print('constructed')
-        RABBIT_ADAPTER.main()
-        print(done)
-    except Exception as e:
-        print(e)
+    print('Running rabbit.py')
+    RABBIT_ADAPTER = RabbitAdapter()
+    RABBIT_ADAPTER.main()
+
