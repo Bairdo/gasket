@@ -886,11 +886,6 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
 
         self.logon_dot1x(h0)
 
-        with open('%s/auth_app.log' % self.tmpdir, 'r') as auth_log:
-            matches = re.findall('authenticated', auth_log.read())
-
-            if matches[0] == 'deauthenticated' and matches[1] == 'authenticated' and matches[2] == 'deauthenticated':
-                self.assertFalse(True)
         count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         self.assertEqual(count, 2)
 

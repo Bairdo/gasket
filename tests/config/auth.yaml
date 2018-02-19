@@ -2,6 +2,7 @@
 version: 0
 
 logger_location: %(logger_location)s
+logger_level: debug
 
 faucet:
     prometheus_port: %(promport)d
