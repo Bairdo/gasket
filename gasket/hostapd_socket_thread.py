@@ -50,7 +50,7 @@ class HostapdSocketThread(threading.Thread):
         try:
             self.logger.info('sockets initiated')
             while not self.stop:
-                self.logger.info('waiting for receive')
+                self.logger.debug('waiting for receive')
                 data = ""
                 try:
                     data = str(self.unsolicited_sock.receive())

@@ -20,6 +20,6 @@ def get_log_level(log_level):
         return logging.INFO
     elif isinstance(log_level, int):
         return log_level
-    elif log_level.upper() not in ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']:
+    elif log_level.upper() in ['CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG']:
         return getattr(logging, log_level.upper())
     return logging.INFO
