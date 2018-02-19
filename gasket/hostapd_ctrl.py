@@ -164,7 +164,7 @@ class HostapdCtrl(object):
                 k, v = s.split('=')
                 dic[k] = v
             except ValueError:
-                self.logger.info('line: %s cannot be split by "="', s)
+                self.logger.warn('line: %s cannot be split by "=", dropping', s)
         return dic
 
     def receive(self, size=4096):
@@ -196,7 +196,7 @@ class HostapdCtrlUNIX(HostapdCtrl):
         self.ifname = ifname
         self.timeout = timeout
 
-        self.logger.info('connecting')
+        self.logger.info('Connecting to UNIX socket %s', ifname)
         while not self.reconnect(ifname):
             time.sleep(1)
 
@@ -242,14 +242,14 @@ class HostapdCtrlUNIX(HostapdCtrl):
             raise RuntimeError('hostapd ctrl socket path must be <= 108 bytes (including null terminator), was: %d bytes, %s' %
                                (len(cli_path), cli_path))
 
-        self.logger.info('path length is fine.')
+        self.logger.debug('UNIX socket path length is fine.')
         for i in range(3):
             try:
                 self.soc.bind(cli_path)
                 self.logger.info('Bound to UNIX Socket: %s', cli_path)
                 break
             except OSError as e:
-                self.logger.error('Unable to bind to UNIX Socket: %s' % cli_path)
+                self.logger.error('Unable to bind to UNIX Socket: %s', cli_path)
                 self.logger.exception(e)
                 if i < 2:
                     os.remove(cli_path)
@@ -260,9 +260,8 @@ class HostapdCtrlUNIX(HostapdCtrl):
 
         try:
             self.soc.connect(ctrl_path)
-            self.logger.info('Connected')
         except FileNotFoundError as e:
-            self.logger.error('Unable to connect to socket. FileNotFoundError %s' % ctrl_path)
+            self.logger.error('Unable to connect to socket. FileNotFoundError %s', ctrl_path)
             self.soc.close()
             os.remove(cli_path)
             self.soc = None
@@ -307,7 +306,7 @@ class HostapdCtrlUDP(HostapdCtrl):
         self.bind_port = bind_port
 
         self.timeout = timeout
-        self.logger.info('connecting')
+        self.logger.info('Connecting to UDP socket %s', self.sockaddr)
         while not self.reconnect(ifname):
             time.sleep(1)
 
@@ -361,7 +360,6 @@ class HostapdCtrlUDP(HostapdCtrl):
             try:
                 self.soc.connect(self.sockaddr)
                 cookie = self.get_cookie()
-                self.logger.info(cookie)
                 self.cookie = cookie.lstrip("COOKIE=")
                 self.logger.info('UDP Socket Cookie is %s', self.cookie)
             except socket.timeout:

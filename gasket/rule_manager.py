@@ -158,8 +158,9 @@ class RuleManager(object):
         if 'aauth' not in base:
             base['aauth'] = {}
 
+        self.logger.debug('base %s', base)
+
         for aclname, acllist in list(rules.items()):
-            self.logger.debug('base %s', base)
             self.logger.debug("aclname: %s user: %s mac:%s", aclname, user, mac)
             base['aauth'][aclname + user + mac] = acllist
             base_acl = base['acls'][aclname]
@@ -174,9 +175,9 @@ class RuleManager(object):
         # write back to filename
         write_yaml(base, filename + '.tmp')
         self.backup_file(filename)
-        self.logger.warn('backed up base')
+        self.logger.debug('backed up base')
         self.swap_temp_file(filename)
-        self.logger.warn('swapped tmp for base')
+        self.logger.debug('swapped tmp for base')
         return base
 
     def authenticate(self, username, mac, switch, port, acl_list):
@@ -226,7 +227,6 @@ class RuleManager(object):
         Returns:
             number of times faucet has reloaded
         """
-
         self.logger.debug('getting reload count')
         for i in range(5):
             try:
@@ -255,8 +255,8 @@ class RuleManager(object):
         """
         with open(self.base_filename) as f:
             base = yaml.safe_load(f)
-
-        self.logger.info(base)
+        self.logger.info('removing username %s, mac %s from base', username, mac)
+        self.logger.debug(base)
         remove = []
 
         if 'aauth' in base:
@@ -278,11 +278,11 @@ class RuleManager(object):
                         remove.append(acl)
                         break
                     elif '_name_' in rule and username == rule['_name_']:
-                        self.logger.warning('removing based on name')
+                        self.logger.debug('removing based on name')
                         remove.append(acl)
                         break
         self.logger.info('remove from auth')
-        self.logger.info(remove)
+        self.logger.debug(remove)
         removed = False
         for aclname in remove:
             del base['aauth'][aclname]
@@ -305,7 +305,7 @@ class RuleManager(object):
             self.swap_temp_file(self.base_filename)
 
         self.logger.info('updated base')
-        self.logger.info(base)
+        self.logger.debug(base)
         return base, removed
 
     def deauthenticate(self, username, mac):
@@ -317,9 +317,7 @@ class RuleManager(object):
             True if a client that is authed has rules removed, or if client is not authed.
             other wise false (faucet fails to reload)
         """
-        self.logger.debug('deauthenticate %s %s' % (username, mac))
-
-        self.logger.info('user: {} mac: {} already authenticated removing'.format(username, mac))
+        self.logger.info('deauthenticate user: %s mac: %s', username, mac)
         # update base
         base, changed = self.remove_from_base(username, mac)
         # update faucet only if config has changed
@@ -387,58 +385,5 @@ class RuleManager(object):
                 contr_pid = int(pid_file.read())
                 os.kill(contr_pid, signal_type)
 
-    def reset_port_acl(self, dp_name, port_num):
-        """Reset the port acl back to the original state (where nothing is authenticated)
-        Args:
-            dp_name (str): name of datapath.
-            port_num (int): port number.
-        Returns:
-            list of MAC addresses (str) that were on the port.
-        """
-        # TODO optimize the ording of this - do we want to signal faucet asap?
-        # find the acl name for that port.
-        acl_name = ""
-        removed_macs = []
-        data = yaml.load(open(self.config.faucet_config_file, 'r'))
-        if dp_name in data['dps']:
-            self.logger.debug('found dp_name: %s in dps', dp_name)
-            if port_num in data['dps'][dp_name]['interfaces']:
-                self.logger.debug('found port_num: %d', port_num)
-                if 'acl_in' in data['dps'][dp_name]['interfaces'][port_num]:
-                    self.logger.debug('can rewrite acl')
-                    acl_name = data['dps'][dp_name]['interfaces'][port_num]['acl_in']
-                    # find the acl for acl_name in base-original.
-                    orig = yaml.load(open(self.config.base_filename + '-orig', 'r'))
-                    orig_acl = orig['acls'][acl_name]
-                    # copy the original acl over to the current base.
-                    base = yaml.load(open(self.config.base_filename, 'r'))
-
-                    base['acls'][acl_name] = orig_acl
-
-                    final = create_faucet_acls(base, self.logger)
-                    write_yaml(final, self.faucet_acl_filename + '.tmp', True)
-                    self.backup_file(self.faucet_acl_filename)
-                    self.swap_temp_file(self.faucet_acl_filename)
-
-                    write_yaml(base, self.base_filename + '.tmp')
-                    self.backup_file(self.base_filename)
-                    self.swap_temp_file(self.base_filename)
-
-                    # sighup.
-                    start_count = self.get_faucet_reload_count()
-                    self.send_signal(signal.SIGHUP)
-                    self.logger.info('reset acl signal sent.')
-                    for i in range(400):
-                        end_count = self.get_faucet_reload_count()
-                        if end_count > start_count:
-                            self.logger.info('reset acl - faucet has reloaded.')
-                            return removed_macs
-                        time.sleep(0.05)
-                        self.logger.info('reset - waiting for faucet to process sighup config reload. %d', i)
-                    self.logger.error('reset - faucet did not process sighup within 20 seconds. 0.05 * 400')
-
-                    # send signal.
-
-        return removed_macs
 if __name__ == '__main__':
     main()

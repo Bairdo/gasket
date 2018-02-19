@@ -6,7 +6,6 @@ and sending it a SIGHUP.
 # pylint: disable=import-error
 
 import argparse
-import logging
 import queue
 import re
 import signal
@@ -102,7 +101,8 @@ class AuthApp(object):
         self.setup_datapath()
         self.get_prometheus_mac_learning()
         print('Started socket Threads.')
-        self.logger.info('Starting worker thread.')
+        print('Working')
+        self.logger.info('Working worker thread.')
         while True:
             work = self.work_queue.get()
 
@@ -149,9 +149,9 @@ class AuthApp(object):
         ip = host_wi.ip
         vid = host_wi.vid
         port_no = host_wi.port
-        self.logger.info('learning mac %s at port: %d' % (mac, port_no))
+        self.logger.info('learning mac %s at dp: %s port: %d', mac, dp_name, port_no)
         if not mac in self.macs:
-            self.logger.info('learning new host %s' % mac)
+            self.logger.info('learning new host %s', mac)
             self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, ip=ip,
                                                          logger=self.logger, rule_man=self.rule_man)
 
@@ -163,15 +163,15 @@ class AuthApp(object):
         And creates L2Learn work for macs already learnt.
         """
         # query faucets promethues.
-        self.logger.info('querying prometheus')
+        self.logger.info('querying prometheus for "learned_macs"')
         try:
             prom_mac_table = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
                                                                    ['learned_macs'])[0]
         except Exception as e:
             self.logger.exception(e)
-            return '', -1
-        self.logger.info('queried prometheus. mac_table:\n%s\n',
-                         prom_mac_table)
+            return
+        self.logger.debug('queried prometheus. mac_table:\n%s\n',
+                          prom_mac_table)
 
         for line in prom_mac_table:
             labels, float_as_mac = line.split(' ')
@@ -191,7 +191,7 @@ class AuthApp(object):
             user (str): Username.
             acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
         """
-        self.logger.info("****authenticated: %s %s", mac, user)
+        self.logger.info("authenticating: %s %s", mac, user)
         if not mac in self.macs:
             self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, logger=self.logger,
                                                          rule_man=self.rule_man)
@@ -200,7 +200,7 @@ class AuthApp(object):
         port = host.get_authing_learn_ports()
         host = host.authenticate(user, port, acl_list)
         self.macs[mac] = host
-
+        self.logger.info('authenticate complete')
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.
         # Perhaps look into the CoA radius thing, so that process looks like:
@@ -219,9 +219,10 @@ class AuthApp(object):
             mac (str): mac address string to deauth
             username (str): username to deauth.
         """
-        self.logger.info('---deauthenticated: %s %s', mac, username)
+        self.logger.info('deauthenticating: %s %s', mac, username)
         host = self.macs[mac]
         host.deauthenticate(None)
+        self.logger.info('deauthenticate complete')
         # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
         # will likley think it has logged off, so is there anything we can do from hostapd to
         # say they have not actually logged off.
@@ -230,7 +231,6 @@ class AuthApp(object):
     def port_status_handler(self, port_change):
         """Deauthenticates all hosts on a port if the port has gone down.
         """
-        self.logger.info('port status changed')
         dpid = port_change.dp_id
         port_no = port_change.port_no
         port_status = port_change.status
@@ -267,7 +267,7 @@ if __name__ == "__main__":
         config_filename = args.config[0]
     print('Loading config %s' % config_filename)
     auth_config = AuthConfig(config_filename)
-    log = auth_app_utils.get_logger('auth_app', auth_config.logger_location, logging.DEBUG, 1)
+    log = auth_app_utils.get_logger('auth_app', auth_config.logger_location, auth_config.logger_level, 1)
 
     aa = AuthApp(auth_config, log)
     print('Running AuthApp')

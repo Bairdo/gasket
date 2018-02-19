@@ -1,4 +1,4 @@
-"""Module for various types of work for the work_queue. 
+"""Module for various types of work for the work_queue.
 TODO possibly should add a work method to WorkItem, instead of using isinstance?"""
 
 class WorkItem(object):
@@ -35,8 +35,7 @@ class AuthWorkItem(AuthenticationWorkItem):
 class DeauthWorkItem(AuthenticationWorkItem):
     """Class that represents a deauthentication item of work,
     """
-    def __init__(self, mac, hostapd_name):
-        super().__init__(mac, hostapd_name)
+    pass
 
 
 class RabbitWorkItem(WorkItem):
