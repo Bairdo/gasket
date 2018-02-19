@@ -2,7 +2,7 @@
 
 from gasket.gasket_conf_utils import validate_ip_address
 from gasket.gasket_conf_utils import validate_port
-from gasket.gasket_conf_utils import get_logger_level
+from gasket.gasket_conf_utils import get_log_level
 
 from gasket import gasket_conf
 
@@ -81,7 +81,7 @@ class HostapdConf(gasket_conf.GasketConf):
         if self.unsolicited_bind_port:
             validate_port(self.unsolicited_bind_port)
 
-        self.logger_level = get_logger_level(self.logger_level)
+        self.logger_level = get_log_level(self.logger_level)
 
     def set_defaults(self):
         super().set_defaults()
