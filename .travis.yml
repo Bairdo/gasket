@@ -31,4 +31,9 @@ script:
   - docker build -t ${FAUCET_TEST_IMG} -f Dockerfile.tests .
   - docker images
   - if [[ ${TRAVIS_BRANCH} == "master" ]] && [[ ${TRAVIS_PULL_REQUEST} == "false" ]]; then mkdir -p $(dirname ${DOCKER_CACHE_FILE}) ; docker save ubuntu:latest | gzip > ${DOCKER_CACHE_FILE} ; fi
-  - sudo docker run --privileged -t -e FAUCET_TESTS="" ${FAUCET_TEST_IMG}
+  - sudo docker-compose up -d rabbitmq_server
+  - sudo docker pull faucet/faucet-event-adapter-rabbitmq
+  - docker images
+  - CONTROL_NETWORK="$(sudo docker network ls |grep control-plane | cut -c 1-12)"
+  - sudo docker run --network=$CONTROL_NETWORK --privileged -t -e FAUCET_TESTS="" ${FAUCET_TEST_IMG}
+  - sudo docker-compose kill rabbitmq_server

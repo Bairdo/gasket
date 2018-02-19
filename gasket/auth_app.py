@@ -17,7 +17,11 @@ from gasket import rule_manager
 from gasket import auth_app_utils
 from gasket.hostapd_conf import HostapdConf
 from gasket import hostapd_socket_thread
-from gasket.work_item import AuthWorkItem, DeauthWorkItem
+from gasket import work_item
+from gasket import rabbitmq
+from gasket.host import UnlearntUnauthenticatedHost
+from gasket.port import Port
+from gasket.datapath import Datapath
 
 
 class Proto(object):
@@ -56,6 +60,11 @@ class AuthApp(object):
     work_queue = None
     threads = []
 
+    dps = {}
+    # dp_name : Datapath
+    macs = {}
+    # mac : Host
+
     def __init__(self, config, logger):
         super(AuthApp, self).__init__()
         self.config = config
@@ -84,58 +93,95 @@ class AuthApp(object):
             self.threads.append(hst)
             self.logger.info('Thread running')
 
+        rt = rabbitmq.RabbitMQ(self.work_queue, self.config.logger_location)
+        try:
+            rt.start()
+            self.threads.append(rt)
+        except Exception as e:
+            self.logger.exception(e)
+        self.setup_datapath()
+        self.get_prometheus_mac_learning()
         print('Started socket Threads.')
         self.logger.info('Starting worker thread.')
         while True:
-            work_item = self.work_queue.get()
+            work = self.work_queue.get()
 
-            self.logger.info('Got work from queue')
-            if isinstance(work_item, AuthWorkItem):
-                self.authenticate(work_item.mac, work_item.username, work_item.acllist)
-            elif isinstance(work_item, DeauthWorkItem):
-                self.deauthenticate(work_item.mac)
+            self.logger.info('Got %s work from queue ', type(work))
+            if isinstance(work, work_item.AuthWorkItem):
+                self.authenticate(work.mac, work.username, work.acllist)
+            elif isinstance(work, work_item.DeauthWorkItem):
+                self.deauthenticate(work.mac)
+            elif isinstance(work, work_item.L2LearnWorkItem):
+                self.l2learn(work)
+            elif isinstance(work, work_item.PortChangeWorkItem):
+                self.port_status_handler(work)
             else:
-                self.logger.warn("Unsupported WorkItem type: %s", type(work_item))
+                self.logger.warn("Unsupported WorkItem type: %s", type(work))
 
-    def _get_dp_name_and_port(self, mac):
-        """Queries the prometheus faucet client,
-         and returns the 'access port' that the mac address is connected on.
+    def setup_datapath(self):
+        """Builds the datpath/ports this instance of gasket is aware of.
+        """
+        for dp_name, datapath in self.config.dp_port_mode.items():
+            dp_id = datapath['id']
+            if not dp_name in self.dps:
+                dp = Datapath(dp_id, dp_name)
+                self.dps[dp_name] = dp
+                self.logger.debug('added dp %s to dps', dp)
+
+            dp = self.dps[dp_name]
+            for port_no, conf_port in datapath['interfaces'].items():
+                if not port_no in self.dps[dp_name].ports:
+                    self.logger.debug('adding port %s' % port_no)
+                    access_mode = None
+                    if conf_port:
+                        access_mode = conf_port.get('auth_mode', None)
+
+                    dp.add_port(Port(port_no, dp, access_mode))
+
+    def l2learn(self, host_wi):
+        """Learns a host, if host is already authenticated rules are applied.
         Args:
-             mac MAC address to find port for.
-        Returns:
-             dp name & port number.
+            host_wi (work_item.L2LearnWorkItem): the host to learn
+        """
+        dp_name = host_wi.dp_name
+        dp_id = host_wi.dp_id
+        mac = host_wi.mac
+        ip = host_wi.ip
+        vid = host_wi.vid
+        port_no = host_wi.port
+        self.logger.info('learning mac %s at port: %d' % (mac, port_no))
+        if not mac in self.macs:
+            self.logger.info('learning new host %s' % mac)
+            self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, ip=ip,
+                                                         logger=self.logger, rule_man=self.rule_man)
+
+        host = self.macs[mac]
+        self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
+
+    def get_prometheus_mac_learning(self):
+        """Queries the prometheus faucet client,
+        And creates L2Learn work for macs already learnt.
         """
         # query faucets promethues.
         self.logger.info('querying prometheus')
         try:
-            prom_mac_table, prom_name_dpid = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
-                                                                                   ['learned_macs', 'faucet_config_dp_name'])
+            prom_mac_table = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
+                                                                   ['learned_macs'])[0]
         except Exception as e:
             self.logger.exception(e)
             return '', -1
-        self.logger.info('queried prometheus. mac_table:\n%s\n\nname_dpid:\n%s',
-                         prom_mac_table, prom_name_dpid)
-        ret_port = -1
-        ret_dp_name = ""
-        dp_port_mode = self.config.dp_port_mode
+        self.logger.info('queried prometheus. mac_table:\n%s\n',
+                         prom_mac_table)
+
         for line in prom_mac_table:
             labels, float_as_mac = line.split(' ')
             macstr = auth_app_utils.float_to_mac(float_as_mac)
             self.logger.debug('float %s is mac %s', float_as_mac, macstr)
-            if mac == macstr:
-                # if this is also an access port, we have found the dpid and the port
-                values = self.learned_macs_compiled_regex.match(labels)
-                dpid, dp_name, n, port, vlan = values.groups()
-                if dp_name in dp_port_mode and \
-                        'interfaces' in dp_port_mode[dp_name] and \
-                        int(port) in dp_port_mode[dp_name]['interfaces'] and \
-                        'auth_mode' in dp_port_mode[dp_name]['interfaces'][int(port)] and \
-                        dp_port_mode[dp_name]['interfaces'][int(port)]['auth_mode'] == 'access':
-                    ret_port = int(port)
-                    ret_dp_name = dp_name
-                    break
-        self.logger.info("name: %s port: %d", ret_dp_name, ret_port)
-        return ret_dp_name, ret_port
+
+            # if this is also an access port, we have found the dpid and the port
+            values = self.learned_macs_compiled_regex.match(labels)
+            dpid, dp_name, n, port, vlan = values.groups()
+            self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port), int(vlan), macstr, None))
 
     def authenticate(self, mac, user, acl_list):
         """Authenticates the user as specifed by adding ACL rules
@@ -146,21 +192,14 @@ class AuthApp(object):
             acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
         """
         self.logger.info("****authenticated: %s %s", mac, user)
+        if not mac in self.macs:
+            self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, logger=self.logger,
+                                                         rule_man=self.rule_man)
 
-        switchname, switchport = self._get_dp_name_and_port(mac)
-
-        if switchname == '' or switchport == -1:
-            self.logger.warn(
-                "Error switchname '%s' or switchport '%d' is unknown. Cannot generate acls for authed user '%s' on MAC '%s'",
-                switchname, switchport, user, mac)
-            # TODO one or the other?
-#            self.hapd_req.deauthenticate(mac)
-#            self.hapd_req.disassociate(mac)
-            return
-
-        self.logger.info('found mac')
-
-        success = self.rule_man.authenticate(user, mac, switchname, switchport, acl_list)
+        host = self.macs[mac]
+        port = host.get_authing_learn_ports()
+        host = host.authenticate(user, port, acl_list)
+        self.macs[mac] = host
 
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.
@@ -181,64 +220,29 @@ class AuthApp(object):
             username (str): username to deauth.
         """
         self.logger.info('---deauthenticated: %s %s', mac, username)
-
-        self.rule_man.deauthenticate(username, mac)
+        host = self.macs[mac]
+        host.deauthenticate(None)
         # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
         # will likley think it has logged off, so is there anything we can do from hostapd to
         # say they have not actually logged off.
         # EAP LOGOFF is a one way message (not ack-ed)
 
-    def is_port_managed(self, dpid, port_num):
-        """
-        Args:
-            dpid (int): datapath id.
-            port_num (int): port number.
-        Returns:
-            datapath name (str) if this dpid & port combo are managed (provide authentication).
-             otherwise None
-        """
-        # query prometheus for the dpid -> name.
-        # use the name to look in auth.yaml for the datapath.
-        # if the dp is there, then use the port.
-        #    if the port is there and it is set to 'access' return true
-        # otherwise return false.
-        dp_names = auth_app_utils.scrape_prometheus_vars(self.config.prom_url, ['dp_status'])[0]
-        dp_name = ''
-        for l in dp_names:
-            pattern = r'dp_id="0x{:x}",dp_name="([\w-]+)"}}'.format(dpid)
-            match = re.search(pattern, l)
-            if match:
-                dp_name = match.group(1)
-                break
-
-        if dp_name in self.config.dp_port_mode:
-            if port_num in self.config.dp_port_mode[dp_name]['interfaces']:
-                if 'auth_mode' in self.config.dp_port_mode[dp_name]['interfaces'][port_num]:
-                    mode = self.config.dp_port_mode[dp_name]['interfaces'][port_num]['auth_mode']
-                    if mode == 'access':
-                        return dp_name
-        return None
-
-    def port_status_handler(self, ryu_event):
+    def port_status_handler(self, port_change):
         """Deauthenticates all hosts on a port if the port has gone down.
         """
-        msg = ryu_event.msg
-        ryu_dp = msg.datapath
-        dpid = ryu_dp.id
-        port = msg.desc.port_no
-
-        port_status = msg.desc.state & msg.datapath.ofproto.OFPPS_LINK_DOWN
-        self.logger.info('DPID %d, Port %d has changed status: %d', dpid, port, port_status)
-        if port_status == 1: # port is down
-            dp_name = self.is_port_managed(dpid, port)
-            self.logger.debug('dp_name: %s', dp_name)
-            if dp_name:
-                removed_macs = self.rule_man.reset_port_acl(dp_name, port)
-                self.logger.info('removed macs: %s', removed_macs)
-                for mac in removed_macs:
-                    self.logger.info('sending deauth for %s', mac)
-#                    self.hapd_req.deauthenticate(mac)
-
+        self.logger.info('port status changed')
+        dpid = port_change.dp_id
+        port_no = port_change.port_no
+        port_status = port_change.status
+        dp_name = port_change.dp_name
+        self.logger.info('DPID %d, Port %s has changed status: %d', dpid, port_no, port_status)
+        if not port_status: # port is down
+            port = self.dps[dp_name].ports[port_no]
+            if port.auth_mode == 'access':
+                self.logger.debug('DP %s is mananged.', dp_name)
+                for mac in list(port.authed_hosts):
+                    self.logger.debug('mac: %s deauthed via port down' % mac)
+                    self.macs[mac] = self.macs[mac].deauthenticate(port)
                 self.logger.debug('reset port completed')
 
     def _handle_sigint(self, sigid, frame):

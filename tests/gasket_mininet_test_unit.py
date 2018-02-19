@@ -6,15 +6,19 @@ These tests use the https://github.com/faucetsdn/faucet base test classes as the
 # pylint: disable=missing-docstring
 # pylint: disable=too-many-arguments
 
+import datetime
 from concurrent import futures
 import os
 import random
 import re
 import shutil
+import socket
 import string
+import subprocess
 import time
 import unittest
 
+import docker
 import ipaddress
 import yaml
 
@@ -35,10 +39,14 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
 
     max_hosts = 3
 
+    rabbit_adapter_stdout = None
+    rabbit_adapter_process = None
+
     def setup(self):
         super(GasketTest, self).setUp()
 
     def tearDown(self):
+        print(datetime.datetime.now())
         if self.net is not None:
             host = self.net.hosts[0]
             print "about to kill everything"
@@ -47,6 +55,9 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
 
             self.net.stop()
         super(GasketTest, self).tearDown()
+        self.rabbit_adapter_stdout.flush()
+        self.rabbit_adapter_process.kill()
+        self.rabbit_adapter_stdout.flush()
 
     def setup_hosts(self, hosts):
         """Create wpa_supplicant config file for each authenticating host.
@@ -114,10 +125,11 @@ eapol_flags=0
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
+                print('logoff configure')
                 time.sleep(0.25)
             self.assertGreater(end_reload_count, start_reload_count)
 
-    def logon_dot1x(self, host, intf=None, netns=None, wait=True):
+    def logon_dot1x(self, host, intf=None, netns=None, wait=False):
         """Log on a host using dot1x
         Args:
             host (mininet.host): host to logon.
@@ -164,6 +176,7 @@ eapol_flags=0
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
+                print('logon configure')
                 time.sleep(0.5)
             # this in only an indicator, it could be possible for another host to successfully logon (and reconfigure faucet), thus increasing the counter.
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.' % (host, intf, host.MAC(), new_status))
@@ -231,6 +244,7 @@ eapol_flags=0
                 end_reload_count = self.get_configure_count()
                 if end_reload_count > start_reload_count:
                     break
+                print('relogon configure')
                 time.sleep(0.5)
             self.assertGreater(end_reload_count, start_reload_count, 'Host: %s. Intf: %s MAC: %s didn\'t cause config reload. wpa_cli status: %s.\nOld Status: %s' % (host, intf, host.MAC(), new_status, old_status))
             self.assertLess(i, 3, 'relogon has taken %d to reload. max allowable time 1.5seconds' % i)
@@ -265,6 +279,15 @@ eapol_flags=0
                 return True
         return False
 
+    def run_rabbit_adapter(self, host):        
+        os.system('ping -c1 172.222.0.104')
+
+        with open('/etc/hosts' , 'a') as hosts_file:
+            hosts_file.write('172.222.0.104 rabbit-server\n')
+
+        self.rabbit_adapter_stdout = open('%s/adapter.log' % self.tmpdir, 'wr') 
+        self.rabbit_adapter_process = subprocess.Popen(['env', 'FAUCET_EVENT_SOCK={0}'.format(self.event_sock), 'FA_RABBIT_HOST=rabbit-server', 'python3', '/gasket-src/adapters/vendors/rabbitmq/rabbit.py'],
+                                stdout=self.rabbit_adapter_stdout, stderr=subprocess.STDOUT)
 
     def run_hostapd(self, host):
         """Compiles and starts the hostapd process.
@@ -444,6 +467,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         config_values['intf'] = portal_name + '-eth0'  # self.net.hosts[0].defaultIntf().name # need to get this.
         config_values['pid_file'] = self.net.controller.pid_file
         config_values['controller_ip'] = '127.0.0.1'
+        config_values['dp_id'] = self.dpid
 
         open('%s/auth.yaml' % self.tmpdir, 'w').write(httpconfig % config_values)
         open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL) # need to get C_B_A
@@ -454,7 +478,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         os.system('python3.5 -m gasket.rule_manager {1} {2} > {0}/rule_man.log 2> {0}/rule_man.err'.format(self.tmpdir, base, faucet_acl))
         self.verify_hup_faucet()
         print('Faucet successfully hup-ed')
-        time.sleep(1)
+
 
 class GasketSingleSwitchTest(GasketTest):
     """Base Test class for single switch topology
@@ -515,6 +539,7 @@ class GasketSingleSwitchTest(GasketTest):
         self.start_tcpdump(gasket_host, interface='%s-eth0' % gasket_host.name)
 
         self.init_gasket(gasket_host)
+        self.run_rabbit_adapter(self.net.controller)
         self.run_hostapd(portal)
         self.run_freeradius(portal)
 
@@ -522,6 +547,7 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.clients = self.net.hosts[2:]
         self.setup_hosts(self.clients)
+        time.sleep(15)
 
 
 class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
@@ -857,13 +883,8 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
 
         with open('%s/base-acls.yaml' % self.tmpdir, 'rw') as f:
             start_base = f.read()
-        try:
-            self.logon_dot1x(h0)
-        except AssertionError:
-            print('logon didnt reload config')
-            pass
-        else:
-            self.assertTrue(False, 'logon should have assertion failed due to config being reloaded, when should be same as before (therefore no reload).')
+
+        self.logon_dot1x(h0)
 
         with open('%s/auth_app.log' % self.tmpdir, 'r') as auth_log:
             matches = re.findall('authenticated', auth_log.read())
@@ -880,9 +901,8 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertTrue(start_base == end_base)
 
     def test_same_user_mac_logon_2_diff_port(self):
-        """Tests that the same username and the same MAC address can logon on the different ports.
-        The system is ambiguous in that the first port to authenticate may or may not be logged off,
-        when the second start the authentication process. TODO need to clarify what correct behavoiur should be.
+        """Tests that the same username and the same MAC address cannot be logged on on two ports at the same time..
+        The first port to logon should be logged off, and the second logged on.
         """
         h0, h1 = self.clients[0:2]
         interweb = self.net.hosts[1]
@@ -895,11 +915,10 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         h1.cmd('sed -i -e s/hostuser1/hostuser0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
-        self.logon_dot1x(h1)
+        self.logon_dot1x(h1, wait=False)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
         self.one_ipv4_ping(h1, interweb.IP(), retries=5)
 
-        # TODO 
-        # self.one_ipv4_ping(h0, interweb.IP())
         count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
         self.assertGreaterEqual(count, 2)
 
@@ -924,7 +943,6 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
-@unittest.skip('LinkState not currently supported')
 class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
     def test_dp_link_down_up(self):

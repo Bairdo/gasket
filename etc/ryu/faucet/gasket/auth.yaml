@@ -5,7 +5,10 @@ logger_location: /var/log/ryu/faucet/gasket/auth_app.log
 
 faucet:
     prometheus_port: 9302
-    ip: 127.0.0.1
+    ip: 172.222.0.103
+    # Name of the faucet docker container. Either controller_pid or container name must be used.
+    # Container must be reachable via the hosts docker unix socket (/var/run/docker.sock)
+    container_name: gasket_faucet_1
 
 files:
     # the location of files. pid should contain the process id (pid) of the main faucet-process (ryu-manager)
@@ -18,9 +21,16 @@ files:
 # rules to be applied for a user once authenticated.
 auth-rules:
     file: /etc/ryu/faucet/gasket/rules.yaml
+
 dps:
     faucet-1:
+        # datapath id.
+        id: 0x1
         interfaces:
+            # all interfaces on the switch must be specified.
+            # Even if not being managed by Gasket.
+            # Port 1 is not managed.
+            1:
             2:
                 auth_mode: access
                 #this port is managed by these hostapds.

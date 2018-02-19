@@ -1,5 +1,6 @@
 concurrencytest
-faucet==1.6.19
+docker
+faucet==1.6.21
 futures
 ipaddress
 netifaces

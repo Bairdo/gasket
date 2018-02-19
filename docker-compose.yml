@@ -50,7 +50,7 @@ services:
         volumes:
             - './docker-compose/gasket/log/ryu/faucet:/var/log/ryu/faucet'
             - './etc/ryu/faucet:/etc/ryu/faucet'
-
+            - '/var/run/:/var/run/'
         networks:
             control-plane-net:
                 ipv4_address: 172.222.0.100
@@ -69,6 +69,35 @@ services:
         networks:
             radius-net:
                 ipv4_address: 172.221.0.102
+
+    rabbitmq_adapter:
+        restart: always
+        depends_on:
+            - faucet
+        image: 'faucet/faucet-event-adapter-rabbitmq'
+        volumes_from:
+            - faucet
+        environment:
+            FAUCET_EVENT_SOCK: '${FAUCET_EVENT_SOCK}'
+            FA_RABBIT_HOST: '${FA_RABBIT_HOST}'
+            FA_RABBIT_PORT: '${FA_RABBIT_PORT}'
+            FA_RABBIT_EXCHANGE: '${FA_RABBIT_EXCHANGE}'
+            FA_RABBIT_EXCHANGE_TYPE: '${FA_RABBIT_EXCHANGE_TYPE}'
+            FA_RABBIT_ROUTING_KEY: '${FA_RABBIT_ROUTING_KEY}'
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.105
+
+
+    rabbitmq_server:
+        restart: always
+        image: 'rabbitmq:3-management'
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.104
+
+        ports:
+            - "5672:5672"
 
 networks:
     control-plane-net:
