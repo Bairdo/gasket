@@ -2,6 +2,9 @@
 version: 0
 
 logger_location: /var/log/ryu/faucet/gasket/auth_app.log
+# These are the same as the standard python levels.
+# CRITICAL, ERROR, WARNING, INFO, DEBUG. 
+logger_level: DEBUG
 
 faucet:
     prometheus_port: 9302
@@ -67,3 +70,6 @@ hostapds:
         # Name of the hostapd interface (NIC) this hostapd config will receive events for.
         # Defaults to the default given by hostapd.
 #        ifname: wlan0
+        # Log level used for this connection. (Optional)
+        # See top level 'logger_level' for acceptable options
+        logger_level: DEBUG
