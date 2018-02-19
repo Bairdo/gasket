@@ -2,6 +2,8 @@
 
 from gasket.gasket_conf_utils import validate_ip_address
 from gasket.gasket_conf_utils import validate_port
+from gasket.gasket_conf_utils import get_log_level
+
 from gasket import gasket_conf
 
 
@@ -25,7 +27,7 @@ class HostapdConf(gasket_conf.GasketConf):
     request_timeout = None
     unsolicited_timeout = None
     ifname = None
-
+    logger_level = None
 
     defaults = {
         'name': None,
@@ -40,6 +42,7 @@ class HostapdConf(gasket_conf.GasketConf):
         'request_timeout': 5,
         'unsolicited_timeout': 5,
         'ifname': None,
+        'logger_level': None,
     }
 
     defaults_types = {
@@ -55,6 +58,7 @@ class HostapdConf(gasket_conf.GasketConf):
         'request_timeout': int,
         'unsolicited_timeout': int,
         'ifname': str,
+        'logger_level': (str, int),
     }
 
 
@@ -76,6 +80,8 @@ class HostapdConf(gasket_conf.GasketConf):
             validate_ip_address(self.unsolicited_bind_address)
         if self.unsolicited_bind_port:
             validate_port(self.unsolicited_bind_port)
+
+        self.logger_level = get_log_level(self.logger_level)
 
     def set_defaults(self):
         super().set_defaults()

@@ -1,6 +1,8 @@
 """Representation of a switch port."""
 class Port(object):
-
+    """Port that belongs to a datapath.
+    Keeps track of hosts learnt and authenticated on it.
+    """
     number = None
     datapath = None
     auth_mode = None

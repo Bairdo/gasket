@@ -106,7 +106,7 @@ class UnlearntAuthenticatedHost(Host):
         self.rule_man.deauthenticate(self.username, self.mac)
         # In theory the user could have changed.
         self.username = username
-        self.logger.info('ua authed')
+        self.logger.info('ua authed port: %s', port)
         return self
 
     def deauthenticate(self, port):
@@ -123,10 +123,9 @@ class UnlearntAuthenticatedHost(Host):
         # return new LearntAuthedHost.
         self.learn_ports[port.number] = port
         self.ordered_learn_ports.append(port.number)
-        self.logger.info('ua learn port %s' % port)
 
         self.auth_port = self.get_authing_learn_ports()
-        self.logger.info('ua auth port %s' % self.auth_port)
+        self.logger.info('ua learn port: %s, auth port %s', port, self.auth_port)
         if self.auth_port == port:
             port.add_authed_host(self.mac)
 
@@ -136,14 +135,11 @@ class UnlearntAuthenticatedHost(Host):
                                        self.auth_port.number, self.acl_list)
 
         port.add_learn_host(self.mac)
-
-        self.logger.info('ua learn')
-        self.logger.info('ua auth_port %s' % self.auth_port)
         return LearntAuthenticatedHost(host=self)
 
     def unlearn(self, port):
         # this shouldnt be possible - already unlearnt
-        self.logger.info('ua cant unlearn')
+        self.logger.warn('ua cant unlearn if not already learnt')
         return self
 
 
@@ -183,7 +179,7 @@ class LearntAuthenticatedHost(Host):
         self.auth_port.add_authed_host(self.mac)
         self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
                                    self.auth_port.number, self.acl_list)
-        self.logger.info('la authed')
+        self.logger.info('la authed auth_port', self.auth_port)
         return self
 
     def deauthenticate(self, port):
@@ -199,7 +195,7 @@ class LearntAuthenticatedHost(Host):
         self.learn_ports[port.number] = port
         self.ordered_learn_ports.append(port.number)
         port.add_learn_host(self.mac)
-        self.logger.info('la learn')
+        self.logger.info('la learn port: %s', port)
         return self
 
     def unlearn(self, port):
@@ -213,7 +209,7 @@ class LearntAuthenticatedHost(Host):
         if p is not None:
             self.ordered_learn_ports.remove(port.number)
         if not self.learn_ports:
-            self.logger.info('la unlearn now ua')
+            self.logger.info('la unlearnt all now ua')
             return UnlearntAuthenticatedHost(host=self)
         self.logger.info('la unlearn still has learn_ports')
         return self
@@ -242,13 +238,12 @@ class LearntUnauthenticatedHost(Host):
         self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
                                    self.auth_port.number, self.acl_list)
         port.add_authed_host(self.mac)
-        self.logger.info('lu auth')
-        self.logger.info('lu auth_port %s' % self.auth_port)
+        self.logger.info('lu auth auth_port %s', self.auth_port)
         return LearntAuthenticatedHost(host=self)
 
     def deauthenticate(self, port):
         # shouldnt be possible
-        self.logger.info('lu deauth shouldnt happen')
+        self.logger.warn('lu deauth shouldnt happen if not already authenticated')
         return self
 
     def learn(self, port):
@@ -256,7 +251,7 @@ class LearntUnauthenticatedHost(Host):
         port.add_learn_host(self.mac)
         self.learn_ports[port.number] = port
         self.ordered_learn_ports.append(port.number)
-        self.logger.info('lu learn')
+        self.logger.info('lu learn port: %s', port)
         return self
 
     def unlearn(self, port):
@@ -296,10 +291,12 @@ class UnlearntUnauthenticatedHost(Host):
 #        self.rule_man.deauthenticate(self.username, self.mac)
         # In theory the user could have changed.
         self.username = username
+        self.logger.info('uu auth auth_port %s', self.auth_port)
         return UnlearntAuthenticatedHost(host=self)
 
     def deauthenticate(self, port):
         # shouldnt be possible
+        self.logger.warn('uu shouldnt be able to deauthenticate. not already authenticated')
         return self
 
     def learn(self, port):
@@ -308,8 +305,10 @@ class UnlearntUnauthenticatedHost(Host):
         self.learn_ports[port.number] = port
         self.ordered_learn_ports.append(port.number)
         port.add_learn_host(self.mac)
+        self.logger.info('uu learnt port: %s', port)
         return LearntUnauthenticatedHost(host=self)
 
     def unlearn(self, port):
         # shouldnt be possible
+        self.logger.warn('uu shouldnt be able to unlearn. not already learnt')
         return self

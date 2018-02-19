@@ -29,7 +29,7 @@ class HostapdSocketThread(threading.Thread):
         self.conf = conf
         self.logger = auth_app_utils.get_logger(self.conf.name,
                                                 logger_location,
-                                                logging.DEBUG,
+                                                self.conf.logger_level,
                                                 1)
         self.work_queue = work_queue
 
@@ -37,8 +37,6 @@ class HostapdSocketThread(threading.Thread):
         """Main loop, waits for messages from hostapd ctl socket,
         and processes them.
         """
-        self.logger.info('run run')
-
         self.logger.info('about to start socket')
         if self.conf.udp:
             self._init_udp_sockets()
@@ -52,7 +50,7 @@ class HostapdSocketThread(threading.Thread):
         try:
             self.logger.info('sockets initiated')
             while not self.stop:
-                self.logger.info('waiting for receive')
+                self.logger.debug('waiting for receive')
                 data = ""
                 try:
                     data = str(self.unsolicited_sock.receive())
@@ -97,7 +95,7 @@ class HostapdSocketThread(threading.Thread):
                 else:
                     self.logger.info('unknown message %s', data)
         except Exception as e:
-            self.logger.info('exception in run.')
+            self.logger.error('exception in run.')
             self.logger.exception(e)
             return
 

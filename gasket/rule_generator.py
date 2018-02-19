@@ -76,7 +76,7 @@ class RuleGenerator(object):
                                     self.logger.warning('list object: %s' % obj)
 
                         else:
-                            self.logger.debug('obj is type %s', type(obj))
+                            self.logger.warning('obj is unrecongnised type %s', type(obj))
                     if portacl == "_authport_":
                         # rename the port acl to the one the user authenticated on.
                         temp = rules[portacl]

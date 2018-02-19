@@ -2,6 +2,8 @@
 # pytype: disable=pyi-error
 import yaml
 
+from gasket import gasket_conf_utils
+
 
 class AuthConfig(object):
     """Structure to hold configuration settings
@@ -12,9 +14,15 @@ class AuthConfig(object):
 
         self.version = data['version']
         self.logger_location = data['logger_location']
+        log_level = data['logger_level']
+
+        self.logger_level = gasket_conf_utils.get_log_level(log_level)
 
         self.prom_port = data['faucet']['prometheus_port']
+        gasket_conf_utils.validate_port(self.prom_port)
+
         self.faucet_ip = data['faucet']['ip']
+        gasket_conf_utils.validate_ip_address(self.faucet_ip)
         self.prom_url = 'http://{}:{}'.format(self.faucet_ip, self.prom_port)
 
         self.container_name = data['faucet'].get('container_name', '')

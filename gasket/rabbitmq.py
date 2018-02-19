@@ -16,6 +16,7 @@ class RabbitMQ(threading.Thread):
     """
     channel = None
     work_queue = None
+    logger = None
 
     def __init__(self, work_queue, logger_location):
         super().__init__()
