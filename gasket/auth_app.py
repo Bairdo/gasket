@@ -71,6 +71,7 @@ class AuthApp(object):
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
         self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
         self.work_queue = queue.Queue()
+        self.setup_datapath()
 
     def start(self):
         """Starts separate thread for each hostapd socket.
@@ -92,13 +93,13 @@ class AuthApp(object):
             self.threads.append(hst)
             self.logger.info('Thread running')
 
-        rt = rabbitmq.RabbitMQ(self.work_queue, self.config.logger_location)
+        dp_names = self.dps.keys()
+        rt = rabbitmq.RabbitMQ(dp_names, self.work_queue, self.config.logger_location)
         try:
             rt.start()
             self.threads.append(rt)
         except Exception as e:
             self.logger.exception(e)
-        self.setup_datapath()
         self.get_prometheus_mac_learning()
         print('Started socket Threads.')
         print('Working')
