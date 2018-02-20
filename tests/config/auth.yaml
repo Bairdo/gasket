@@ -22,7 +22,7 @@ hostapds:
 
 
 dps:
-    faucet-1:
+    %(faucet_name)s:
         id: %(dp_id)s
         interfaces:
             1:

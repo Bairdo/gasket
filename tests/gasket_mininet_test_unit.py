@@ -47,13 +47,13 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
 
     def tearDown(self):
         print(datetime.datetime.now())
-        if self.net is not None:
-            host = self.net.hosts[0]
-            print "about to kill everything"
-            for name, pid in self.pids.iteritems():
-                host.cmd('kill -s sigkill' + str(pid))
 
-            self.net.stop()
+
+        print "about to kill everything"
+        for name, pid in self.pids.iteritems():
+            os.system('kill -s int ' + str(pid))
+
+        self.net.stop()
         super(GasketTest, self).tearDown()
         self.rabbit_adapter_stdout.flush()
         self.rabbit_adapter_process.kill()
@@ -430,9 +430,9 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         self.assertLess(int(contr_num), 255)
         return contr_num
 
-    def init_gasket(self, host):
+    def init_gasket(self, host, portal_name):
 
-        self.gasket_setup()
+        self.gasket_setup(portal_name)
 
         host.cmd('python3 -m gasket.auth_app {0}/auth.yaml > {0}/gasket.out &'.format(self.tmpdir))
         self.pids['gasket'] = host.lastPid
@@ -448,7 +448,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         return 'u%s%s' % (
             id_chars[id_a], id_chars[id_b])
 
-    def gasket_setup(self):
+    def gasket_setup(self, portal_name):
         """Starts the authentication controller app.
         Args:
             host (mininet.host): host to start app on (generally the controller)
@@ -463,14 +463,15 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         config_values['logger_location'] = self.tmpdir + '/auth_app.log'
         serial = faucet_mininet_test_util.get_serialno(
                 self.ports_sock, self._test_name())
-        portal_name = self._get_sid_prefix(serial) + '1'
+        #portal_name = self._get_sid_prefix(serial) + '1'
         config_values['intf'] = portal_name + '-eth0'  # self.net.hosts[0].defaultIntf().name # need to get this.
         config_values['pid_file'] = self.net.controller.pid_file
         config_values['controller_ip'] = '127.0.0.1'
         config_values['dp_id'] = self.dpid
+        config_values['faucet_name'] = self.DP_NAME
 
         open('%s/auth.yaml' % self.tmpdir, 'w').write(httpconfig % config_values)
-        open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL) # need to get C_B_A
+        open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL % {'dp_name': self.DP_NAME}) # need to get C_B_A
 
         faucet_acl = self.tmpdir + '/faucet-acl.yaml'
         base = self.tmpdir + '/base-acls.yaml'
@@ -480,7 +481,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         print('Faucet successfully hup-ed')
 
 
-class GasketSingleSwitchTest(GasketTest):
+class GasketOneSwitchTest(GasketTest):
     """Base Test class for single switch topology
     """
     ws_port = 0
@@ -495,12 +496,13 @@ class GasketSingleSwitchTest(GasketTest):
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED + N_TAGGED)
 
     def setUp(self):
-        super(GasketSingleSwitchTest, self).setUp()
+        super(GasketOneSwitchTest, self).setUp()
        
         self.topo = self.topo_class(
             self.ports_sock, self._test_name(), dpids=[self.dpid], n_tagged=self.N_TAGGED, n_untagged=self.N_UNTAGGED)
-       
+        print('pid: ',os.getpid()) 
         # do the base config thing here.
+        self.port_map['dp_name'] = self.DP_NAME
         open(self.tmpdir + '/faucet-acl.yaml', 'w').write(faucet_mininet_test_util.gen_faucet_acl(self.max_hosts) % self.port_map)
         shutil.copytree('/gasket-src/', '%s/gasket-src' % self.tmpdir)
         self.start_net()
@@ -513,7 +515,7 @@ class GasketSingleSwitchTest(GasketTest):
         """
         # pylint: disable=unbalanced-tuple-unpacking
         portal, interweb = self.net.hosts[:2]
-        gasket_host = Node('gasket', inNamespace=False)
+        gasket_host = Node('gasket-%d' % os.getpid(), inNamespace=False)
 
         # pylint: disable=no-member
         contr_num = self.get_controller_number()
@@ -538,7 +540,7 @@ class GasketSingleSwitchTest(GasketTest):
 
         self.start_tcpdump(gasket_host, interface='%s-eth0' % gasket_host.name)
 
-        self.init_gasket(gasket_host)
+        self.init_gasket(gasket_host, portal.name)
         self.run_rabbit_adapter(self.net.controller)
         self.run_hostapd(portal)
         self.run_freeradius(portal)
@@ -550,7 +552,7 @@ class GasketSingleSwitchTest(GasketTest):
         time.sleep(15)
 
 
-class GasketMultiHostPerPortTest(GasketSingleSwitchTest):
+class GasketMultiHostPerPortTest(GasketOneSwitchTest):
     """Config has multiple authenticating hosts on the same port.
     """
     mac_interfaces = {} # {'1': inteface}
@@ -596,7 +598,7 @@ eapol_flags=0
 
 
 #@unittest.skip('broken.')
-class GasketSingleTwoHostsPerPortTest(GasketMultiHostPerPortTest):
+class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 2
 
@@ -628,7 +630,7 @@ class GasketSingleTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.fail_ping_ipv4(h0, '10.0.0.2')
 
 
-class GasketMultiHostsBase(GasketSingleSwitchTest):
+class GasketMultiHostsBase(GasketOneSwitchTest):
     
     def logon_logoff(self, host):
         interweb = self.net.hosts[1]
@@ -681,7 +683,7 @@ class GasketMultiHostsBase(GasketSingleSwitchTest):
         # Repeat that for each host a number of times.
 
 
-class GasketSingleTenHostsTest(GasketMultiHostsBase):
+class GasketTenHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 12
     max_hosts = N_UNTAGGED - 2
 
@@ -695,7 +697,7 @@ class GasketSingleTenHostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 15
 
 
-class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
+class GasketTwentyHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -709,7 +711,7 @@ class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 60
 
 
-class GasketSingle14HostsTest(GasketMultiHostsBase):
+class Gasket14HostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 16
     max_hosts = N_UNTAGGED - 2
 
@@ -723,7 +725,7 @@ class GasketSingle14HostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 60
 
 
-class GasketSingleTwoHostsTest(GasketMultiHostsBase):
+class GasketTwoHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 4
     max_hosts = N_UNTAGGED - 2
 
@@ -737,7 +739,7 @@ class GasketSingleTwoHostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 10
 
 
-class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
+class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
 
     max_vlan_hosts = 10
 
@@ -802,7 +804,7 @@ class GasketSingleTenHostsPerPortTest(GasketMultiHostPerPortTest):
         # TODO remove. this is just here to check no exceptions occured before the teardown
         self.verify_no_exception(self.env['faucet']['FAUCET_EXCEPTION_LOG'])
 
-class GasketNoLogOnTest(GasketSingleSwitchTest):
+class GasketNoLogOnTest(GasketOneSwitchTest):
     """Check the connectivity when the hosts are not authenticated"""
 
     def test_nologon(self):
@@ -823,7 +825,7 @@ class GasketNoLogOnTest(GasketSingleSwitchTest):
         self.assertAlmostEqual(ploss, 100)
 
 
-class GasketSingleDupLogonTest(GasketSingleSwitchTest):
+class GasketDupLogonTest(GasketOneSwitchTest):
     """Tests various username and MAC address combinations that may or may not result in
     the configuration changing.
     """
@@ -938,7 +940,8 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
-class GasketSingleLinkStateTest(GasketSingleSwitchTest):
+@unittest.skip('breaks other tests')
+class GasketLinkStateTest(GasketOneSwitchTest):
 
     def test_dp_link_down_up(self):
 

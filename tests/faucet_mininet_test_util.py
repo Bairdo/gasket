@@ -213,7 +213,7 @@ def gen_config(num_vlans):
             %(port_{1})d:
                 name: host{1}
                 native_vlan: 100
-                acl_in: port_faucet-1_%(port_{1})d""".format(conf, i)
+                acl_in: port_%(dp_name)s_%(port_{1})d""".format(conf, i)
     return conf
 
 
@@ -228,7 +228,7 @@ def gen_base_config(num_vlans):
     # TODO can we not hardcode these output dl_dst mac adddresses for portal?
     for i in range(3, num_vlans + 3):
         port_acl = """
-  port_faucet-1_{0}:
+  port_%(dp_name)s_{0}:
   - rule:
       dl_type: 0x888e
       actions:
@@ -258,7 +258,7 @@ def gen_faucet_acl(num_hosts):
     conf = """acls:"""
     for i in range(3, num_hosts + 3):
         conf = """{0}
-    port_faucet-1_%(port_{1})d:
+    port_%(dp_name)s_%(port_{1})d:
         - rule:
             actions:
                 allow: 0""".format(conf, i)
