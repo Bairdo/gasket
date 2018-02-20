@@ -94,17 +94,25 @@ class HostapdSocketThread(threading.Thread):
                     self.work_queue.put(work_item.DeauthWorkItem(mac, self.conf.name))
                 else:
                     self.logger.info('unknown message %s', data)
+        except OSError as e:
+            if self.stop:
+                self.logger.info('Bad file descriptor after shutdown')
+                return
+            self.logger.error('OSError exception in run. self.stop has not been set.')
+            self.logger.exception(e)
         except Exception as e:
             self.logger.error('exception in run.')
             self.logger.exception(e)
             return
 
     def kill(self):
-        # TODO Does this even work? - does hostapd detatch the socket.
-        self.request_sock.close()
-        self.unsolicited_sock.detach()
-        self.unsolicited_sock.close()
         self.stop = True
+        self.request_sock.close()
+        try:
+            self.unsolicited_sock.detach()
+        except socket.timeout:
+            pass
+        self.unsolicited_sock.close()
 
     def _init_udp_sockets(self):
         self.logger.info('initiating UDP socket for hostapd ctrl')
