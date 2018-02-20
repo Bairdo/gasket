@@ -2,7 +2,7 @@
 
 _int(){
     echo "Caught $? signal!"
-    kill -SIGINT "$gasket"
+    kill -s INT "$gasket"
     wait "$gasket"
 }
 
