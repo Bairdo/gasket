@@ -942,7 +942,6 @@ class GasketDupLogonTest(GasketOneSwitchTest):
         self.assertEqual(h1_count, 2)
 
 
-@unittest.skip('breaks other tests')
 class GasketLinkStateTest(GasketOneSwitchTest):
 
     def test_dp_link_down_up(self):
