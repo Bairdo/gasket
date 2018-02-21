@@ -698,7 +698,8 @@ class GasketTenHostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 15
 
 
-class GasketTwentyHostsTest(GasketMultiHostsBase):
+@unittest.skip('broken')
+class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
