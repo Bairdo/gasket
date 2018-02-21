@@ -48,7 +48,9 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
     def tearDown(self):
         print(datetime.datetime.now())
 
-
+        # allow gasket to shutdown first. (cleaner log)
+        os.system('kill -s int ' + str(self.pids['gasket']))
+        time.sleep(2)
         print "about to kill everything"
         for name, pid in self.pids.iteritems():
             os.system('kill -s int ' + str(pid))
@@ -610,8 +612,6 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
 
         self.logon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP())
-        result = self.check_http_connection(h0)
-        self.assertTrue(result)
 
         mac_intf = self.mac_interfaces['1']
         netns = mac_intf + 'ns'
@@ -647,6 +647,7 @@ class GasketMultiHostsBase(GasketOneSwitchTest):
             # as close to 0 as possible should be the goal.
             self.fail_ping_ipv4(host, interweb.IP(), retries=self.LOGOFF_RETRIES, print_flag=False)
             error_point = 4
+            time.sleep(5)
             print('%s off' % host.name)
             self.relogon_dot1x(host)
             error_point = 5
