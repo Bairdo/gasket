@@ -674,8 +674,8 @@ class GasketMultiHostsBase(GasketOneSwitchTest):
 
         self.assertEqual(len(failures), 0, 'the following hosts failed at stages: %s' % failures)
 
-    @unittest.skip('not implemented')
-    def test_multi_hosts_random_parallel(self):
+    #@unittest.skip('not implemented')
+    def multi_hosts_random_parallel(self):
         """Log X different users on and off randomly on different ports in parallel.
         """
         # TODO implement.
@@ -698,7 +698,6 @@ class GasketTenHostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 15
 
 
-@unittest.skip('broken')
 class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
