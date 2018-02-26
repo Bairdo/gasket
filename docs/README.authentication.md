@@ -76,10 +76,9 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 
 ## Limitations
 - .yaml configuration files must have 'dps' & 'acls' as top level (no indentation) objects, and only declared once across all files.
-- Weird things may happen if a user moves 'access' port, they should successfully reauthenticate, however they might have issues if a malicious user fakes the authenticated users MAC on the old port (poisoning the MAC-port learning table), and if they (malicious user) were to log off the behaviour is currently 'undefined'
-What is believed (unconfirmed) to occur, is on the second logon hostapd will send a disconnect message at the start of the authentication process for that MAC address and the system will therefore log the mac off the old port.
-The MAC will therefore only be authenticated on the current port.
-This behaviour however does allow fake users to logoff other users, by either cloning the MAC address of an authenticated client and either of A) sending a EAP-Logoff, or B) starting a new authentication (regardless of whether it is successful).
+- Authentication will occur on the (auth) port that a MAC address was last seen.
+There might be issues if a malicious user fakes the authenticated users MAC on another port, which will result in the malicious user being authenticated, while the real one is not.
+- Logoff messages are not associated with a port, this allows fake users to logoff other users, by either cloning the MAC address of an authenticated client and either of A) sending a EAP-Logoff, or B) starting a new authentication (regardless of whether it is successful).
 The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix' may be availalble for 'B' that ignores the disconnect from unsuccessful logon attempts if the client is still active.
 - See [TODO](#todo) for more.
 
@@ -376,8 +375,6 @@ In the future it should be possible to run multiple hostap servers and load bala
 
 ###### rules.yaml
 
-TODO talk about how you can have one ACL use many ACLs. Or have the radius server do that.
-
 The base directory contains the file rules.yaml.
 rules.yaml contains the rules to apply when a user successfully logs on.
 rules.yaml is organised as follows:
@@ -490,26 +487,25 @@ acls:
 
 ##### auth_app.py
 The Gasket repository contains auth_app.py which is used as the 'proxy' between the authentication servers and Faucet.
-This must run on the same machine as Faucet, as the SIGHUP signal is used to reload the Faucet configuration.
+This must run on the same machine as Faucet, as the SIGHUP signal is used to reload the Faucet configuration
+If using the docker containers for running Faucet & Gasket, Gasket can signal the Faucet container via the docker socket.
+
+If you wish to run without docker see [docker/runauth.sh](../docker/runauth.sh) for the Gasket startup script.
 
 ###### auth.yaml
 See [auth.yaml](./etc/ryu/faucet/gasket/auth.yaml) for acceptable configuration options and descriptions.
-Note: the structure and content is subject to change.
+Note: the structure and content is subject to change, but should be up to date there.
 
 ### Running
-
-TODO add docker-compose for faucet-con stuff
 
 #### Controller
 
 ##### Faucet + Gasket
 
-To start Faucet and Gasket use Dockerfile.auth:
+To start Faucet and Gasket use docker-compose:
 ```bash
-docker build -t bairdo/gasket -f Dockerfile.auth .
-docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
+docker-compose up faucet gasket rabbitmq_server rabbitmq_adapter
 ```
-Port 6653 is the Openflow port used by the Faucet, port 9244 is used for Prometheus and - port 9244 may be omitted if you do not need Prometheus.
 
 #### Authentication Server
 

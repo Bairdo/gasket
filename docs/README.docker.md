@@ -8,25 +8,32 @@ To run the docker based test suite run the following commands as root:
 docker build -t gasket/tests -f Dockerfile.tests .
 apparmor_parser -R /etc/apparmor.d/usr.sbin.tcpdump
 modprobe openvswitch
-docker run --privileged -ti gasket/tests
+docker-compose up -r rabbitmq_server
+docker run --network=gasket_control-plane-net --privileged -ti gasket/tests
 ```
 
 
 ## docker-compose.yaml
 
 This contains an example docker-compose file that can be used in conjunction with a mininet network, to demonstrate 802.1X functionality with Faucet.
-It contains 3 containers 'freeradius', 'hostapd' & 'faucet-auth'.
+It contains 6 containers 'freeradius', 'hostapd', 'faucet', 'gasket', 'rabbitmq_server', 'rabbitmq_adapter'.
 - freeradius - is a RADIUS server, see directory docker-compose/freeradius for configuration files.
 - hostapd - is the 802.1X authenticator, see directoy docker-compose/hostapd for its configuration file.
-- faucet-auth - is the controller (faucet & auth_app).
+- faucet - is the Faucet controller.
+- gasket - is the 1X application.
+- rabbitmq_server - is a helper container for running a rabbitmq server. gasket connects to this.
+- rabbitmq_adapter - is a helper container that publishes events on the Faucet UNIX socket to rabbitmq_server
 
 You will need to setup your network (mininet or real). [see below for mininet example](mininet).
 
 ### Running:
 
-Start the containers
+Set the following environment variables and start the containers
+Note: rabbitmq_adapter uses the volume from faucet, so do not expect to see the directory on the host.
 ```bash
-docker-compose up freeradius hostapd gasket
+export FA_RABBIT_HOST=172.222.0.104
+export FAUCET_EVENT_SOCK=/var/run/faucet/faucet.sock
+docker-compose up freeradius hostapd gasket faucet rabbitmq_server rabbitmq_adapter
 ```
 
 To kill the gasket container, run the following to tidy up the hostapd control socket connections.
@@ -85,13 +92,7 @@ Start mininet:
 mn --topo=single --custom=topo.py --controller=remote,ip=172.222.0.100,port=6653
 ```
 mininet will take several minutes to start as the controller is not running yet.
-Alternatively run docker-compose up faucet-auth first.
-
-Add another controller to the OVS Switch. 6653 is for Faucet, & 6663 is for Gasket.
-```bash
-ovs-vsctl set-controller s1 tcp:172.222.0.100:6653 \
-tcp:172.222.0.100:6663
-```
+Alternatively run docker-compose up faucet first.
 
 
 ## TODO
