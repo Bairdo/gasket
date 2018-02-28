@@ -92,7 +92,7 @@ class AuthApp(object):
             self.threads.append(hst)
             self.logger.info('Thread running')
 
-        rt = rabbitmq.RabbitMQ(self.work_queue, self.config.logger_location)
+        rt = rabbitmq.RabbitMQ(self.work_queue, self.config.logger_location, self.config.rabbit_host, self.config.rabbit_port)
         try:
             rt.start()
             self.threads.append(rt)

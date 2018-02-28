@@ -17,14 +17,18 @@ class RabbitMQ(threading.Thread):
     channel = None
     work_queue = None
     logger = None
+    server_host = None
+    server_port = None
 
-    def __init__(self, work_queue, logger_location):
+    def __init__(self, work_queue, logger_location, host, port):
         super().__init__()
         self.work_queue = work_queue
         self.logger = auth_app_utils.get_logger('rabbitmq',
                                                 logger_location,
                                                 logging.DEBUG,
                                                 1)
+        self.server_host = host
+        self.server_port = port
         self.logger.info('inited')
 
     def run(self):
@@ -35,7 +39,7 @@ class RabbitMQ(threading.Thread):
             while True:
                 try:
                     connection = pika.BlockingConnection(pika.ConnectionParameters(
-                        host='172.222.0.104', port=5672))
+                        host=self.server_host, port=self.server_port))
                     break
                 except Exception as e:
                     self.logger.info('cannot connect to rabbitmq server')

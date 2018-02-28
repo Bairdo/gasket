@@ -27,6 +27,12 @@ class AuthConfig(object):
 
         self.container_name = data['faucet'].get('container_name', '')
 
+        rabbitmq = data.get('rabbitmq', {})
+
+        self.rabbit_host = rabbitmq.get('host', '')
+        self.rabbit_port = rabbitmq.get('port', 5672)
+
+
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
         self.acl_config_file = data['files']['acl_config']
