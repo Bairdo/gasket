@@ -135,18 +135,19 @@ def save_CSV(test_no, *data):
 
     data = list(zip(*data))
 
-    with open(filename, 'w') as file:
+    with open(filename, 'w+') as file:
         file.write(
             '\n'.join([', '.join([str(x) for x in line]) for line in data]))
 
 
 def check_valid_results(*results):
-    for list in results:
-        if list[-1] == 'N/A':
-            print('error with results')
-            for list in results:
-                list.pop()
-            return
+    print('cvr', results)
+
+    old_length = len(results)
+    filter(lambda a: a != 'N/A', results)
+    new_length = len(results)
+    if old_length != new_length:
+        print('errors: %d with results' % (old_length - new_length))
 
 
 def read_folder(dir_name):
