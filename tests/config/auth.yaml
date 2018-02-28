@@ -19,7 +19,9 @@ hostapds:
         unix_socket_path: %(tmpdir)s/hostapd/%(intf)s
         request_timeout: 4
         unsolicited_timeout: 4
-
+rabbitmq:
+    host: 172.222.0.104
+    port: 5672
 
 dps:
     faucet-1:
