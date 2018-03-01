@@ -70,8 +70,6 @@ def set_up():
     print('gasket started')
     wait_until_line(FAUCET.stdout, 'instantiating app faucet.faucet of Faucet')
     time.sleep(15)
-    with open('faucet-adapter-perftests.log', 'a+') as log:
-        log.write(RABBIT_ADAPTER.stdout.read())
 
 #    os.system('ovs-ofctl dump-flows s1')
     print('Faucet good')
@@ -118,7 +116,7 @@ def wait_until_logoff(host):
         time.sleep(1)
 
 
-def shut_down(hosts):
+def shut_down(hosts, log_location):
     for host in hosts:
         host.cmd('wpa_cli -i%s-eth0 terminate' % host.name)
 #        host.cmd('kill -SIGHUP %s' % PID)
@@ -132,10 +130,12 @@ def shut_down(hosts):
     GASKET.terminate()
     FREERADIUS.terminate()
     HOSTAPD.terminate()
-    with open('hostapd.log', 'w+') as log:
+    with open('%s/faucet-adapter-perftests.log' % log_location, 'a+') as log:
+        log.write(RABBIT_ADAPTER.stdout.read())
+    with open('%s/hostapd.log' % log_location, 'w+') as log:
         log.write(HOSTAPD.stdout.read())
 
-    with open('faucet-perftests.log', 'w+') as log:
+    with open('%s/faucet-perftests.log' % log_location, 'w+') as log:
         log.write(FAUCET.stdout.read())
 
 

@@ -8,7 +8,7 @@ services:
             context: '../'
             dockerfile: './Dockerfile.hostapd'
         volumes:
-            - './docker-compose/hostapd/:/etc/hostapd'
+            - './docker-compose-test/hostapd/:/etc/hostapd'
         command:  bash -c "until ip link show eth3; do sleep 1; done;
             ip link set eth3 down;
             ip link set eth3 address 44:44:44:44:44:44;
@@ -30,8 +30,8 @@ services:
         image: 'faucet/faucet'
 
         volumes:
-            - './docker-compose/faucet/var/log/ryu/faucet:/var/log/ryu/faucet'
-            - './etc/ryu/faucet:/etc/ryu/faucet'
+            - './docker-compose-test/faucet/var/log/ryu/faucet:/var/log/ryu/faucet'
+            - './etc-test/ryu/faucet:/etc/ryu/faucet'
 
         ports:
             - '6699:6653'
@@ -48,8 +48,8 @@ services:
             context: '..'
             dockerfile: './Dockerfile.auth'
         volumes:
-            - './docker-compose/gasket/log/ryu/faucet:/var/log/ryu/faucet'
-            - './etc/ryu/faucet:/etc/ryu/faucet'
+            - './docker-compose-test/gasket/log/ryu/faucet:/var/log/ryu/faucet'
+            - './etc-test/ryu/faucet:/etc/ryu/faucet'
             - '/var/run/:/var/run/'
         networks:
             control-plane-net:
@@ -62,10 +62,10 @@ services:
             context: '..'
             dockerfile: './Dockerfile.freeradius'
         volumes:
-            - "./docker-compose/freeradius/raddb/clients.conf:/etc/freeradius/clients.conf"
-            - "./docker-compose/freeradius/raddb/users:/etc/freeradius/users"
-            - "./docker-compose/freeradius/raddb/dictionary:/etc/freeradius/dictionary"
-            - "./docker-compose/freeradius/log/radius-log:/var/log/radius/"
+            - "./docker-compose-test/freeradius/raddb/clients.conf:/etc/freeradius/clients.conf"
+            - "./docker-compose-test/freeradius/raddb/users:/etc/freeradius/users"
+            - "./docker-compose-test/freeradius/raddb/dictionary:/etc/freeradius/dictionary"
+            - "./docker-compose-test/freeradius/log/radius-log:/var/log/radius/"
         networks:
             radius-net:
                 ipv4_address: 172.121.0.102

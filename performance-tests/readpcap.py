@@ -129,18 +129,14 @@ def get_ICMP_info(eth):
     return src, dst, seq
 
 
-def save_CSV(test_no, *data):
-    check_valid_results(*data)
-    filename = 'results/test_%s.csv' % test_no
+def save_CSV(test_name, data):
+    filename = 'results/%s.csv' % test_name
 
-    data = list(zip(*data))
-
-    with open(filename, 'w+') as file:
-        file.write(
-            '\n'.join([', '.join([str(x) for x in line]) for line in data]))
+    with open(filename, 'a') as file:
+        file.write('\n' + ', '.join([str(i) for i in data]))
 
 
-def check_valid_results(*results):
+def check_valid_results(results):
     print('cvr', results)
 
     old_length = len(results)
