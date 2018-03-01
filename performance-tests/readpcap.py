@@ -2,12 +2,14 @@ import os
 
 import dpkt
 
+
 EAP_LOGOFF_DATA = '\x02\x02\x00\x00'
 EAP_START_DATA = '\x02\x01\x00\x00'
 EAP_SUCCESS_LEN = 4
 
 ETHER_EAP = 0x888e
 ETHER_IPV4 = 0x800
+
 
 def auth_time(filename):
     """Time from eap-start to success.
@@ -16,7 +18,7 @@ def auth_time(filename):
 
     for ts, pkt in dpkt.pcap.Reader(open(filename, 'r')):
         eth = dpkt.ethernet.Ethernet(pkt)
-        if eth.type == 0x888e:
+        if eth.type == ETHER_EAP:
             if start is None and eth.data == EAP_START_DATA:
                 start = ts
             elif len(eth.data) > EAP_SUCCESS_LEN and ord(eth.data[4]) == 3:
@@ -40,8 +42,8 @@ def ping_reply_time(filename, client_ip, internet_ip):
                 start = ts
         else:
             if eth.type == ETHER_IPV4:
-                src = '.'.join(str(ord(x)) for x in eth.data.src)
-                dst = '.'.join(str(ord(x)) for x in eth.data.dst)
+                src = get_eth_address(eth.data.src)
+                dst = get_eth_address(eth.data.dst)
                 if src == internet_ip and dst == client_ip:
                     end = ts
                     break
@@ -128,8 +130,8 @@ def reauth_ping_reply_time(filename, client_ip, internet_ip):
                 start = ts
         else:
             if eth.type == ETHER_IPV4:
-                src = '.'.join(str(ord(x)) for x in eth.data.src)
-                dst = '.'.join(str(ord(x)) for x in eth.data.dst)
+                src = get_eth_address(eth.data.src)
+                dst = get_eth_address(eth.data.dst)
                 if src == internet_ip and dst == client_ip:
                     end = ts
                     break
@@ -140,10 +142,18 @@ def reauth_ping_reply_time(filename, client_ip, internet_ip):
 
 
 def get_ICMP_info(eth):
-    src = '.'.join(str(ord(x)) for x in eth.data.src)
-    dst = '.'.join(str(ord(x)) for x in eth.data.dst)
+    src = get_eth_address(eth.data.src)
+    dst = get_eth_address(eth.data.dst)
     seq = eth.data.data.data.seq
     return src, dst, seq
+
+
+def get_eth_address(address):
+    """
+    Args:
+        address (eth.data.src/dst):
+    """
+    return '.'.join(str(ord(x)) for x in address)
 
 
 def save_CSV(test_name, data):
@@ -161,32 +171,3 @@ def check_valid_results(results):
     new_length = len(results)
     if old_length != new_length:
         print('errors: %d with results' % (old_length - new_length))
-
-
-def read_folder(dir_name):
-    auth_times = []
-    ping_reply_times = []
-    logoff_times = []
-    reauth_times = []
-    reauth_ping_reply_times = []
-
-    for filename in sorted(os.listdir(dir_name), key=lambda x: int(x.split('_')[1][:-5])):
-        print(filename)
-        pcap_file = dir_name + '/' + filename
-        auth_times.append(auth_time(pcap_file))
-        ping_reply_times.append(ping_reply_time(pcap_file))
-        logoff_times.append(logoff_time(pcap_file))
-        reauth_times.append(reauth_time(pcap_file))
-        reauth_ping_reply_times.append(reauth_ping_reply_time(pcap_file))
-        save_CSV(3, auth_times, ping_reply_times,
-                 logoff_times, reauth_times, reauth_ping_reply_times)
-
-if __name__ == '__main__':
-        # print 'Auth Time: %ss' % auth_time('pcaps/test3_1.pcap')
-        # print 'Ping Reply Time: %ss' % ping_reply_time('tcpdump')
-        # print 'Logoff Time: %ss' % logoff_time('tcpdump3')
-        # print 'Reauth Time: %ss' % reauth_time('pcaps/test3_1.pcap')
-        # print 'Reauth Ping Reply Time: %ss' %
-        # reauth_ping_reply_time('pcaps/test3_1.pcap')
-
-    read_folder('test_results_1/pcaps')

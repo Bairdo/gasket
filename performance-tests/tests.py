@@ -47,14 +47,14 @@ def setup():
                '{0}_rabbitmq_adapter_1 {0}_faucet_1').format('performancetests'))
 
 
-def start(pcap_dir, test_name, run_no):
+def start(pcap_dir, test_name, run_no, no_hosts):
     """starts mininet and tcpdumps, and docker containers.
     Args:
         pcap_dir    (str): directory to save pcap files in.
         test_name   (str):
         test_no     (int): run number.
     """
-    hosts = mn.start()
+    hosts = mn.start(no_hosts)
     h0 = hosts[0]
     print('mn started')
     mn.start_tcpdump(h0, PCAP_FORMAT_STRING % (pcap_dir, test_name, run_no, h0.name))
@@ -90,18 +90,6 @@ def createCSV(filename, headers):
         file.write(', '.join([str(h) for h in headers]))
 
 
-#def test_many_hosts(no_trials, pcap_dir, no_hosts):
-#    """n hosts all logon, logoff, logon again.
-#    """
-
-#    dir_setup()
-
-#    '''h0-on, h0-off, h0-on, h1-on, h1-off, h1-on, ...'''
-#    headers = [i for i in range(no_hosts)]
-#    headers.extend('')
-#    createCSV('results/%s.csv' % test_many_hosts.__name__, headers)
-
-
 def test3(n, pcap_dir):
     """Test that logs on, off and then back on.
     """
@@ -122,13 +110,13 @@ def test3(n, pcap_dir):
         print('trial', i)
         start_time = datetime.now()
         setup()
-        hosts = start(pcap_dir, test3.__name__, i)
+        hosts = start(pcap_dir, test3.__name__, i, 2) # TODO not sure why this needs to be 2.
         h0 = hosts[0]
         i0 = mn.NET.get('i0')
         pid = h0.cmd('ping 10.0.0.40 -i0.1 &')
         mn.authenticate(h0)
         time.sleep(1)
-        h0.cmd('wpa_cli -i %s logoff' % 'h0-eth0')
+        h0.cmd('wpa_cli -i %s-eth0 logoff' % h0.name)
 
         mn.wait_until_logoff(h0)
 
@@ -138,7 +126,7 @@ def test3(n, pcap_dir):
 
         time.sleep(5.1)
 
-        h0.cmd('wpa_cli -i %s logon' % 'h0-eth0')
+        h0.cmd('wpa_cli -i %s-eth0 logon' % h0.name)
 
         mn.wait_until_authenticate(h0)
 

@@ -29,13 +29,13 @@ def wpa_cli_status(host, intf):
             return match.group(0).split('=')[1]
 
 
-def start():
+def start(no_hosts):
     global NET
-    NET = Mininet(topo=Single(),
+    NET = Mininet(topo=Single(no_hosts),
                   controller=RemoteController('c1', '127.0.0.1', 6699))
     NET.start()
     print('started mininet')
-    return [NET.get('h0')]
+    return [NET.get(h) for h in NET.topo.hosts() if h.startswith('h')]
 
 
 def set_up():
@@ -71,7 +71,6 @@ def set_up():
     wait_until_line(FAUCET.stdout, 'instantiating app faucet.faucet of Faucet')
     time.sleep(15)
 
-#    os.system('ovs-ofctl dump-flows s1')
     print('Faucet good')
 
 
@@ -119,10 +118,9 @@ def wait_until_logoff(host):
 def shut_down(hosts, log_location):
     for host in hosts:
         host.cmd('wpa_cli -i%s-eth0 terminate' % host.name)
-#        host.cmd('kill -SIGHUP %s' % PID)
 
-#    os.system('ovs-ofctl dump-flows s1')
     NET.stop()
+    # must use this otherwise adapter will restart.
     os.system('docker stop performancetests_rabbitmq_adapter_1')
 
     RABBIT_SERVER.terminate()
@@ -137,5 +135,3 @@ def shut_down(hosts, log_location):
 
     with open('%s/faucet-perftests.log' % log_location, 'w+') as log:
         log.write(FAUCET.stdout.read())
-
-
