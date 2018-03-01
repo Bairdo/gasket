@@ -90,6 +90,18 @@ def createCSV(filename, headers):
         file.write(', '.join([str(h) for h in headers]))
 
 
+#def test_many_hosts(no_trials, pcap_dir, no_hosts):
+#    """n hosts all logon, logoff, logon again.
+#    """
+
+#    dir_setup()
+
+#    '''h0-on, h0-off, h0-on, h1-on, h1-off, h1-on, ...'''
+#    headers = [i for i in range(no_hosts)]
+#    headers.extend('')
+#    createCSV('results/%s.csv' % test_many_hosts.__name__, headers)
+
+
 def test3(n, pcap_dir):
     """Test that logs on, off and then back on.
     """
@@ -101,7 +113,6 @@ def test3(n, pcap_dir):
     reauth_times = []
     reauth_ping_reply_times = []
 
-    shutil.rmtree('etc_backups/3', ignore_errors=True)
     dir_setup()
     createCSV('results/%s.csv' % test3.__name__,
               ['test_duration', 'auth_time', 'ping_reply_time',
@@ -113,6 +124,7 @@ def test3(n, pcap_dir):
         setup()
         hosts = start(pcap_dir, test3.__name__, i)
         h0 = hosts[0]
+        i0 = mn.NET.get('i0')
         pid = h0.cmd('ping 10.0.0.40 -i0.1 &')
         mn.authenticate(h0)
         time.sleep(1)
@@ -139,13 +151,13 @@ def test3(n, pcap_dir):
         pcap_file = PCAP_FORMAT_STRING % (pcap_dir, test3.__name__, i, h0.name)
         at = auth_time(pcap_file)
         auth_times.append(at)
-        prt = ping_reply_time(pcap_file)
+        prt = ping_reply_time(pcap_file, h0.IP(), i0.IP())
         ping_reply_times.append(prt)
-        lt = logoff_time(pcap_file)
+        lt = logoff_time(pcap_file, h0.IP(), i0.IP())
         logoff_times.append(lt)
         rat = reauth_time(pcap_file)
         reauth_times.append(rat)
-        rprt = reauth_ping_reply_time(pcap_file)
+        rprt = reauth_ping_reply_time(pcap_file, h0.IP(), i0.IP())
         reauth_ping_reply_times.append(rprt)
 
         time_taken = datetime.now() - start_time
@@ -172,6 +184,7 @@ def test3(n, pcap_dir):
     print('rprt', reauth_ping_reply_times)
     check_valid_results(reauth_ping_reply_times)
     print('Avg reauth ping reply time: %ss' % avg(reauth_ping_reply_times))
+
 
 if __name__ == '__main__':
 

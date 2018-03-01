@@ -1,16 +1,25 @@
-import dpkt
 import os
 
+import dpkt
+
+EAP_LOGOFF_DATA = '\x02\x02\x00\x00'
+EAP_START_DATA = '\x02\x01\x00\x00'
+EAP_SUCCESS_LEN = 4
+
+ETHER_EAP = 0x888e
+ETHER_IPV4 = 0x800
 
 def auth_time(filename):
+    """Time from eap-start to success.
+    """
     start = end = None
 
     for ts, pkt in dpkt.pcap.Reader(open(filename, 'r')):
         eth = dpkt.ethernet.Ethernet(pkt)
         if eth.type == 0x888e:
-            if start is None and eth.data == '\x02\x01\x00\x00':
+            if start is None and eth.data == EAP_START_DATA:
                 start = ts
-            elif len(eth.data) > 4 and ord(eth.data[4]) == 3:
+            elif len(eth.data) > EAP_SUCCESS_LEN and ord(eth.data[4]) == 3:
                 end = ts
                 break
 
@@ -19,19 +28,21 @@ def auth_time(filename):
     return 'N/A'
 
 
-def ping_reply_time(filename):
+def ping_reply_time(filename, client_ip, internet_ip):
+    """Time from eap-start to first ping reply.
+    """
     start = end = None
 
     for ts, pkt in dpkt.pcap.Reader(open(filename, 'r')):
         eth = dpkt.ethernet.Ethernet(pkt)
         if start is None:
-            if eth.type == 0x888e and len(eth.data) > 4 and ord(eth.data[4]) == 3:
+            if eth.type == ETHER_EAP and len(eth.data) > EAP_SUCCESS_LEN and ord(eth.data[4]) == 3:
                 start = ts
         else:
-            if eth.type == 0x800:
+            if eth.type == ETHER_IPV4:
                 src = '.'.join(str(ord(x)) for x in eth.data.src)
                 dst = '.'.join(str(ord(x)) for x in eth.data.dst)
-                if src == '10.0.0.40' and dst == '10.0.0.10':
+                if src == internet_ip and dst == client_ip:
                     end = ts
                     break
 
@@ -40,7 +51,9 @@ def ping_reply_time(filename):
     return 'N/A'
 
 
-def logoff_time(filename):
+def logoff_time(filename, client_ip, internet_ip):
+    """Time from eap-logoff to first ping that does not get a reply.
+    """
     start = end = None
 
     packets = list(dpkt.pcap.Reader(open(filename, 'r')))
@@ -48,15 +61,15 @@ def logoff_time(filename):
     for ts, pkt in packets:
         eth = dpkt.ethernet.Ethernet(pkt)
         if start is None:
-            if eth.type == 0x888e and eth.data == '\x02\x02\x00\x00':
+            if eth.type == ETHER_EAP and eth.data == EAP_LOGOFF_DATA:
                 start = ts
         else:
-            if eth.type == 0x800:
+            if eth.type == ETHER_IPV4:
                 src, dst, seq = get_ICMP_info(eth)
-                if src == '10.0.0.10' and dst == '10.0.0.40':
+                if src == client_ip and dst == internet_ip:
                     for _, pkt2 in packets:
                         eth2 = dpkt.ethernet.Ethernet(pkt2)
-                        if eth2.type == 0x800:
+                        if eth2.type == ETHER_IPV4:
                             src2, dst2, seq2 = get_ICMP_info(eth2)
 
                             if src2 == dst and dst2 == src and seq2 == seq:
@@ -71,21 +84,23 @@ def logoff_time(filename):
 
 
 def reauth_time(filename):
+    """Time from the (after logoff) eap-start to eap-success.
+    """
     logoff = False
     start = end = None
 
     for ts, pkt in dpkt.pcap.Reader(open(filename, 'r')):
         eth = dpkt.ethernet.Ethernet(pkt)
         if not logoff:
-            if eth.type == 0x888e and eth.data == '\x02\x02\x00\x00':
+            if eth.type == ETHER_EAP and eth.data == EAP_LOGOFF_DATA:
                 logoff = True
             else:
                 continue
 
-        elif eth.type == 0x888e:
-            if start is None and eth.data == '\x02\x01\x00\x00':
+        elif eth.type == ETHER_EAP:
+            if start is None and eth.data == EAP_START_DATA:
                 start = ts
-            elif len(eth.data) > 4 and ord(eth.data[4]) == 3:
+            elif len(eth.data) > EAP_SUCCESS_LEN and ord(eth.data[4]) == 3:
                 end = ts
                 break
 
@@ -94,26 +109,28 @@ def reauth_time(filename):
     return 'N/A'
 
 
-def reauth_ping_reply_time(filename):
+def reauth_ping_reply_time(filename, client_ip, internet_ip):
+    """Time from the eap-start (after eap-logoff) to first successful ping reply.
+    """
     logoff = False
     start = end = None
 
     for ts, pkt in dpkt.pcap.Reader(open(filename, 'r')):
         eth = dpkt.ethernet.Ethernet(pkt)
         if not logoff:
-            if eth.type == 0x888e and eth.data == '\x02\x02\x00\x00':
+            if eth.type == ETHER_EAP and eth.data == EAP_LOGOFF_DATA:
                 logoff = True
             else:
                 continue
 
         if start is None:
-            if eth.type == 0x888e and len(eth.data) > 4 and ord(eth.data[4]) == 3:
+            if eth.type == ETHER_EAP and len(eth.data) > EAP_SUCCESS_LEN and ord(eth.data[4]) == 3:
                 start = ts
         else:
-            if eth.type == 0x800:
+            if eth.type == ETHER_IPV4:
                 src = '.'.join(str(ord(x)) for x in eth.data.src)
                 dst = '.'.join(str(ord(x)) for x in eth.data.dst)
-                if src == '10.0.0.40' and dst == '10.0.0.10':
+                if src == internet_ip and dst == client_ip:
                     end = ts
                     break
 
