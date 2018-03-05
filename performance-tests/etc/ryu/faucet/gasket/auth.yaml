@@ -34,17 +34,8 @@ dps:
             # Even if not being managed by Gasket.
             # Port 1 is not managed.
             1:
-            2:
-                auth_mode: access
-                #this port is managed by these hostapds.
-                hostapds: [hostapd-1]
-
-            3:
-                auth_mode: access
-            4:
-                auth_mode: link022
-                hostapds: [hostapd-2]
-            16:
+%(host_ports)s
+            %(hostapd_port)d:
 
 # top level hostapds contains the config info for connecting to the (many) hostapd interfaces.
 hostapds:

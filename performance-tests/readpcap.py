@@ -160,7 +160,7 @@ def save_CSV(test_name, data):
     filename = 'results/%s.csv' % test_name
 
     with open(filename, 'a') as file:
-        file.write('\n' + ', '.join([str(i) for i in data]))
+        file.write('\n' + ', '.join([str(i) for times in data for i in times]))
 
 
 def check_valid_results(results):

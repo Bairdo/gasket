@@ -1,3 +1,4 @@
+
 import os
 import re
 from subprocess import Popen, PIPE
@@ -5,6 +6,8 @@ import time
 
 from mininet.net import Mininet
 from mininet.node import RemoteController
+
+import netifaces
 
 from topo import Single
 
@@ -34,11 +37,11 @@ def start(no_hosts):
     NET = Mininet(topo=Single(no_hosts),
                   controller=RemoteController('c1', '127.0.0.1', 6699))
     NET.start()
-    print('started mininet')
+
     return [NET.get(h) for h in NET.topo.hosts() if h.startswith('h')]
 
 
-def set_up():
+def set_up(pcap_dir):
     global FAUCET, FREERADIUS, HOSTAPD, GASKET, RABBIT_SERVER, RABBIT_ADAPTER
     print('starting containers')
     FAUCET = Popen(
@@ -69,6 +72,22 @@ def set_up():
 
     print('gasket started')
     wait_until_line(FAUCET.stdout, 'instantiating app faucet.faucet of Faucet')
+
+    for switch in NET.switches:
+        print(type(switch))
+        print(pcap_dir)
+        for intf in switch.intfNames():
+            os.system('tcpdump -i {0} -w {1}/{0}.pcap &'.format(intf, pcap_dir))
+
+
+    interfaces = netifaces.interfaces()
+    print(interfaces)
+    for intf in interfaces:
+        if intf.endswith('_l'):
+            os.system('tcpdump -i {0} -w {1}/{0}.pcap &'.format(intf, pcap_dir))
+
+    print('started mininet')
+
     time.sleep(15)
 
     print('Faucet good')
@@ -76,7 +95,7 @@ def set_up():
 
 def start_tcpdump(host, filename):
 
-    return host.cmd('tcpdump -v -i %s-eth0 -w %s &' % (host.name, filename))
+    return host.cmd('tcpdump -i %s-eth0 -w %s &' % (host.name, filename))
 
 
 def authenticate(host):
@@ -122,7 +141,7 @@ def shut_down(hosts, log_location):
     NET.stop()
     # must use this otherwise adapter will restart.
     os.system('docker stop performancetests_rabbitmq_adapter_1')
-
+    os.system('killall tcpdump')
     RABBIT_SERVER.terminate()
     FAUCET.terminate()
     GASKET.terminate()
