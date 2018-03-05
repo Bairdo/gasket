@@ -8,7 +8,7 @@ import shutil
 
 import mn
 
-import readcap
+import readpcap
 
 
 PCAP_FORMAT_STRING = '%s/%s_%d_%s.pcap'
