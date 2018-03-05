@@ -238,25 +238,25 @@ def test_many_hosts(no_runs, pcap_dir_base, no_hosts):
             host_no += 1
             pcap_file = PCAP_FORMAT_STRING % (pcap_dir, test_name, run_no, host.name)
 
-            auth_matrix[run_no][host_no] = readcap.auth_time(pcap_file)
+            auth_matrix[run_no][host_no] = readpcap.auth_time(pcap_file)
 
-            prt_matrix[run_no][host_no] = readcap.ping_reply_time(pcap_file, host.IP(), i0.IP())
+            prt_matrix[run_no][host_no] = readpcap.ping_reply_time(pcap_file, host.IP(), i0.IP())
 
-            logoff_times_matrix[run_no][host_no] = readcap.logoff_time(pcap_file,
-                                                                       host.IP(),
-                                                                       i0.IP())
+            logoff_times_matrix[run_no][host_no] = readpcap.logoff_time(pcap_file,
+                                                                        host.IP(),
+                                                                        i0.IP())
 
-            reauth_times_matrix[run_no][host_no] = readcap.reauth_time(pcap_file)
+            reauth_times_matrix[run_no][host_no] = readpcap.reauth_time(pcap_file)
 
-            reauth_ping_matrix[run_no][host_no] = readcap.reauth_ping_reply_time(pcap_file,
-                                                                                 host.IP(),
-                                                                                 i0.IP())
+            reauth_ping_matrix[run_no][host_no] = readpcap.reauth_ping_reply_time(pcap_file,
+                                                                                  host.IP(),
+                                                                                  i0.IP())
 
 
         time_taken = datetime.now() - start_time
-        readcap.save_CSV(test_name, [[time_taken], auth_matrix[run_no], prt_matrix[run_no],
-                                     logoff_times_matrix[run_no], reauth_times_matrix[run_no],
-                                     reauth_ping_matrix[run_no]])
+        readpcap.save_CSV(test_name, [[time_taken], auth_matrix[run_no], prt_matrix[run_no],
+                                      logoff_times_matrix[run_no], reauth_times_matrix[run_no],
+                                      reauth_ping_matrix[run_no]])
 
         # cleanup
         clean_up(test_name, run_no)
