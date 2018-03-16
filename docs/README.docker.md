@@ -17,7 +17,7 @@ docker run --privileged -ti gasket/tests
 This contains an example docker-compose file that can be used in conjunction with a mininet network, to demonstrate 802.1X functionality with Faucet.
 It contains 3 containers 'freeradius', 'hostapd' & 'faucet-auth'.
 - freeradius - is a RADIUS server, see directory docker-compose/freeradius for configuration files.
-- hostapd - is the 802.1X authenticator, see directoy docker-compose/hostapd for its configuration file.
+- hostapd - is the 802.1X authenticator, see directory docker-compose/hostapd for its configuration file.
 - faucet-auth - is the controller (faucet & auth_app).
 
 You will need to setup your network (mininet or real). [see below for mininet example](mininet).
