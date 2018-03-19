@@ -80,7 +80,7 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 What is believed (unconfirmed) to occur, is on the second logon hostapd will send a disconnect message at the start of the authentication process for that MAC address and the system will therefore log the mac off the old port.
 The MAC will therefore only be authenticated on the current port.
 This behaviour however does allow fake users to logoff other users, by either cloning the MAC address of an authenticated client and either of A) sending a EAP-Logoff, or B) starting a new authentication (regardless of whether it is successful).
-The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix' may be availalble for 'B' that ignores the disconnect from unsuccessful logon attempts if the client is still active.
+The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix' may be available for 'B' that ignores the disconnect from unsuccessful logon attempts if the client is still active.
 - See [TODO](#todo) for more.
 
 
