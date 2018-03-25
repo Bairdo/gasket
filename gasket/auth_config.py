@@ -10,7 +10,7 @@ class AuthConfig(object):
     """
 
     def __init__(self, filename):
-        data = yaml.load(open(filename, 'r'))
+        data = yaml.load(open(filename, 'r'), Loader=yaml.CLoader)
 
         self.version = data['version']
         self.logger_location = data['logger_location']
@@ -24,6 +24,8 @@ class AuthConfig(object):
         self.faucet_ip = data['faucet']['ip']
         gasket_conf_utils.validate_ip_address(self.faucet_ip)
         self.prom_url = 'http://{}:{}'.format(self.faucet_ip, self.prom_port)
+
+        self.prom_sleep = data['faucet'].get('prom_sleep', 5)
 
         self.container_name = data['faucet'].get('container_name', '')
 

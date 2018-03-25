@@ -132,6 +132,7 @@ class RuleManager(object):
     """
 
     logger = None
+    base = None
 
     def __init__(self, config, logger):
         self.config = config
@@ -140,45 +141,51 @@ class RuleManager(object):
         self.base_filename = self.config.base_filename
         self.faucet_acl_filename = self.config.acl_config_file
 
-    def add_to_base_acls(self, filename, rules, user, mac):
+
+    def read_base(self, filename):
+        with open(filename) as f:
+            self.base = yaml.load(f, Loader=yaml.CLoader)
+
+
+    def write_base(self, filename):
+        # 'rotate' filename - filename.bak, filename.bak.1 this is primiarily for logging,
+        # to see how users affect the config.
+
+        # write back to filename
+        write_yaml(self.base, filename + '.tmp')
+        self.backup_file(filename)
+        self.logger.debug('backed up base')
+        self.swap_temp_file(filename)
+        self.logger.debug('swapped tmp for base')
+
+    def add_to_base_acls(self, rules, user, mac):
         '''Adds rules to the base acl file (and writes).
         Args:
             filename (str);
             rules (dict): {port_s1_1 : list of rules}
             user (str): username
         '''
-        with open(filename) as f:
-            base = yaml.safe_load(f)
         # somehow add the rules to the base where ideally the items in the acl are the pointers.
         # but guess it might not matter, just hurts readability.
 
         # this is NOT a spelling mistake. this ensures that the auth rules are defined before
         # the use in the port acl.
         # and that the port acl will have the pointer. At the end of the day it doesn't matter.
-        if 'aauth' not in base:
-            base['aauth'] = {}
+        if 'aauth' not in self.base:
+            self.base['aauth'] = {}
 
-        self.logger.debug('base %s', base)
+        self.logger.debug('base %s', self.base)
 
         for aclname, acllist in list(rules.items()):
             self.logger.debug("aclname: %s user: %s mac:%s", aclname, user, mac)
-            base['aauth'][aclname + user + mac] = acllist
-            base_acl = base['acls'][aclname]
+            self.base['aauth'][aclname + user + mac] = acllist
+            base_acl = self.base['acls'][aclname]
             i = base_acl.index('authed-rules')
             # insert rules above the authed-rules 'flag'. Add 1 for below it.
             # this may not be included as the reference. but instead inserting each.
             base_acl[i:i] = [{aclname + user + mac: acllist}]
 
-        # 'rotate' filename - filename.bak, filename.bak.1 this is primiarily for logging,
-        # to see how users affect the config.
 
-        # write back to filename
-        write_yaml(base, filename + '.tmp')
-        self.backup_file(filename)
-        self.logger.debug('backed up base')
-        self.swap_temp_file(filename)
-        self.logger.debug('swapped tmp for base')
-        return base
 
     def authenticate(self, username, mac, switch, port, acl_list):
         """Authenticates a username and MAC address on a switch and port.
@@ -201,9 +208,12 @@ class RuleManager(object):
                              username, mac)
             return False
         # update base
-        base = self.add_to_base_acls(self.base_filename, rules, username, mac)
+        self.add_to_base_acls(rules, username, mac)
+
+
+    def translate_to_faucet(self):
         # update faucet
-        final = create_faucet_acls(base, self.logger)
+        final = create_faucet_acls(self.base, self.logger)
         write_yaml(final, self.faucet_acl_filename + '.tmp', True)
         self.backup_file(self.faucet_acl_filename)
         self.swap_temp_file(self.faucet_acl_filename)
@@ -253,17 +263,15 @@ class RuleManager(object):
             username (str)
             mac (str): MAC address
         """
-        with open(self.base_filename) as f:
-            base = yaml.safe_load(f)
         self.logger.info('removing username %s, mac %s from base', username, mac)
-        self.logger.debug(base)
+        self.logger.debug(self.base)
         remove = []
 
-        if 'aauth' in base:
-            for acl in list(base['aauth'].keys()):
+        if 'aauth' in self.base:
+            for acl in list(self.base['aauth'].keys()):
                 self.logger.debug('aauth acl')
                 self.logger.debug(acl)
-                for  r in base['aauth'][acl]:
+                for  r in self.base['aauth'][acl]:
                     rule = r['rule']
                     if '_mac_' in rule and '_name_' in rule:
                         self.logger.debug('mac and name exist')
@@ -285,28 +293,22 @@ class RuleManager(object):
         self.logger.debug(remove)
         removed = False
         for aclname in remove:
-            del base['aauth'][aclname]
+            del self.base['aauth'][aclname]
             removed = True
 
-            for port_acl_name, port_acl_list in list(base['acls'].items()):
+            for port_acl_name, port_acl_list in list(self.base['acls'].items()):
                 for item in port_acl_list:
                     if isinstance(item, dict):
                         if aclname in item:
                             try:
-                                base['acls'][port_acl_name].remove(item)
+                                self.base['acls'][port_acl_name].remove(item)
                                 removed = True
                             except Exception as e:
                                 self.logger.exception(e)
 
-        if removed:
-            # only need to write it back if something has actually changed.
-            write_yaml(base, self.base_filename + '.tmp')
-            self.backup_file(self.base_filename)
-            self.swap_temp_file(self.base_filename)
-
         self.logger.info('updated base')
-        self.logger.debug(base)
-        return base, removed
+        self.logger.debug(self.base)
+
 
     def deauthenticate(self, username, mac):
         """Deauthenticates a username or MAC address.
@@ -319,29 +321,9 @@ class RuleManager(object):
         """
         self.logger.info('deauthenticate user: %s mac: %s', username, mac)
         # update base
-        base, changed = self.remove_from_base(username, mac)
+        self.remove_from_base(username, mac)
         # update faucet only if config has changed
-        if changed:
-            self.logger.info('base has changed. removing from faucet')
-            final = create_faucet_acls(base, self.logger)
-            write_yaml(final, self.faucet_acl_filename + '.tmp', True)
 
-            self.backup_file(self.faucet_acl_filename)
-            self.swap_temp_file(self.faucet_acl_filename)
-            # sighup.
-            start_count = self.get_faucet_reload_count()
-            self.send_signal(signal.SIGHUP)
-            self.logger.info('deauth signal sent')
-            for i in range(400):
-                end_count = self.get_faucet_reload_count()
-                if end_count > start_count:
-                    self.logger.info('deauth - faucet has reloaded.')
-                    return True
-                time.sleep(0.05)
-                self.logger.info('deauth - waiting for faucet to process sighup config reload on. %d', i)
-            self.logger.error('deauth - faucet did not process sighup within 400 * 0.05 seconds.')
-            return False
-        return True
 
     @staticmethod
     def backup_file(filename):

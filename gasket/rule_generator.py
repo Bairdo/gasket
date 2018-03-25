@@ -93,5 +93,5 @@ class RuleGenerator(object):
             rule_file: path to file.
         """
         self.yaml_file = rule_file
-        self.conf = yaml.load(open(rule_file, "r"))
+        self.conf = yaml.load(open(rule_file, "r"), Loader=yaml.CLoader)
 

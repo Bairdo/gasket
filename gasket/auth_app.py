@@ -6,6 +6,7 @@ and sending it a SIGHUP.
 # pylint: disable=import-error
 
 import argparse
+from datetime import datetime
 import queue
 import re
 import signal
@@ -21,6 +22,7 @@ from gasket import rabbitmq
 from gasket.host import UnlearntUnauthenticatedHost
 from gasket.port import Port
 from gasket.datapath import Datapath
+from gasket import prometheus_thread
 
 
 class Proto(object):
@@ -36,9 +38,6 @@ class Proto(object):
     DHCP_SERVER_PORT = 67
     DNS_PORT = 53
     HTTP_PORT = 80
-
-
-LEARNED_MACS_REGEX = r"""learned_macs{dp_id="(0x[a-f0-9]+)",dp_name="([\w-]+)",n="(\d+)",port="(\d+)",vlan="(\d+)"}"""
 
 
 class AuthApp(object):
@@ -69,7 +68,6 @@ class AuthApp(object):
         self.config = config
         self.logger = logger
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
-        self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
         self.work_queue = queue.Queue()
 
     def start(self):
@@ -99,24 +97,53 @@ class AuthApp(object):
         except Exception as e:
             self.logger.exception(e)
         self.setup_datapath()
-        self.get_prometheus_mac_learning()
+
+        pt = prometheus_thread.Prometheus(self.work_queue, self.config.logger_location, self.config.prom_url, self.config.prom_port, self.config.prom_sleep)
+        try:
+            pt.start()
+            self.threads.append(pt)
+        except Exception as e:
+            self.logger.exception(e)
+
         print('Started socket Threads.')
         print('Working')
         self.logger.info('Working worker thread.')
         while True:
-            work = self.work_queue.get()
+            work_list = []
+            auth_count = 0
+            deauth_count = 0
+            l2learn_count = 0
+            port_status_count = 0
+            work_list.append(self.work_queue.get())
+            start_time = datetime.now()
+            while not self.work_queue.empty():
+                work_list.append(self.work_queue.get())
+            self.rule_man.read_base(self.config.base_filename)
+            for work in work_list:
+                self.logger.info('Got %s work from queue ', type(work))
+                if isinstance(work, work_item.AuthWorkItem):
+                    self.authenticate(work.mac, work.username, work.acllist, work.creation_time)
+                    auth_count += 1
+                elif isinstance(work, work_item.DeauthWorkItem):
+                    self.deauthenticate(work.mac)
+                    deauth_count += 1
+                elif isinstance(work, work_item.L2LearnWorkItem):
+                    self.l2learn(work)
+                    l2learn_count += 1
+                elif isinstance(work, work_item.PortChangeWorkItem):
+                    self.port_status_handler(work)
+                    port_status_count += 1
+                else:
+                    self.logger.warn("Unsupported WorkItem type: %s", type(work))
+            self.rule_man.write_base(self.config.base_filename)
+            self.rule_man.translate_to_faucet()
+            end_time = datetime.now()
 
-            self.logger.info('Got %s work from queue ', type(work))
-            if isinstance(work, work_item.AuthWorkItem):
-                self.authenticate(work.mac, work.username, work.acllist)
-            elif isinstance(work, work_item.DeauthWorkItem):
-                self.deauthenticate(work.mac)
-            elif isinstance(work, work_item.L2LearnWorkItem):
-                self.l2learn(work)
-            elif isinstance(work, work_item.PortChangeWorkItem):
-                self.port_status_handler(work)
-            else:
-                self.logger.warn("Unsupported WorkItem type: %s", type(work))
+            elapsed_time = end_time - start_time
+            total_time = (elapsed_time.days * 24 * 60 * 60 + elapsed_time.seconds) * 1000 + elapsed_time.microseconds / 1000.0
+            self.logger.info('processed %d workitems a: %d, d: %d, l2: %d, p: %d in time: %d' % (len(work_list), auth_count,
+                                                                                                 deauth_count, l2learn_count,
+                                                                                                 port_status_count, total_time))
 
     def setup_datapath(self):
         """Builds the datpath/ports this instance of gasket is aware of.
@@ -158,32 +185,7 @@ class AuthApp(object):
         host = self.macs[mac]
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
 
-    def get_prometheus_mac_learning(self):
-        """Queries the prometheus faucet client,
-        And creates L2Learn work for macs already learnt.
-        """
-        # query faucets promethues.
-        self.logger.info('querying prometheus for "learned_macs"')
-        try:
-            prom_mac_table = auth_app_utils.scrape_prometheus_vars(self.config.prom_url,
-                                                                   ['learned_macs'])[0]
-        except Exception as e:
-            self.logger.exception(e)
-            return
-        self.logger.debug('queried prometheus. mac_table:\n%s\n',
-                          prom_mac_table)
-
-        for line in prom_mac_table:
-            labels, float_as_mac = line.split(' ')
-            macstr = auth_app_utils.float_to_mac(float_as_mac)
-            self.logger.debug('float %s is mac %s', float_as_mac, macstr)
-
-            # if this is also an access port, we have found the dpid and the port
-            values = self.learned_macs_compiled_regex.match(labels)
-            dpid, dp_name, n, port, vlan = values.groups()
-            self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port), int(vlan), macstr, None))
-
-    def authenticate(self, mac, user, acl_list):
+    def authenticate(self, mac, user, acl_list, start_time):
         """Authenticates the user as specifed by adding ACL rules
         to the Faucet configuration file. Once added Faucet is signaled via SIGHUP.
         Args:
@@ -191,6 +193,7 @@ class AuthApp(object):
             user (str): Username.
             acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
         """
+        auth_start_time = datetime.now()
         self.logger.info("authenticating: %s %s", mac, user)
         if not mac in self.macs:
             self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, logger=self.logger,
@@ -200,7 +203,17 @@ class AuthApp(object):
         port = host.get_authing_learn_ports()
         host = host.authenticate(user, port, acl_list)
         self.macs[mac] = host
-        self.logger.info('authenticate complete')
+        self.logger.info('authenticate complete %s' % mac)
+        end_time = datetime.now()
+
+        elapsed_time = end_time - start_time
+        total_time = (elapsed_time.days * 24 * 60 * 60 + elapsed_time.seconds) * 1000 + elapsed_time.microseconds / 1000.0
+        elapsed_time = end_time - auth_start_time
+        auth_time = (elapsed_time.days * 24 * 60 * 60 + elapsed_time.seconds) * 1000 + elapsed_time.microseconds / 1000.0
+
+
+        self.logger.info('time (spent actually processing (not in queue)) to authenticate mac: %s %dms' % (mac, auth_time))
+        self.logger.info('time (since event received) to authenticate mac: %s %dms' % (mac, total_time))
         # TODO probably shouldn't return success if the switch/port cannot be found.
         # but at this stage auth server (hostapd) can't do anything about it.
         # Perhaps look into the CoA radius thing, so that process looks like:
@@ -262,7 +275,7 @@ if __name__ == "__main__":
     parser.add_argument('config', metavar='config', type=str,
                         nargs=1, help='path to configuration file')
     args = parser.parse_args()
-    config_filename = '/etc/ryu/faucet/gasket/auth.yaml'
+    config_filename = '/etc/faucet/gasket/auth.yaml'
     if args.config:
         config_filename = args.config[0]
     print('Loading config %s' % config_filename)
