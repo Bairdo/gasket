@@ -1,6 +1,10 @@
 
 *.bak*
 
+performance-tests/test-backups*
+performance-tests/results*
+performance-tests/pcaps
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
