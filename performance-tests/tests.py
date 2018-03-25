@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime
 import errno
+import glob
 import os
 import time
 import shutil
@@ -20,7 +21,27 @@ def avg(list_):
         list_   (list<floats>): numbers to take mean of.
     """
     print(list_)
-    return sum(list_) / float(len(list_))
+    s = 0
+    for f in list_:
+        if not f == 'N/A':
+            s += f
+
+    c = float(len(list_) - list_.count('N/A'))
+    if c == 0:
+        return -1
+    return s / c
+
+def get_stats(list_):
+    """
+    Args:
+        list_ (list<floats>): numbers to get statistics for
+    Returns:
+        list of mean, max, count of 'N/A'
+    """
+    mean = avg(list_)
+    max_ = max(list_)
+    na_count = list_.count('N/A')
+    return [mean, max_, na_count]
 
 
 def dir_setup(pcap_dir_base, test_name, no_runs):
@@ -56,7 +77,7 @@ def setup(hostapd_port_no):
     shutil.copytree('etc', 'etc-test')
 
 
-    with open('etc-test/ryu/faucet/faucet.yaml', 'r') as faucet:
+    with open('etc-test/faucet/faucet.yaml', 'r') as faucet:
         txt = faucet.read()
 
     host_ports_conf = ''
@@ -67,11 +88,11 @@ def setup(hostapd_port_no):
                 acl_in: port_faucet-1_%d
 ''' % (host_ports_conf, i, i)
 
-    with open('etc-test/ryu/faucet/faucet.yaml', 'w') as faucet:
+    with open('etc-test/faucet/faucet.yaml', 'w') as faucet:
         faucet.write(txt % {'host_ports' : host_ports_conf, 'hostapd_port': hostapd_port_no})
 
 
-    with open('etc-test/ryu/faucet/faucet-acls.yaml', 'a') as faucet_acls:
+    with open('etc-test/faucet/faucet-acls.yaml', 'a') as faucet_acls:
         for i in range(2, hostapd_port_no):
             acl = '''  port_faucet-1_%d:
   - rule:
@@ -89,7 +110,7 @@ def setup(hostapd_port_no):
             faucet_acls.write(acl)
 
 
-    with open('etc-test/ryu/faucet/gasket/base-no-authed-acls.yaml', 'a') as gasket_acls:
+    with open('etc-test/faucet/gasket/base-no-authed-acls.yaml', 'a') as gasket_acls:
         for i in range(2, hostapd_port_no):
             acl = '''    port_faucet-1_%d:
     - rule:
@@ -108,7 +129,7 @@ def setup(hostapd_port_no):
             gasket_acls.write(acl)
 
 
-    with open('etc-test/ryu/faucet/gasket/auth.yaml', 'r') as gasket_auth:
+    with open('etc-test/faucet/gasket/auth.yaml', 'r') as gasket_auth:
         txt = gasket_auth.read()
 
     host_ports_conf = ''
@@ -118,7 +139,7 @@ def setup(hostapd_port_no):
                 auth_mode: access
 ''' % (host_ports_conf, i)
 
-    with open('etc-test/ryu/faucet/gasket/auth.yaml', 'w') as gasket_auth:
+    with open('etc-test/faucet/gasket/auth.yaml', 'w') as gasket_auth:
         gasket_auth.write(txt % {'host_ports' : host_ports_conf, 'hostapd_port' : hostapd_port_no})
 
 
@@ -159,12 +180,10 @@ def clean_up(test_name, test_no):
         test_name   (str):
         test_no     (int): run number.
     """
-    shutil.move('etc-test', 'test-backups/%s/%d/etc' % (test_name, test_no))
-    shutil.move('docker-compose-test', 'test-backups/%s/%d/docker-compose' % (test_name, test_no))
-    shutil.move('hostapd.log', 'test-backups/%s/%d/hostapd.log' % (test_name, test_no))
-    shutil.move('faucet-perftests.log', 'test-backups/%s/%d/faucet.log' % (test_name, test_no))
-    shutil.move('faucet-adapter-perftests.log',
-                'test-backups/%s/%d/faucet-adapter.log' % (test_name, test_no))
+    shutil.move('etc-test/', 'test-backups/%s/%d/etc-test/' % (test_name, test_no))
+    shutil.move('docker-compose-test/', 'test-backups/%s/%d/docker-compose/' % (test_name, test_no))
+    for f1 in glob.glob('/tmp/wpa_ctrl*'):
+        os.remove(f1)
 
 
 def createCSV(filename, headers):
@@ -178,9 +197,9 @@ def createCSV(filename, headers):
 
 
 def authenticate(host):
-    print(host.cmdPrint('wpa_supplicant -f etc-test/{0}/wpa.log -Dwired -i{0}-eth0 -cetc-test/{0}/host-wpa.conf -B -W'.format(host.name)))
+    host.cmd('wpa_supplicant -f etc-test/{0}/wpa.log -Dwired -i{0}-eth0 -cetc-test/{0}/host-wpa.conf -B -W'.format(host.name))
 
-    print(host.cmdPrint('wpa_cli -a etc-test/{0}/host-action.sh > /tmp/qwerty.uio 2>&1 &'.format(host.name)))
+    host.cmd('wpa_cli -a etc-test/{0}/host-action.sh > /tmp/qwerty.uio 2>&1 &'.format(host.name))
 
 
 
@@ -200,6 +219,8 @@ def test_many_hosts(no_runs, pcap_dir_base, no_hosts):
     for header in ['auth', 'ping_reply', 'logoff', 'reauth_time', 'reauth_ping_reply']:
         for i in range(no_hosts):
             headers.append('h%d-%s' % (i, header))
+        for stat in ['avg', 'max', 'N/A count']:
+            headers.append('%s-%s' % (header, stat))
     createCSV('results/%s.csv' % test_name, headers)
 
     for run_no in range(no_runs):
@@ -227,10 +248,18 @@ def test_many_hosts(no_runs, pcap_dir_base, no_hosts):
 
         for host in hosts:
             authenticate(host)
-
+        # TODO replace this sleep with a wait. and maybe also a timeout (so if test takes longer than X stop.).
         time.sleep(60)
 
-        log_location = './'
+#        for host in hosts:
+#            for _ in range(24):
+#                if os.path.getsize('etc-test/%s-eth0.log' % host.name) < 5:
+#                    time.sleep(5)
+#                else:
+#                    break
+
+
+        log_location = './docker-compose-test/'
         mn.shut_down(hosts, log_location)
 
         host_no = -1
@@ -254,14 +283,16 @@ def test_many_hosts(no_runs, pcap_dir_base, no_hosts):
 
 
         time_taken = datetime.now() - start_time
-        readpcap.save_CSV(test_name, [[time_taken], auth_matrix[run_no], prt_matrix[run_no],
-                                      logoff_times_matrix[run_no], reauth_times_matrix[run_no],
-                                      reauth_ping_matrix[run_no]])
+        readpcap.save_CSV(test_name, [[time_taken],
+                                      auth_matrix[run_no], get_stats(auth_matrix[run_no]),
+                                      prt_matrix[run_no], get_stats(prt_matrix[run_no]),
+                                      logoff_times_matrix[run_no], get_stats(logoff_times_matrix[run_no]),
+                                      reauth_times_matrix[run_no], get_stats(reauth_times_matrix[run_no]),
+                                      reauth_ping_matrix[run_no], get_stats(reauth_ping_matrix[run_no])])
 
         # cleanup
         clean_up(test_name, run_no)
         print('trial completed')
-        time.sleep(10)
 
 
 if __name__ == '__main__':

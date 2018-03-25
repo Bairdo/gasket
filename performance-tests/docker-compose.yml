@@ -30,8 +30,8 @@ services:
         image: 'faucet/faucet'
 
         volumes:
-            - './docker-compose-test/faucet/var/log/ryu/faucet:/var/log/ryu/faucet'
-            - './etc-test/ryu/faucet:/etc/ryu/faucet'
+            - './docker-compose-test/faucet/var/log/faucet:/var/log/faucet'
+            - './etc-test/faucet:/etc/faucet'
 
         ports:
             - '6699:6653'
@@ -48,8 +48,8 @@ services:
             context: '..'
             dockerfile: './Dockerfile.auth'
         volumes:
-            - './docker-compose-test/gasket/log/ryu/faucet:/var/log/ryu/faucet'
-            - './etc-test/ryu/faucet:/etc/ryu/faucet'
+            - './docker-compose-test/gasket/log/faucet/gasket:/var/log/faucet/gasket'
+            - './etc-test/faucet:/etc/faucet'
             - '/var/run/:/var/run/'
         networks:
             control-plane-net:

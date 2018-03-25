@@ -88,7 +88,7 @@ def set_up(pcap_dir):
 
     print('started mininet')
 
-    time.sleep(15)
+    time.sleep(5)
 
     print('Faucet good')
 
@@ -151,6 +151,7 @@ def shut_down(hosts, log_location):
         log.write(RABBIT_ADAPTER.stdout.read())
     with open('%s/hostapd.log' % log_location, 'w+') as log:
         log.write(HOSTAPD.stdout.read())
-
+    with open('%s/faucet-perftests.log' % log_location, 'w+') as log:
+        log.write(FAUCET.stdout.read())
     with open('%s/faucet-perftests.log' % log_location, 'w+') as log:
         log.write(FAUCET.stdout.read())
