@@ -4,3 +4,6 @@ tests/*pyc
 gasket/*/*pyc
 tests/*/*pyc
 docker-compose/*
+performance-tests/pcaps
+performance-tests/results*
+performance-tests/test-backups*
