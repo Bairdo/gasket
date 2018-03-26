@@ -1,39 +1,16 @@
-FROM osrg/ryu
-
-RUN \
-  apt-get update && \
-  apt-get install -qy --no-install-recommends \
-    gcc \
-    git \
-    libpython3-all-dev \
-    libyaml-dev \
-    netbase \
-    python3-pip \
-    tcpdump \
-    wget \
-    build-essential \
-    libssl-dev
-
-#
-# This hostapd contains several minor fixes for when running the internal radius server.
-# Otherwise it is the same as hostapd origin, at the time of the clone. ~15/9/17.
-#
-RUN \
-  git clone https://github.com/Bairdo/hostapd-d1xf.git && \
-  cd hostapd-d1xf/hostapd && \
-  git checkout hostapd-master && \
-  make && make install
+FROM faucet/faucet-python3:1.7.0
 
 COPY ./ /gasket-src/
 
 RUN \
+  BUILDDEPS='gcc python3-dev musl-dev' && \
+  apk -q add -U  $BUILDDEPS && \
   pip3 install --upgrade pip && \
   pip3 install setuptools wheel virtualenv --upgrade && \
   pip3 install -r /gasket-src/requirements.txt && \
-  pip3 install /gasket-src
+  pip3 install /gasket-src && \
+  for i in $BUILDDEPS; do apk -q del $i; done
 
 VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/", "/etc/hostapd"]
-
-EXPOSE 6653
 
 CMD ["/gasket-src/docker/runauth.sh"]
