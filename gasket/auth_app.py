@@ -105,18 +105,20 @@ class AuthApp(object):
         self.logger.info('Working worker thread.')
         while True:
             work = self.work_queue.get()
-
-            self.logger.info('Got %s work from queue ', type(work))
-            if isinstance(work, work_item.AuthWorkItem):
-                self.authenticate(work.mac, work.username, work.acllist)
-            elif isinstance(work, work_item.DeauthWorkItem):
-                self.deauthenticate(work.mac)
-            elif isinstance(work, work_item.L2LearnWorkItem):
-                self.l2learn(work)
-            elif isinstance(work, work_item.PortChangeWorkItem):
-                self.port_status_handler(work)
-            else:
-                self.logger.warn("Unsupported WorkItem type: %s", type(work))
+            try:
+                self.logger.info('Got %s work from queue ', type(work))
+                if isinstance(work, work_item.AuthWorkItem):
+                    self.authenticate(work.mac, work.username, work.acllist)
+                elif isinstance(work, work_item.DeauthWorkItem):
+                    self.deauthenticate(work.mac)
+                elif isinstance(work, work_item.L2LearnWorkItem):
+                    self.l2learn(work)
+                elif isinstance(work, work_item.PortChangeWorkItem):
+                    self.port_status_handler(work)
+                else:
+                    self.logger.warn("Unsupported WorkItem type: %s", type(work))
+            except Exception as e:
+                self.logger.exception(e)
 
     def setup_datapath(self):
         """Builds the datpath/ports this instance of gasket is aware of.
@@ -220,8 +222,9 @@ class AuthApp(object):
             username (str): username to deauth.
         """
         self.logger.info('deauthenticating: %s %s', mac, username)
-        host = self.macs[mac]
-        host.deauthenticate(None)
+        host = self.macs.get(mac, None)
+        if host:
+            host.deauthenticate(None)
         self.logger.info('deauthenticate complete')
         # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
         # will likley think it has logged off, so is there anything we can do from hostapd to
