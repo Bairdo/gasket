@@ -1,0 +1,71 @@
+version: '2.1'
+
+services:
+    faucet:
+        image: 'faucet/faucet-pi'
+
+        volumes:
+            - '/var/log/ryu/faucet:/var/log/ryu/faucet'
+            - '/etc/ryu/faucet:/etc/ryu/faucet'
+
+        ports:
+            - '6653:6653'
+            - '9302'
+            - 8890
+        environment:
+            FAUCET_CONFIG_STAT_RELOAD: '${FAUCET_CONFIG_STAT_RELOAD}'
+            FAUCET_EVENT_SOCK: '${FAUCET_EVENT_SOCK}'
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.103
+
+    gasket:
+        build:
+            context: '.'
+            dockerfile: './Dockerfile.pi'
+        volumes:
+            - '/var/log/ryu/faucet:/var/log/ryu/faucet'
+            - '/etc/ryu/faucet:/etc/ryu/faucet'
+            - '/var/run/:/var/run/'
+        networks:
+            default:
+            control-plane-net:
+                ipv4_address: 172.222.0.100
+        ports:
+            - 8890:8890/udp
+
+    rabbitmq_adapter:
+        restart: always
+        depends_on:
+            - faucet
+        image: 'faucet/faucet-event-adapter-rabbitmq-pi'
+        volumes_from:
+            - faucet
+        environment:
+            FAUCET_EVENT_SOCK: '${FAUCET_EVENT_SOCK}'
+            FA_RABBIT_HOST: '${FA_RABBIT_HOST}'
+            FA_RABBIT_PORT: '${FA_RABBIT_PORT}'
+            FA_RABBIT_EXCHANGE: '${FA_RABBIT_EXCHANGE}'
+            FA_RABBIT_EXCHANGE_TYPE: '${FA_RABBIT_EXCHANGE_TYPE}'
+            FA_RABBIT_ROUTING_KEY: '${FA_RABBIT_ROUTING_KEY}'
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.105
+
+
+    rabbitmq_server:
+        restart: always
+        image: 'rabbitmq:3-management'
+        networks:
+            control-plane-net:
+                ipv4_address: 172.222.0.104
+
+        ports:
+            - "5672:5672"
+
+networks:
+    control-plane-net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 172.222.0.0/24
