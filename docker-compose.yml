@@ -26,7 +26,6 @@ services:
         - net.ipv4.conf.all.send_redirects=0
         - net.ipv4.ip_forward=0
 
-
     faucet:
         image: 'faucet/faucet'
 
@@ -75,7 +74,7 @@ services:
         restart: always
         depends_on:
             - faucet
-        image: 'faucet/faucet-event-adapter-rabbitmq-pi'
+        image: 'faucet/faucet-event-adapter-rabbitmq'
         volumes_from:
             - faucet
         environment:

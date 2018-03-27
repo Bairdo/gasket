@@ -12,7 +12,6 @@ services:
         ports:
             - '6653:6653'
             - '9302'
-            - 8890
         environment:
             FAUCET_CONFIG_STAT_RELOAD: '${FAUCET_CONFIG_STAT_RELOAD}'
             FAUCET_EVENT_SOCK: '${FAUCET_EVENT_SOCK}'
