@@ -14,10 +14,12 @@ class AuthenticationWorkItem(WorkItem):
     """
     mac = None
     hostapd_name = None
+    ports = None
 
-    def __init__(self, mac, hostapd_name):
+    def __init__(self, mac, hostapd_name, ports):
         self.mac = mac
         self.hostapd_name = hostapd_name
+        self.ports = ports
 
 
 class AuthWorkItem(AuthenticationWorkItem):
@@ -26,8 +28,8 @@ class AuthWorkItem(AuthenticationWorkItem):
     username = None
     acllist = []
 
-    def __init__(self, mac, username, acllist, hostapd_name):
-        super().__init__(mac, hostapd_name)
+    def __init__(self, mac, username, acllist, hostapd_name, ports):
+        super().__init__(mac, hostapd_name, ports)
         self.username = username
         self.acllist = acllist
 

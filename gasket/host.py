@@ -183,8 +183,8 @@ class LearntAuthenticatedHost(Host):
         return self
 
     def deauthenticate(self, port):
-
-        self.auth_port.del_authed_host(self.mac)
+        if self.auth_port:
+            self.auth_port.del_authed_host(self.mac)
         self.auth_port = None
         self.rule_man.deauthenticate(self.username, self.mac)
         self.logger.info('la deauth now uu')

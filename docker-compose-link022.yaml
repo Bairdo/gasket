@@ -2,6 +2,7 @@ version: '2.1'
 
 services:
     faucet:
+        restart: always
         image: 'faucet/faucet-pi'
 
         volumes:

@@ -28,6 +28,7 @@ class HostapdConf(gasket_conf.GasketConf):
     unsolicited_timeout = None
     ifname = None
     logger_level = None
+    locations = None
 
     defaults = {
         'name': None,
@@ -43,6 +44,7 @@ class HostapdConf(gasket_conf.GasketConf):
         'unsolicited_timeout': 5,
         'ifname': None,
         'logger_level': None,
+        'locations': None,
     }
 
     defaults_types = {
@@ -59,6 +61,7 @@ class HostapdConf(gasket_conf.GasketConf):
         'unsolicited_timeout': int,
         'ifname': str,
         'logger_level': (str, int),
+        'locations': dict,
     }
 
 
@@ -81,9 +84,17 @@ class HostapdConf(gasket_conf.GasketConf):
         if self.unsolicited_bind_port:
             validate_port(self.unsolicited_bind_port)
 
+        if self.locations:
+            self.validate_locations(self.locations)
+
         self.logger_level = get_log_level(self.logger_level)
 
     def set_defaults(self):
         super().set_defaults()
         self._set_default('name', self._id)
         self._set_default('description', self.name)
+
+    def validate_locations(self, locations):
+        """Checks that the
+        """
+        pass

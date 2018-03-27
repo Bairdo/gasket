@@ -108,9 +108,9 @@ class AuthApp(object):
             try:
                 self.logger.info('Got %s work from queue ', type(work))
                 if isinstance(work, work_item.AuthWorkItem):
-                    self.authenticate(work.mac, work.username, work.acllist)
+                    self.authenticate(work.mac, work.username, work.acllist, work.ports)
                 elif isinstance(work, work_item.DeauthWorkItem):
-                    self.deauthenticate(work.mac)
+                    self.deauthenticate(work.mac, work.ports)
                 elif isinstance(work, work_item.L2LearnWorkItem):
                     self.l2learn(work)
                 elif isinstance(work, work_item.PortChangeWorkItem):
@@ -185,13 +185,14 @@ class AuthApp(object):
             dpid, dp_name, n, port, vlan = values.groups()
             self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port), int(vlan), macstr, None))
 
-    def authenticate(self, mac, user, acl_list):
+    def authenticate(self, mac, user, acl_list, ports):
         """Authenticates the user as specifed by adding ACL rules
         to the Faucet configuration file. Once added Faucet is signaled via SIGHUP.
         Args:
             mac (str): MAC Address.
             user (str): Username.
             acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
+            ports (list of {dpname :{port}}): ports that the hostapd that authed the MAC is looking after.
         """
         self.logger.info("authenticating: %s %s", mac, user)
         if not mac in self.macs:
@@ -200,6 +201,17 @@ class AuthApp(object):
 
         host = self.macs[mac]
         port = host.get_authing_learn_ports()
+
+        # if only one port, must be located on that port.
+        if len(ports) == 1:
+            # we know for ??certain?? where the mac is.
+            for k, v in ports.items():
+                if len(v) == 1:
+                    for p in v.keys():
+                        port = self.dps[k].ports[p]
+                        host = self.macs[mac].learn(port)
+
+
         host = host.authenticate(user, port, acl_list)
         self.macs[mac] = host
         self.logger.info('authenticate complete')
@@ -214,12 +226,13 @@ class AuthApp(object):
 #            self.hapd_req.deauthenticate(mac)
 #            self.hapd_req.disassociate(mac)
 
-    def deauthenticate(self, mac, username=None):
+    def deauthenticate(self, mac, ports, username=None):
         """Deauthenticates the mac and username by removing related acl rules
         from Faucet's config file.
         Args:
             mac (str): mac address string to deauth
             username (str): username to deauth.
+            ports (list of {dpname :{port}}): ports that the hostapd that authed the MAC is looking after.
         """
         self.logger.info('deauthenticating: %s %s', mac, username)
         host = self.macs.get(mac, None)

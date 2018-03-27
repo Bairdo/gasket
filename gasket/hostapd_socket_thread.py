@@ -85,13 +85,13 @@ class HostapdSocketThread(threading.Thread):
                     self.work_queue.put(work_item.AuthWorkItem(mac,
                                                                username,
                                                                radius_acl_list,
-                                                               self.conf.name))
+                                                               self.conf.name, self.conf.locations))
                     self.logger.info('work given to queue')
                 elif 'AP-STA-DISCONNECTED' in data:
                     self.logger.info('%s disconnected message', data)
                     mac = data.split()[1].replace("'", '')
                     # and add mac to the work queue for deauth. maybe add which hostapd it came from
-                    self.work_queue.put(work_item.DeauthWorkItem(mac, self.conf.name))
+                    self.work_queue.put(work_item.DeauthWorkItem(mac, self.conf.name, self.conf.locations))
                 else:
                     self.logger.info('unknown message %s', data)
         except OSError as e:
