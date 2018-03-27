@@ -30,8 +30,8 @@ services:
         image: 'faucet/faucet'
 
         volumes:
-            - '/var/log/ryu/faucet:/var/log/ryu/faucet'
-            - '/etc/ryu/faucet:/etc/ryu/faucet'
+            - './var/log/ryu/faucet:/var/log/ryu/faucet'
+            - './etc/ryu/faucet:/etc/ryu/faucet'
 
         ports:
             - '6653:6653'
