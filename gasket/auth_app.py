@@ -147,9 +147,6 @@ class AuthApp(object):
                                                          logger=self.logger, rule_man=self.rule_man)
 
         host = self.macs[mac]
-        self.logger.info(self.dps)
-        for k, v in self.dps[dp_name].ports.items():
-            self.logger.info('%s : %s', k, v)
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
 
     def get_prometheus_mac_learning(self):
@@ -193,12 +190,11 @@ class AuthApp(object):
 
         host = self.macs[mac]
         port = host.get_authing_learn_ports()
-
-
         hapd = self.hostapds[hostapd_name]
 
-        if len(hapd.ports) == 1:
         # if only one port, must be located on that port.
+        # otherwise we use the last learnt auth port
+        if len(hapd.ports) == 1:
             port = next(iter(hapd.ports.values()))
             host = self.macs[mac].learn(port)
 
