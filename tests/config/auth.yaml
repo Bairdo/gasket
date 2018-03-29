@@ -29,79 +29,64 @@ dps:
             2:
             3:
                 auth_mode: access
+                hostapds: [hostapd-1]
             4:
                 auth_mode: access
+                hostapds: [hostapd-1]
             5:
                 auth_mode: access
+                hostapds: [hostapd-1]
             6:
                 auth_mode: access
+                hostapds: [hostapd-1]
             7:
                 auth_mode: access
+                hostapds: [hostapd-1]
             8:
                 auth_mode: access
+                hostapds: [hostapd-1]
             9:
                 auth_mode: access
+                hostapds: [hostapd-1]
             10:
                 auth_mode: access
+                hostapds: [hostapd-1]
             11:
                 auth_mode: access
+                hostapds: [hostapd-1]
             12:
                 auth_mode: access
+                hostapds: [hostapd-1]
             13:
                 auth_mode: access
+                hostapds: [hostapd-1]
             14:
                 auth_mode: access
+                hostapds: [hostapd-1]
             15:
                 auth_mode: access
+                hostapds: [hostapd-1]
             16:
                 auth_mode: access
+                hostapds: [hostapd-1]
             17:
                 auth_mode: access
+                hostapds: [hostapd-1]
             18:
                 auth_mode: access
+                hostapds: [hostapd-1]
             19:
                 auth_mode: access
+                hostapds: [hostapd-1]
             20:
                 auth_mode: access
+                hostapds: [hostapd-1]
             21:
                 auth_mode: access
+                hostapds: [hostapd-1]
             22:
                 auth_mode: access
-
-servers:
-    gateways:
-        - gateway:
-            mac: 52:54:00:12:35:02
-            ip: 10.0.5.2
-
-    captive-portals:
-        - captive-portal:
-            mac: 08:00:27:00:03:02
-
-    # the 4 servers below are currently unused by any real code,
-    #  but are loaded into the python object.
-    dot1x-servers:
-        - dot1x-server:
-            mac: 08:00:27:00:03:02
-
-    dns-servers:
-        - dns-server:
-            mac: # TODO
-
-    dhcp-servers:
-        - dhcp-server:
-            mac: # TODO
-            ip: # TODO
-
-    wins-servers:
-        - wins-server:
-            mac: # TODO
-            ip: # TODO
-
-
-captive-portal:
-    # number of retransmission attemps of 802.1X before allowing captive portal fallback
-    retransmission-attempts: 3
+                hostapds: [hostapd-1]
 
 # rules to be applied for a user once authenticated.
 auth-rules:
