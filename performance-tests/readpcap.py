@@ -15,18 +15,20 @@ def auth_time(filename):
     """Time from eap-start to success.
     """
     start = end = None
+    try:
+        for ts, pkt in dpkt.pcap.Reader(open(filename, 'r')):
+            eth = dpkt.ethernet.Ethernet(pkt)
+            if eth.type == ETHER_EAP:
+                if start is None and eth.data == EAP_START_DATA:
+                    start = ts
+                elif len(eth.data) > EAP_SUCCESS_LEN and ord(eth.data[4]) == 3:
+                    end = ts
+                    break
 
-    for ts, pkt in dpkt.pcap.Reader(open(filename, 'r')):
-        eth = dpkt.ethernet.Ethernet(pkt)
-        if eth.type == ETHER_EAP:
-            if start is None and eth.data == EAP_START_DATA:
-                start = ts
-            elif len(eth.data) > EAP_SUCCESS_LEN and ord(eth.data[4]) == 3:
-                end = ts
-                break
-
-    if start is not None and end is not None:
-        return (end - start)
+        if start is not None and end is not None:
+            return (end - start)
+    except dpkt.NeedData:
+        pass
     return 'N/A'
 
 
