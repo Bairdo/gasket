@@ -41,9 +41,10 @@ dps:
 
             3:
                 auth_mode: access
+                hostapds: [hostapd-1]
             4:
                 auth_mode: link022
-                hostapds: [hostapd-2]
+                hostapds: [hostapd-1]
 
 # top level hostapds contains the config info for connecting to the (many) hostapd interfaces.
 hostapds:

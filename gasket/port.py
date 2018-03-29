@@ -1,21 +1,48 @@
-"""Representation of a switch port."""
-class Port(object):
+"""Representation oif a switch port."""
+
+
+from gasket import gasket_conf
+
+
+class Port(gasket_conf.GasketConf):
     """Port that belongs to a datapath.
     Keeps track of hosts learnt and authenticated on it.
     """
     number = None
-    datapath = None
+    dp_id = None
     auth_mode = None
+    hostapds = None
+
 
     learnt_hosts = set()
     authed_hosts = set()
 
-    def __init__(self, port_no, datapath, auth_mode):
+    datapath = None
+
+
+    defaults = {
+        'number': None,
+        'dp_id': None,
+        'auth_mode': None,
+        'hostapds': None,
+    }
+
+    defaults_types = {
+        'number': int,
+        'dp_id': int,
+        'auth_mode': str,
+        'hostapds': list,
+    }
+
+    def __init__(self, _id, conf, dp):
         """Stores state related to a switch port.
         """
-        self.number = port_no
-        self.datapath = datapath
-        self.auth_mode = auth_mode
+        super(Port, self).__init__(_id, conf, dpid=dp.dp_id)
+        self.datapath = dp
+
+
+    def set_defaults(self):
+        self._set_default('number', int(self._id))
 
     def add_learn_host(self, mac):
         """Adds a learnt host
@@ -46,4 +73,4 @@ class Port(object):
         self.authed_hosts.discard(mac)
 
     def __str__(self):
-        return "Port:  %s:%s mode: %s" % (self.datapath.dp_name, self.number, self.auth_mode)
+        return "Port:  %s:%s mode: %s" % (self.dp_id, self.number, self.auth_mode)

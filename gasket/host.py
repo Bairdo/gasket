@@ -131,7 +131,7 @@ class UnlearntAuthenticatedHost(Host):
 
             self.logger.info('ua learn, can apply rules to the port')
             self.rule_man.authenticate(self.username, self.mac,
-                                       self.auth_port.datapath.dp_name,
+                                       self.auth_port.datapath.name,
                                        self.auth_port.number, self.acl_list)
 
         port.add_learn_host(self.mac)
@@ -177,7 +177,7 @@ class LearntAuthenticatedHost(Host):
         # In theory the user could have changed.
         self.username = username
         self.auth_port.add_authed_host(self.mac)
-        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
+        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.name,
                                    self.auth_port.number, self.acl_list)
         self.logger.info('la authed auth_port', self.auth_port)
         return self
@@ -235,7 +235,7 @@ class LearntUnauthenticatedHost(Host):
         assert port is not None
         self.auth_port = port
         self.acl_list = acl_list
-        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
+        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.name,
                                    self.auth_port.number, self.acl_list)
         port.add_authed_host(self.mac)
         self.logger.info('lu auth auth_port %s', self.auth_port)
