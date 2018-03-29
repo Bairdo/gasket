@@ -1,3 +1,5 @@
+"""Configuration parser for gasket.
+"""
 
 from gasket.datapath import Datapath
 from gasket.hostapd_conf import HostapdConf
