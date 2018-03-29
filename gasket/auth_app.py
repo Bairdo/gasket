@@ -18,9 +18,7 @@ from gasket import hostapd_socket_thread
 from gasket import rabbitmq
 from gasket import rule_manager
 from gasket import work_item
-from gasket.datapath import Datapath
 from gasket.host import UnlearntUnauthenticatedHost
-from gasket.port import Port
 
 
 class Proto(object):
@@ -75,7 +73,7 @@ class AuthApp(object):
         temp_config = {}
         temp_config['hostapds'] = config.hostapds
         temp_config['dps'] = config.dps
-        self.dps, self.hostapds = config_parser.parse_config(temp_config, logger)
+        self.dps, self.hostapds = config_parser.parse_config(temp_config)
 
         self.logger = logger
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
@@ -93,7 +91,7 @@ class AuthApp(object):
         self.logger.info('Starting hostapd socket threads')
         print('Starting hostapd socket threads ...')
 
-        for hostapd_name, hostapd_conf in self.hostapds.items():
+        for hostapd_conf in self.hostapds.values():
             hst = hostapd_socket_thread.HostapdSocketThread(hostapd_conf, self.work_queue,
                                                             self.config.logger_location)
             self.logger.info('Starting thread %s', hst)
@@ -146,7 +144,6 @@ class AuthApp(object):
             self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, ip=ip,
                                                          logger=self.logger, rule_man=self.rule_man)
 
-        host = self.macs[mac]
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
 
     def get_prometheus_mac_learning(self):
@@ -172,7 +169,8 @@ class AuthApp(object):
             # if this is also an access port, we have found the dpid and the port
             values = self.learned_macs_compiled_regex.match(labels)
             dpid, dp_name, n, port, vlan = values.groups()
-            self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port), int(vlan), macstr, None))
+            self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port),
+                                                          int(vlan), macstr, None))
 
     def authenticate(self, mac, user, acl_list, hostapd_name):
         """Authenticates the user as specifed by adding ACL rules
