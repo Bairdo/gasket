@@ -1,9 +1,6 @@
 docker
 faucet==1.6.21
-ipaddress
-networkx
 pika>=0.11.0
-prometheus_client
 pyyaml
 requests
 ryu==4.19
