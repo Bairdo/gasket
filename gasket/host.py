@@ -66,7 +66,7 @@ class Host(object):
             last learnt port that is mode 'access'.
             Otherwise None
         """
-        self.logger.debug('host is on ports %s' % self.learn_ports)
+        self.logger.debug('host is on ports %s', self.learn_ports)
         for port_no in reversed(self.ordered_learn_ports):
             port = self.learn_ports[port_no]
             if port.auth_mode == 'access':
@@ -179,7 +179,7 @@ class LearntAuthenticatedHost(Host):
         self.auth_port.add_authed_host(self.mac)
         self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.name,
                                    self.auth_port.number, self.acl_list)
-        self.logger.info('la authed auth_port', self.auth_port)
+        self.logger.info('la authed auth_port: %s', self.auth_port)
         return self
 
     def deauthenticate(self, port):

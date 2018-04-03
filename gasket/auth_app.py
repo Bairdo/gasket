@@ -75,7 +75,7 @@ class AuthApp(object):
         temp_config = {}
         temp_config['hostapds'] = config.hostapds
         temp_config['dps'] = config.dps
-        self.dps, self.hostapds = config_parser.parse_config(temp_config, logger)
+        self.dps, self.hostapds = config_parser.parse_config(temp_config)
 
         self.logger = logger
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
