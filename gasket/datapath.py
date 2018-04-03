@@ -40,7 +40,11 @@ class Datapath(gasket_conf.GasketConf):
 
 
     def add_port(self, port):
+        """Adds a new port to the dp.
+        Args:
+            port (Port): new port to add.
+        """
         self.ports[port.number] = port
 
     def __str__(self):
-        return 'Datapath id: %s, name: %s' % (self.dp_id, self.dp_name)
+        return 'Datapath id: %s, name: %s' % (self.dp_id, self.name)

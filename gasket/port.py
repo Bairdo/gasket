@@ -42,6 +42,7 @@ class Port(gasket_conf.GasketConf):
 
 
     def set_defaults(self):
+        super(Port, self).set_defaults()
         self._set_default('number', int(self._id))
 
     def add_learn_host(self, mac):
