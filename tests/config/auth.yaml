@@ -16,6 +16,7 @@ files:
 
 hostapds:
     hostapd-1:
+        logger_level: warning
         unix_socket_path: %(tmpdir)s/hostapd/%(intf)s
         request_timeout: 4
         unsolicited_timeout: 4
@@ -23,7 +24,7 @@ hostapds:
 
 dps:
     faucet-1:
-        id: %(dp_id)s
+        #        id: %(dp_id)s
         interfaces:
             1:
             2:
