@@ -12,15 +12,13 @@ import signal
 import sys
 
 from gasket.auth_config import AuthConfig
-from gasket import rule_manager
 from gasket import auth_app_utils
-from gasket.hostapd_conf import HostapdConf
+from gasket import config_parser
 from gasket import hostapd_socket_thread
-from gasket import work_item
 from gasket import rabbitmq
+from gasket import rule_manager
+from gasket import work_item
 from gasket.host import UnlearntUnauthenticatedHost
-from gasket.port import Port
-from gasket.datapath import Datapath
 
 
 class Proto(object):
@@ -63,10 +61,20 @@ class AuthApp(object):
     # dp_name : Datapath
     macs = {}
     # mac : Host
+    hostapds = {}
+    # hostapd_name : HostapdConf
 
     def __init__(self, config, logger):
         super(AuthApp, self).__init__()
         self.config = config
+
+        # TODO replace the AuthConfig with the faucet conf class style.
+        # this is just hack until it is all complete.
+        temp_config = {}
+        temp_config['hostapds'] = config.hostapds
+        temp_config['dps'] = config.dps
+        self.dps, self.hostapds = config_parser.parse_config(temp_config)
+
         self.logger = logger
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
         self.learned_macs_compiled_regex = re.compile(LEARNED_MACS_REGEX)
@@ -83,8 +91,7 @@ class AuthApp(object):
         self.logger.info('Starting hostapd socket threads')
         print('Starting hostapd socket threads ...')
 
-        for hostapd_name, conf in self.config.hostapds.items():
-            hostapd_conf = HostapdConf(hostapd_name, conf)
+        for hostapd_conf in self.hostapds.values():
             hst = hostapd_socket_thread.HostapdSocketThread(hostapd_conf, self.work_queue,
                                                             self.config.logger_location)
             self.logger.info('Starting thread %s', hst)
@@ -98,45 +105,27 @@ class AuthApp(object):
             self.threads.append(rt)
         except Exception as e:
             self.logger.exception(e)
-        self.setup_datapath()
+
         self.get_prometheus_mac_learning()
         print('Started socket Threads.')
         print('Working')
         self.logger.info('Working worker thread.')
         while True:
             work = self.work_queue.get()
-
-            self.logger.info('Got %s work from queue ', type(work))
-            if isinstance(work, work_item.AuthWorkItem):
-                self.authenticate(work.mac, work.username, work.acllist)
-            elif isinstance(work, work_item.DeauthWorkItem):
-                self.deauthenticate(work.mac)
-            elif isinstance(work, work_item.L2LearnWorkItem):
-                self.l2learn(work)
-            elif isinstance(work, work_item.PortChangeWorkItem):
-                self.port_status_handler(work)
-            else:
-                self.logger.warn("Unsupported WorkItem type: %s", type(work))
-
-    def setup_datapath(self):
-        """Builds the datpath/ports this instance of gasket is aware of.
-        """
-        for dp_name, datapath in self.config.dp_port_mode.items():
-            dp_id = datapath['id']
-            if not dp_name in self.dps:
-                dp = Datapath(dp_id, dp_name)
-                self.dps[dp_name] = dp
-                self.logger.debug('added dp %s to dps', dp)
-
-            dp = self.dps[dp_name]
-            for port_no, conf_port in datapath['interfaces'].items():
-                if not port_no in self.dps[dp_name].ports:
-                    self.logger.debug('adding port %s' % port_no)
-                    access_mode = None
-                    if conf_port:
-                        access_mode = conf_port.get('auth_mode', None)
-
-                    dp.add_port(Port(port_no, dp, access_mode))
+            try:
+                self.logger.info('Got %s work from queue ', type(work))
+                if isinstance(work, work_item.AuthWorkItem):
+                    self.authenticate(work.mac, work.username, work.acllist, work.hostapd_name)
+                elif isinstance(work, work_item.DeauthWorkItem):
+                    self.deauthenticate(work.mac, work.hostapd_name)
+                elif isinstance(work, work_item.L2LearnWorkItem):
+                    self.l2learn(work)
+                elif isinstance(work, work_item.PortChangeWorkItem):
+                    self.port_status_handler(work)
+                else:
+                    self.logger.warn("Unsupported WorkItem type: %s", type(work))
+            except Exception as e:
+                self.logger.exception(e)
 
     def l2learn(self, host_wi):
         """Learns a host, if host is already authenticated rules are applied.
@@ -144,10 +133,8 @@ class AuthApp(object):
             host_wi (work_item.L2LearnWorkItem): the host to learn
         """
         dp_name = host_wi.dp_name
-        dp_id = host_wi.dp_id
         mac = host_wi.mac
         ip = host_wi.ip
-        vid = host_wi.vid
         port_no = host_wi.port
         self.logger.info('learning mac %s at dp: %s port: %d', mac, dp_name, port_no)
         if not mac in self.macs:
@@ -155,7 +142,6 @@ class AuthApp(object):
             self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, ip=ip,
                                                          logger=self.logger, rule_man=self.rule_man)
 
-        host = self.macs[mac]
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
 
     def get_prometheus_mac_learning(self):
@@ -181,15 +167,17 @@ class AuthApp(object):
             # if this is also an access port, we have found the dpid and the port
             values = self.learned_macs_compiled_regex.match(labels)
             dpid, dp_name, n, port, vlan = values.groups()
-            self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port), int(vlan), macstr, None))
+            self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16), int(port),
+                                                          int(vlan), macstr, None))
 
-    def authenticate(self, mac, user, acl_list):
+    def authenticate(self, mac, user, acl_list, hostapd_name):
         """Authenticates the user as specifed by adding ACL rules
         to the Faucet configuration file. Once added Faucet is signaled via SIGHUP.
         Args:
             mac (str): MAC Address.
             user (str): Username.
             acl_list (list of str): names of acls (in order of highest priority to lowest) to be applied.
+            hostapd_name (str): name of the hostapd that did the auth.
         """
         self.logger.info("authenticating: %s %s", mac, user)
         if not mac in self.macs:
@@ -198,6 +186,14 @@ class AuthApp(object):
 
         host = self.macs[mac]
         port = host.get_authing_learn_ports()
+        hapd = self.hostapds[hostapd_name]
+
+        # if only one port, must be located on that port.
+        # otherwise we use the last learnt auth port
+        if len(hapd.ports) == 1:
+            port = next(iter(hapd.ports.values()))
+            host = self.macs[mac].learn(port)
+
         host = host.authenticate(user, port, acl_list)
         self.macs[mac] = host
         self.logger.info('authenticate complete')
@@ -212,16 +208,18 @@ class AuthApp(object):
 #            self.hapd_req.deauthenticate(mac)
 #            self.hapd_req.disassociate(mac)
 
-    def deauthenticate(self, mac, username=None):
+    def deauthenticate(self, mac, hostapd_name, username=None):
         """Deauthenticates the mac and username by removing related acl rules
         from Faucet's config file.
         Args:
             mac (str): mac address string to deauth
             username (str): username to deauth.
+            hostapd_name (str): name of the hostapd that did the deauth.
         """
         self.logger.info('deauthenticating: %s %s', mac, username)
-        host = self.macs[mac]
-        host.deauthenticate(None)
+        host = self.macs.get(mac, None)
+        if host:
+            self.macs[mac] = host.deauthenticate(None)
         self.logger.info('deauthenticate complete')
         # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
         # will likley think it has logged off, so is there anything we can do from hostapd to

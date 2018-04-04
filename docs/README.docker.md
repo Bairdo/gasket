@@ -31,7 +31,9 @@ You will need to setup your network (mininet or real). [see below for mininet ex
 
 Start the containers
 ```bash
-docker-compose up freeradius hostapd gasket
+export FAUCET_EVENT_SOCK=1
+export FA_RABBIT_HOST=<rabbitmq_server IP>
+docker-compose up freeradius hostapd gasket rabbitmq_adapter rabbitmq_server
 ```
 
 To kill the gasket container, run the following to tidy up the hostapd control socket connections.

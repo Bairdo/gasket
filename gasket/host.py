@@ -10,7 +10,6 @@ class Host(object):
     """
     mac = None
     ip = None
-    # TODO handle case where host can be on many ports.
     learn_ports = None
     ordered_learn_ports = None
     rule_man = None
@@ -66,7 +65,7 @@ class Host(object):
             last learnt port that is mode 'access'.
             Otherwise None
         """
-        self.logger.debug('host is on ports %s' % self.learn_ports)
+        self.logger.debug('host is on ports %s', self.learn_ports)
         for port_no in reversed(self.ordered_learn_ports):
             port = self.learn_ports[port_no]
             if port.auth_mode == 'access':
@@ -98,7 +97,10 @@ class UnlearntAuthenticatedHost(Host):
 
     def authenticate(self, username, port, acl_list):
         """deauthenticates host from old port.
-
+        Args:
+            username (str):
+            port (Port): should not be None
+            acl_list (list<str>): names of acls to apply.
         """
         assert port is None
         self.acl_list = acl_list
@@ -131,7 +133,7 @@ class UnlearntAuthenticatedHost(Host):
 
             self.logger.info('ua learn, can apply rules to the port')
             self.rule_man.authenticate(self.username, self.mac,
-                                       self.auth_port.datapath.dp_name,
+                                       self.auth_port.datapath.name,
                                        self.auth_port.number, self.acl_list)
 
         port.add_learn_host(self.mac)
@@ -177,14 +179,14 @@ class LearntAuthenticatedHost(Host):
         # In theory the user could have changed.
         self.username = username
         self.auth_port.add_authed_host(self.mac)
-        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
+        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.name,
                                    self.auth_port.number, self.acl_list)
-        self.logger.info('la authed auth_port', self.auth_port)
+        self.logger.info('la authed auth_port: %s', self.auth_port)
         return self
 
     def deauthenticate(self, port):
-
-        self.auth_port.del_authed_host(self.mac)
+        if self.auth_port:
+            self.auth_port.del_authed_host(self.mac)
         self.auth_port = None
         self.rule_man.deauthenticate(self.username, self.mac)
         self.logger.info('la deauth now uu')
@@ -235,7 +237,7 @@ class LearntUnauthenticatedHost(Host):
         assert port is not None
         self.auth_port = port
         self.acl_list = acl_list
-        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.dp_name,
+        self.rule_man.authenticate(self.username, self.mac, self.auth_port.datapath.name,
                                    self.auth_port.number, self.acl_list)
         port.add_authed_host(self.mac)
         self.logger.info('lu auth auth_port %s', self.auth_port)
