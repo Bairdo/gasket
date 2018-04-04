@@ -25,6 +25,6 @@ RUN  \
     find / -name \*pyc -delete
   
 
-VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/"]
+VOLUME ["/etc/faucet/", "/var/log/faucet/"]
 
 CMD ["/gasket-src/docker/runauth.sh"]

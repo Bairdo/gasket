@@ -18,5 +18,5 @@ dps:
                 native_vlan: 100
                 acl_in: port_faucet-1_4
 include:
-    - /etc/ryu/faucet/faucet-acls.yaml
+    - /etc/faucet/faucet-acls.yaml
 

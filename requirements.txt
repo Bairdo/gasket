@@ -1,6 +1,6 @@
 docker
-faucet==1.6.21
+faucet==1.7.2
 pika>=0.11.0
 pyyaml
 requests
-ryu==4.19
+ryu==4.24

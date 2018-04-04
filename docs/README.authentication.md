@@ -1,4 +1,4 @@
-# 801.1X & Captive Portal Authentication with Faucet
+# 802.1X & Captive Portal Authentication with Faucet
 
 This release is a work in progress, and there are bugs.
 
@@ -493,7 +493,7 @@ The Gasket repository contains auth_app.py which is used as the 'proxy' between 
 This must run on the same machine as Faucet, as the SIGHUP signal is used to reload the Faucet configuration.
 
 ###### auth.yaml
-See [auth.yaml](./etc/ryu/faucet/gasket/auth.yaml) for acceptable configuration options and descriptions.
+See [auth.yaml](./etc/faucet/gasket/auth.yaml) for acceptable configuration options and descriptions.
 Note: the structure and content is subject to change.
 
 ### Running
@@ -507,7 +507,7 @@ TODO add docker-compose for faucet-con stuff
 To start Faucet and Gasket use Dockerfile.auth:
 ```bash
 docker build -t bairdo/gasket -f Dockerfile.auth .
-docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
+docker run --privileged -v <path-to-config-dir>:/etc/faucet/ -v <path-to-logging-dir>:/var/log/faucet/ -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
 ```
 Port 6653 is the Openflow port used by the Faucet, port 9244 is used for Prometheus and - port 9244 may be omitted if you do not need Prometheus.
 
