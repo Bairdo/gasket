@@ -133,10 +133,8 @@ class AuthApp(object):
             host_wi (work_item.L2LearnWorkItem): the host to learn
         """
         dp_name = host_wi.dp_name
-        dp_id = host_wi.dp_id
         mac = host_wi.mac
         ip = host_wi.ip
-        vid = host_wi.vid
         port_no = host_wi.port
         self.logger.info('learning mac %s at dp: %s port: %d', mac, dp_name, port_no)
         if not mac in self.macs:
