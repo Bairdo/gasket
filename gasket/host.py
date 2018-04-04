@@ -10,7 +10,6 @@ class Host(object):
     """
     mac = None
     ip = None
-    # TODO handle case where host can be on many ports.
     learn_ports = None
     ordered_learn_ports = None
     rule_man = None
@@ -98,7 +97,10 @@ class UnlearntAuthenticatedHost(Host):
 
     def authenticate(self, username, port, acl_list):
         """deauthenticates host from old port.
-
+        Args:
+            username (str):
+            port (Port): should not be None
+            acl_list (list<str>): names of acls to apply.
         """
         assert port is None
         self.acl_list = acl_list

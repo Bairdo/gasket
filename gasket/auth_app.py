@@ -219,7 +219,7 @@ class AuthApp(object):
         self.logger.info('deauthenticating: %s %s', mac, username)
         host = self.macs.get(mac, None)
         if host:
-            host.deauthenticate(None)
+            self.macs[mac] = host.deauthenticate(None)
         self.logger.info('deauthenticate complete')
         # TODO possibly handle success somehow. However the client wpa_supplicant, etc,
         # will likley think it has logged off, so is there anything we can do from hostapd to
