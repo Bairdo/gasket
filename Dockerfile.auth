@@ -11,6 +11,6 @@ RUN \
   pip3 install /gasket-src && \
   for i in $BUILDDEPS; do apk -q del $i; done
 
-VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/", "/etc/hostapd"]
+VOLUME ["/etc/faucet/", "/var/log/faucet/", "/etc/hostapd"]
 
 CMD ["/gasket-src/docker/runauth.sh"]

@@ -262,7 +262,7 @@ if __name__ == "__main__":
     parser.add_argument('config', metavar='config', type=str,
                         nargs=1, help='path to configuration file')
     args = parser.parse_args()
-    config_filename = '/etc/ryu/faucet/gasket/auth.yaml'
+    config_filename = '/etc/faucet/gasket/auth.yaml'
     if args.config:
         config_filename = args.config[0]
     print('Loading config %s' % config_filename)

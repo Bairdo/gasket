@@ -25,7 +25,7 @@ RUN  \
     find / -name \*pyc -delete
   
 
-VOLUME ["/etc/ryu/faucet/", "/var/log/ryu/faucet/"]
+VOLUME ["/etc/faucet/", "/var/log/faucet/"]
 
 EXPOSE 6653 6663 9302
 

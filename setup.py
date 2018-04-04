@@ -7,13 +7,13 @@ from pkg_resources import resource_filename
 from setuptools import setup, find_packages
 
 def install_configs():
-    """Install configuration files to /etc/ryu/"""
-    dst_faucet_conf_dir = '/etc/ryu/faucet/'
-    dst_gasket_conf_dir = '/etc/ryu/faucet/gasket/'
+    """Install configuration files to /etc/faucet/"""
+    dst_faucet_conf_dir = '/etc/faucet/'
+    dst_gasket_conf_dir = '/etc/faucet/gasket/'
 
-    src_faucet_conf_dir = resource_filename(__name__, 'etc/ryu/faucet')
-    src_gasket_conf_dir = resource_filename(__name__, 'etc/ryu/faucet/gasket')
-    gasket_log_dir = '/var/log/ryu/faucet/gasket/'
+    src_faucet_conf_dir = resource_filename(__name__, 'etc/faucet')
+    src_gasket_conf_dir = resource_filename(__name__, 'etc/faucet/gasket')
+    gasket_log_dir = '/var/log/faucet/gasket/'
 
     try:
         if not os.path.exists(dst_faucet_conf_dir):

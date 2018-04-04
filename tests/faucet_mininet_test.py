@@ -91,7 +91,7 @@ FAUCET_LINT_SRCS = glob.glob(
 FAUCET_TEST_LINT_SRCS = glob.glob(
     os.path.join(os.path.dirname(__file__), 'faucet_mininet_test*py'))
 
-CONFIG_FILE_DIRS = ['/etc/ryu/faucet', './']
+CONFIG_FILE_DIRS = ['/etc/faucet', './']
 REQUIRED_TEST_PORTS = 4
 
 

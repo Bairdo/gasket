@@ -1,7 +1,7 @@
 ---
 version: 0
 
-logger_location: /var/log/ryu/faucet/gasket/auth_app.log
+logger_location: /var/log/faucet/gasket/auth_app.log
 # These are the same as the standard python levels.
 # CRITICAL, ERROR, WARNING, INFO, DEBUG. 
 logger_level: DEBUG
@@ -17,13 +17,13 @@ files:
     # the location of files. pid should contain the process id (pid) of the main faucet-process (ryu-manager)
     #  should be obtainable with "ps aux | grep faucet.faucet | head -n1 awk '{print $2}' > /etc/ryu/faucet/contr_pid"
     controller_pid: /var/run/faucet.pid
-    faucet_config: /etc/ryu/faucet/faucet.yaml
-    acl_config: /etc/ryu/faucet/faucet-acls.yaml
-    base_config: /etc/ryu/faucet/gasket/base-acls.yaml
+    faucet_config: /etc/faucet/faucet.yaml
+    acl_config: /etc/faucet/faucet-acls.yaml
+    base_config: /etc/faucet/gasket/base-acls.yaml
 
 # rules to be applied for a user once authenticated.
 auth-rules:
-    file: /etc/ryu/faucet/gasket/rules.yaml
+    file: /etc/faucet/gasket/rules.yaml
 
 dps:
     faucet-1:
@@ -55,21 +55,21 @@ hostapds:
         remote_port: 8888
 
         # may also be used instead of host & port, when using the unix socket interface.
-#        socket_path: /path/to/hostapd/ctrl/socket
+        #socket_path: /path/to/hostapd/ctrl/socket
         # timeout seconds- can be a non negative float. If 0 socket will not block. If not specified defaults to 5 seconds.
         request_timeout: 4
         unsolicited_timeout: 4
-      
+
         # bind_address & bind port must be used if udp port forwarding is used.
         # Recommended (but optional) for unsolicited socket if running behind a firewall.
         unsolicited_bind_address: 0.0.0.0
         unsolicited_bind_port: 8892
-#        request_bind_address: 0.0.0.0
-#        request_bind_port: 8891
+        #request_bind_address: 0.0.0.0
+        #request_bind_port: 8891
 
         # Name of the hostapd interface (NIC) this hostapd config will receive events for.
         # Defaults to the default given by hostapd.
-#        ifname: wlan0
+        #ifname: wlan0
         # Log level used for this connection. (Optional)
         # See top level 'logger_level' for acceptable options
         logger_level: DEBUG
