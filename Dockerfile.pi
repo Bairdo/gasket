@@ -2,7 +2,7 @@ FROM hypriot/rpi-alpine
 
 ENV APK="apk -q"
 ENV BUILDDEPS="gcc musl-dev python3-dev"
-ENV TESTDEPS="bitstring pytest setuptools wheel virtualenv"
+ENV TESTDEPS="setuptools wheel virtualenv"
 ENV PIP3="pip3 -q --no-cache-dir install --upgrade"
 
 RUN \
@@ -26,7 +26,5 @@ RUN  \
   
 
 VOLUME ["/etc/faucet/", "/var/log/faucet/"]
-
-EXPOSE 6653 6663 9302
 
 CMD ["/gasket-src/docker/runauth.sh"]
