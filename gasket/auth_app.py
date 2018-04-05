@@ -153,8 +153,7 @@ class AuthApp(object):
             self.rule_man.translate_to_faucet()
             end_time = datetime.now()
 
-            elapsed_time = end_time - start_time
-            total_time = (elapsed_time.days * 24 * 60 * 60 + elapsed_time.seconds) * 1000 + elapsed_time.microseconds / 1000.0
+            total_time = auth_app_utils.time_difference(start_time, end_time)
             self.logger.info('processed %d workitems a: %d, d: %d, l2: %d, p: %d in time: %d' % (len(work_list), auth_count,
                                                                                                  deauth_count, l2learn_count,
                                                                                                  port_status_count, total_time))
@@ -226,11 +225,8 @@ class AuthApp(object):
         self.logger.info('authenticate complete %s' % mac)
         end_time = datetime.now()
 
-        elapsed_time = end_time - start_time
-        total_time = (elapsed_time.days * 24 * 60 * 60 + elapsed_time.seconds) * 1000 + elapsed_time.microseconds / 1000.0
-        elapsed_time = end_time - auth_start_time
-        auth_time = (elapsed_time.days * 24 * 60 * 60 + elapsed_time.seconds) * 1000 + elapsed_time.microseconds / 1000.0
-
+        total_time = auth_app_utils.time_difference(start_time, end_time)
+        auth_time = auth_app_utils.time_difference(auth_start_time, end_time)
 
         self.logger.info('time (spent actually processing (not in queue)) to authenticate mac: %s %dms' % (mac, auth_time))
         self.logger.info('time (since event received) to authenticate mac: %s %dms' % (mac, total_time))
