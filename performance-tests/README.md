@@ -11,13 +11,16 @@ Eventually the goal of these tests is to compare implementations of 802.1X syste
 
 
 
-If there is an error when running the tests, it may be necessary to remove the ovs-bridge and shutdown the Docker containers manually.
+If there is an error when running the tests, it may be necessary to remove the ovs-bridge, shutdown the Docker containers manually, delete surplus network interfaces.
 
 ```bash
 ovs-vsctl del-br s1
 docker ps
 docker stop performancetests_gasket_1
 docker stop performancetests_faucet_1
+...
+ip link
+ip link delete br-12345abcd
 ...
 ```
 
