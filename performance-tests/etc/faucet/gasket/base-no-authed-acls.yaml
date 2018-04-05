@@ -1,6 +1,0 @@
-acls:
-    allow_all:
-        - rule:
-            actions:
-                allow: 1
-

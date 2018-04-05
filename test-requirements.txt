@@ -1,6 +1,6 @@
 concurrencytest
 docker
-faucet==1.7.0
+faucet==1.7.2
 futures
 ipaddress
 netifaces
@@ -9,4 +9,4 @@ pylint
 pytest-cov
 pyyaml
 requests
-ryu==4.19
+ryu==4.24

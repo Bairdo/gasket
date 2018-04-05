@@ -1,4 +1,4 @@
-# 801.1X & Captive Portal Authentication with Faucet
+# 802.1X & Captive Portal Authentication with Faucet
 
 This release is a work in progress, and there are bugs.
 
@@ -80,7 +80,7 @@ This allows the authentication traffic to avoid the dataplane of the switch and 
 What is believed (unconfirmed) to occur, is on the second logon hostapd will send a disconnect message at the start of the authentication process for that MAC address and the system will therefore log the mac off the old port.
 The MAC will therefore only be authenticated on the current port.
 This behaviour however does allow fake users to logoff other users, by either cloning the MAC address of an authenticated client and either of A) sending a EAP-Logoff, or B) starting a new authentication (regardless of whether it is successful).
-The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix' may be availalble for 'B' that ignores the disconnect from unsuccessful logon attempts if the client is still active.
+The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix' may be available for 'B' that ignores the disconnect from unsuccessful logon attempts if the client is still active.
 - See [TODO](#todo) for more.
 
 
@@ -493,7 +493,7 @@ The Gasket repository contains auth_app.py which is used as the 'proxy' between 
 This must run on the same machine as Faucet, as the SIGHUP signal is used to reload the Faucet configuration.
 
 ###### auth.yaml
-See [auth.yaml](./etc/ryu/faucet/gasket/auth.yaml) for acceptable configuration options and descriptions.
+See [auth.yaml](./etc/faucet/gasket/auth.yaml) for acceptable configuration options and descriptions.
 Note: the structure and content is subject to change.
 
 ### Running
@@ -507,7 +507,7 @@ TODO add docker-compose for faucet-con stuff
 To start Faucet and Gasket use Dockerfile.auth:
 ```bash
 docker build -t bairdo/gasket -f Dockerfile.auth .
-docker run --privileged -v <path-to-config-dir>:/etc/ryu/faucet/ -v <path-to-logging-dir>:/var/log/ryu/faucet/ -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
+docker run --privileged -v <path-to-config-dir>:/etc/faucet/ -v <path-to-logging-dir>:/var/log/faucet/ -p 6653:6653 -p 9244:9244 -ti bairdo/gasket
 ```
 Port 6653 is the Openflow port used by the Faucet, port 9244 is used for Prometheus and - port 9244 may be omitted if you do not need Prometheus.
 

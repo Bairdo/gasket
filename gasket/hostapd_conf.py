@@ -29,6 +29,8 @@ class HostapdConf(gasket_conf.GasketConf):
     ifname = None
     logger_level = None
 
+    ports = None
+
     defaults = {
         'name': None,
         'description': None,
@@ -60,10 +62,13 @@ class HostapdConf(gasket_conf.GasketConf):
         'ifname': str,
         'logger_level': (str, int),
     }
-
+ 
+    def __init__(self, _id, conf):
+        super(HostapdConf, self).__init__(_id, conf)
+        self.ports = {}
 
     def check_config(self):
-
+        super(HostapdConf, self).check_config()
         if self.unix_socket_path:
             self.udp = False
             assert self.remote_host is None and self.remote_port is None
@@ -84,6 +89,13 @@ class HostapdConf(gasket_conf.GasketConf):
         self.logger_level = get_log_level(self.logger_level)
 
     def set_defaults(self):
-        super().set_defaults()
+        super(HostapdConf, self).set_defaults()
         self._set_default('name', self._id)
         self._set_default('description', self.name)
+
+    def add_port(self, port):
+        """add port that is managed by this hostapd.
+        Args:
+            port (Port):
+        """
+        self.ports[port.number] = port

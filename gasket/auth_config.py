@@ -18,6 +18,7 @@ class AuthConfig(object):
 
         self.logger_level = gasket_conf_utils.get_log_level(log_level)
 
+        # TODO make a config class for 'faucet'
         self.prom_port = data['faucet']['prometheus_port']
         gasket_conf_utils.validate_port(self.prom_port)
 
@@ -29,22 +30,29 @@ class AuthConfig(object):
 
         self.container_name = data['faucet'].get('container_name', '')
 
+<<<<<<< HEAD
         rabbitmq = data.get('rabbitmq', {})
 
         self.rabbit_host = rabbitmq.get('host', '')
         self.rabbit_port = rabbitmq.get('port', 5672)
 
 
+=======
+        # TODO move these files to new 'faucet' config class
+>>>>>>> master
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
         self.acl_config_file = data['files']['acl_config']
 
+        # TODO put this somewhere
         self.base_filename = data['files']['base_config']
 
-        self.dp_port_mode = data["dps"]
 
-        self.gateways = data.get("servers", {}).get("gateways", [])
+        # dps has a config class
+        self.dps = data["dps"]
 
+        # TODO move this to the same place 'base_config' goes
         self.rules = data["auth-rules"]["file"]
 
+        # hostapds has a config class
         self.hostapds = data["hostapds"]

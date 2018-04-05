@@ -1,21 +1,50 @@
 """Representation of a datapath"""
 
+from gasket import gasket_conf
 
-class Datapath(object):
+
+class Datapath(gasket_conf.GasketConf):
     """Stores state related to a datapath (switch)
     """
 
     dp_id = None
-    dp_name = None
+    name = None
 
-    ports = {}
+    interfaces = None
 
-    def __init__(self, dp_id, dp_name):
-        self.dp_id = dp_id
-        self.dp_name = dp_name
+
+    ports = None
+
+    defaults = {
+        'dp_id': None,
+        'name': None,
+        'interfaces': {},
+    }
+
+    defaults_types = {
+        'dp_id': int,
+        'name': str,
+        'interfaces': dict,
+    }
+
+
+    def __init__(self, _id, dp_id, conf):
+        super(Datapath, self).__init__(_id, conf, dpid=dp_id)
+        self.ports = {}
+
+
+    def set_defaults(self):
+        super(Datapath, self).set_defaults()
+        self._set_default('dp_id', self._id)
+        self._set_default('name', self._id)
+
 
     def add_port(self, port):
+        """Adds a new port to the dp.
+        Args:
+            port (Port): new port to add.
+        """
         self.ports[port.number] = port
 
     def __str__(self):
-        return 'Datapath id: %s, name: %s' % (self.dp_id, self.dp_name)
+        return 'Datapath id: %s, name: %s' % (self.dp_id, self.name)

@@ -8,17 +8,22 @@ To run the docker based test suite run the following commands as root:
 docker build -t gasket/tests -f Dockerfile.tests .
 apparmor_parser -R /etc/apparmor.d/usr.sbin.tcpdump
 modprobe openvswitch
-docker run --privileged -ti gasket/tests
+docker-compose up -d rabbitmq_server
+CONTROL_NETWORK="$(sudo docker network ls |grep control-plane | cut -c 1-12)"
+docker run --network=$CONTROL_NETWORK --privileged -ti gasket/tests
 ```
 
 
 ## docker-compose.yaml
 
 This contains an example docker-compose file that can be used in conjunction with a mininet network, to demonstrate 802.1X functionality with Faucet.
-It contains 3 containers 'freeradius', 'hostapd' & 'faucet-auth'.
+It contains 3 containers 'faucet', 'freeradius', 'gasket', 'hostapd', 'rabbitmq_adapter' & 'rabbitmq_server' .
+- faucet - is the OpenFlow controller.
 - freeradius - is a RADIUS server, see directory docker-compose/freeradius for configuration files.
+- gasket - is the authentication application.
 - hostapd - is the 802.1X authenticator, see directoy docker-compose/hostapd for its configuration file.
-- faucet-auth - is the controller (faucet & auth_app).
+- rabbitmq_adapter - is a small container for publishing Faucet events (from the faucet UNIX socket) to a rabbitmq server.
+- rabbitmq_server - a simple rabbitmq server, gasket will get faucets events from this.
 
 You will need to setup your network (mininet or real). [see below for mininet example](mininet).
 
@@ -26,7 +31,9 @@ You will need to setup your network (mininet or real). [see below for mininet ex
 
 Start the containers
 ```bash
-docker-compose up freeradius hostapd gasket
+export FAUCET_EVENT_SOCK=1
+export FA_RABBIT_HOST=<rabbitmq_server IP>
+docker-compose up freeradius hostapd gasket rabbitmq_adapter rabbitmq_server
 ```
 
 To kill the gasket container, run the following to tidy up the hostapd control socket connections.

@@ -7,7 +7,7 @@ from pkg_resources import resource_filename
 from setuptools import setup, find_packages
 
 def install_configs():
-    """Install configuration files to /etc/"""
+    """Install configuration files to /etc/faucet/"""
     dst_faucet_conf_dir = '/etc/faucet/'
     dst_gasket_conf_dir = '/etc/faucet/gasket/'
 

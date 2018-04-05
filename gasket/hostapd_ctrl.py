@@ -362,7 +362,7 @@ class HostapdCtrlUDP(HostapdCtrl):
                 cookie = self.get_cookie()
                 self.cookie = cookie.lstrip("COOKIE=")
                 self.logger.info('UDP Socket Cookie is %s', self.cookie)
-            except socket.timeout:
+            except (socket.timeout, ConnectionRefusedError):
                 self.logger.debug("Couldn't connect (get cookie) to UDP socket %s", self.sockaddr)
                 if i < 2:
                     continue

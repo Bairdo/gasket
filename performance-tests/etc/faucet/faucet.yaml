@@ -8,9 +8,15 @@ dps:
         interfaces:
             1:
                 native_vlan: 100
-%(host_ports)s
-            %(hostapd_port)d:
+            2:
                 native_vlan: 100
-
+                acl_in: port_faucet-1_2
+            3:
+                native_vlan: 100
+                acl_in: port_faucet-1_3
+            4:
+                native_vlan: 100
+                acl_in: port_faucet-1_4
 include:
     - /etc/faucet/faucet-acls.yaml
+
