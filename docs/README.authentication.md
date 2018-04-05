@@ -19,10 +19,10 @@ If you notice something odd, or have any suggestions please create a GitHub issu
 
 # Introduction
 
-This system is made up of 6 general components as shown in the diagram below: Hosts (end users), authenticator(s), authentication server(s), the Internet, OpenFlow Controller, and an OpenFlow 1.3 capable switch
-This has been tested with Ubuntu 16.04 (with [wpa_supplicant](https://w1.fi/wpa_supplicant/) providing 802.1X support), and Android version 8.i
+This system is made up of 6 general components as shown in the diagram below: Hosts (end users), authenticator(s), authentication server(s), the Internet, OpenFlow Controller, and an OpenFlow 1.3 capable switch.
+This has been tested with Ubuntu 16.04 (with [wpa_supplicant](https://w1.fi/wpa_supplicant/) providing 802.1X support), and Android version 8.0
 
-The **Hosts** must support 802.1X authentication.
+The **Hosts** must support 802.1X authentication (Windows, wpa_supplicant, Android, macOS, ...).
 
 The **Authenticator** is a Network Function Virtualisation (NFV) style server
 [Hostapd](https://w1.fi/hostapd/) provides the 802.1X authentication.
@@ -31,14 +31,14 @@ The **Authentication server** is a RADIUS server.
 
 The **Internet** is the rest of your network, e.g. Gateway, DNS Servers, more Switches & Hosts, e.t.c..
 
-The **Controller** is the [Ryu](osrg.github.io/ryu) OpenFlow Controller, [Faucet](https://github.com/faucetsdn/faucet), and a process (gasket.auth_app.py) for managing authentication messages from the authenticator and  configuring Faucet across the network.
+The **Controller** is [Faucet](https://github.com/faucetsdn/faucet), and a process (gasket.auth_app.py) for managing authentication messages from the authenticator and configuring Faucet across the network.
 
 The **OpenFlow Switch** is an OpenFlow 1.3 switch we currently use [OpenVSwitch](openvswitch.org).
 
 We have two test scenarios a virtual wired network using mininet and a wireless network using [Link022](https://github.com/google/link022).
 
 ## Wired
-The diagram below is an example of the wired network, in the future we hope to verify different configurations such as multiple switches managed by a single authenticator & controller, and multiple switch with multiple Authenticator at different switches.
+The diagram below is an example of the wired network, in the future we hope to verify different configurations such as multiple switches managed by a single authenticator & controller, and multiple switch with multiple Authenticators at different switches.
 Take note of the link between the Authenticator and the OpenFlow Controller, [see more](#hostapd---controller-link).
 This allows the authentication traffic to avoid the data plane of the switch and therefore any end-user traffic, and allow the Controller to run in out-of-band mode.
 
@@ -71,9 +71,9 @@ This allows the authentication traffic to avoid the data plane of the switch and
 ```
 
 ## Wireless
-For instructions on how to setup gasket and link022 see [link022 gasket readme](https://github.com/google/link022/blob/master/demo/README.gasket.md)
+For instructions on how to setup Gasket and link022 see [link022 gasket readme](https://github.com/google/link022/blob/master/demo/README.gasket.md)
 The network is similar to the wired example however there are few key changes.
-1) Internet node is replaced by the Link022GW, the key difference is that it is running the GNMI client, and FreeRADIUS.
+1) Internet node is replaced by the Link022GW, the key difference is that it is running the GNMI client and FreeRADIUS.
 2) Instead of an authenticator the link022APs handle the authentication, using WPA2 Enterprise.
 3) The controller must be connected to the data plane (and control plane).
 
@@ -146,13 +146,16 @@ The logoff attack 'A' is an issue with the IEEE 802.1X standard, however a 'fix'
 - Gasket
 
 ### Overview
-A user can be in two states authenticated and unauthenticated.
+When used in 'wired' mode a user can be in two states authenticated and unauthenticated.
 When a user is unauthenticated (default state) all of their traffic is redirected to the hostapd server via a destination MAC address rewrite.
 This allows the following:
 1. The hostapd process to inform the client that the network is using 802.1X with a EAP-Request message.
 2. 802.1X traffic destined to the authenticator should only be received by the hostapd process.
 3. One hostpad process to be anywhere on the network.
 When a user sends the EAP-Logoff message they are unauthenticated from the port.
+
+When used in 'wireless mode' (where the AP performs the authentication) no unauthenticated traffic or EAP should be seen by the switch.
+Therefore no redirection of unauthenticated traffic, or start messages need to be performed.
 
 When a user successfully authenticates Access Control List (ACL) rules get applied.
 These ACLs are identical to Faucet ACL rule syntax, and can therefore perform any Faucet action such as output, mirror, modify VLANs, ... .
@@ -177,8 +180,8 @@ echo 0 > /proc/sys/net/ipv4/ip_forward
 
 ##### Hostapd
 - Get hostapd. Note not official hostapd.
-- There is also a docker container available to use (Dockerfile.hostapd or 'hostapd' in docker-compose.yml)
-This contains a small number of bug fixes to the control interface socket.
+- There is also a docker container available to use (Dockerfile.hostapd or 'hostapd' in docker-compose.yml).
+- This contains a small number of bug fixes to the control interface socket.
 
 ```bash
 $ git clone https://github.com/bairdo/hostapd-d1xf.git -b faucet-con
@@ -316,7 +319,7 @@ rule_manager.py takes an input file that contains the default configuration (whe
 The input file (shown as base-acls.yaml below) is used during the running of auth_app.py to reconstruct the faucet-acl.yaml when the authentication changes.
 It also keeps a record of what rules belong to what username/MAC address so they can be removed on deauthentication.
 In the event of a system reboot, as the state is kept here the system can resume without reauthenticating the clients.
-To do this remove the ```cp /etc/faucet/gasket/base-no-authed-acls.yaml /etc/faucet/gasket/base-acls.yaml``` line from docker/runauth.sh
+To do this remove the ```cp /etc/faucet/gasket/base-no-authed-acls.yaml /etc/faucet/gasket/base-acls.yaml``` line from docker/runauth.sh.
 By default the network is reset.
 
 ###### base-acls.yaml, base-no-authed-acls.yaml
@@ -425,13 +428,11 @@ These configuration files are based on the network diagram at the top.
 - 'port_faucet-1_1' & 'port_faucet-1_2' show the rules that each 802.1X port ACL requires.
 
 - Change the mac address '08:00:27:00:03:02' to the mac address of the server that hostap is running on.
-In the future it should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port ACLs, however Gasket does not currently support multiple control sockets.
+It should be possible to run multiple hostap servers and load balance them via changing the 'actions: dl_dst: <mac_address>' of some of the port ACLs.
 
 
 
 ###### rules.yaml
-
-TODO talk about how you can have one ACL use many ACLs. Or have the radius server do that.
 
 The base directory contains the file rules.yaml.
 rules.yaml contains the rules to apply when a user successfully logs on.
@@ -449,7 +450,7 @@ This will apply regardless of what port the authentication occurs on.
 The values '\_user-mac\_' and '\_user-name\_' are filled at runtime, with the logged in username and MAC address of the authenticating device.
 
 
-The keys '\_mac\_', '\_name\_' and their value is technically optional, but recommended for most use cases.
+The keys '\_mac\_', '\_name\_' and their value are technically optional, but recommended for most use cases.
 The values can be any string, however they are used to identify who the rules belong to so they can be removed when the user logs off, so if they are not set as below when a logoff occurs the rules may not be removed, OR different ones removed (if match a different username).
 
 rules.yaml has support for yaml anchors.
