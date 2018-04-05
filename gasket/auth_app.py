@@ -130,21 +130,25 @@ class AuthApp(object):
                 work_list.append(self.work_queue.get())
             self.rule_man.read_base(self.config.base_filename)
             for work in work_list:
-                self.logger.info('Got %s work from queue ', type(work))
-                if isinstance(work, work_item.AuthWorkItem):
-                    self.authenticate(work.mac, work.username, work.acllist, work.creation_time)
-                    auth_count += 1
-                elif isinstance(work, work_item.DeauthWorkItem):
-                    self.deauthenticate(work.mac)
-                    deauth_count += 1
-                elif isinstance(work, work_item.L2LearnWorkItem):
-                    self.l2learn(work)
-                    l2learn_count += 1
-                elif isinstance(work, work_item.PortChangeWorkItem):
-                    self.port_status_handler(work)
-                    port_status_count += 1
-                else:
-                    self.logger.warn("Unsupported WorkItem type: %s", type(work))
+                try:
+                    self.logger.info('Got %s work from queue ', type(work))
+                    if isinstance(work, work_item.AuthWorkItem):
+                        self.authenticate(work.mac, work.username, work.acllist, work.hostapd_name, work.creation_time)
+                        auth_count += 1
+                    elif isinstance(work, work_item.DeauthWorkItem):
+                        self.deauthenticate(work.mac, work.hostapd_name)
+                        deauth_count += 1
+                    elif isinstance(work, work_item.L2LearnWorkItem):
+                        self.l2learn(work)
+                        l2learn_count += 1
+                    elif isinstance(work, work_item.PortChangeWorkItem):
+                        self.port_status_handler(work)
+                        port_status_count += 1
+                    else:
+                        self.logger.warn("Unsupported WorkItem type: %s", type(work))
+                except Exception as e:
+                    # Hope that things are still in a constient state and try the next work
+                    self.logger.exception(e)
             self.rule_man.write_base(self.config.base_filename)
             self.rule_man.translate_to_faucet()
             end_time = datetime.now()
@@ -158,8 +162,8 @@ class AuthApp(object):
     def setup_datapath(self):
         """Builds the datpath/ports this instance of gasket is aware of.
         """
-        for dp_name, datapath in self.config.dp_port_mode.items():
-            dp_id = datapath['id']
+        for dp_name, datapath in self.config.dps.items():
+            dp_id = datapath['dp_id']
             if not dp_name in self.dps:
                 dp = Datapath(dp_id, dp_name)
                 self.dps[dp_name] = dp
@@ -192,7 +196,7 @@ class AuthApp(object):
 
         self.macs[mac] = self.macs[mac].learn(self.dps[dp_name].ports[port_no])
 
-    def authenticate(self, mac, user, acl_list, start_time):
+    def authenticate(self, mac, user, acl_list, hostapd_name, start_time):
         """Authenticates the user as specifed by adding ACL rules
         to the Faucet configuration file. Once added Faucet is signaled via SIGHUP.
         Args:

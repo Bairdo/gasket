@@ -26,7 +26,7 @@ rabbitmq:
 
 dps:
     faucet-1:
-        #        id: %(dp_id)s
+        dp_id: %(dp_id)s
         interfaces:
             1:
             2:
