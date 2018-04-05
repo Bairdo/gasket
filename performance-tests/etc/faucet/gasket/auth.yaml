@@ -2,12 +2,9 @@
 version: 0
 
 logger_location: /var/log/faucet/gasket/auth_app.log
-<<<<<<< HEAD:performance-tests/etc/faucet/gasket/auth.yaml
 # These are the same as the standard python levels.
 # CRITICAL, ERROR, WARNING, INFO, DEBUG. 
 logger_level: DEBUG
-=======
->>>>>>> master:performance-tests/etc/faucet/gasket/auth.yaml
 
 faucet:
     prometheus_port: 9302
@@ -18,11 +15,7 @@ faucet:
 
 files:
     # the location of files. pid should contain the process id (pid) of the main faucet-process (ryu-manager)
-<<<<<<< HEAD:performance-tests/etc/faucet/gasket/auth.yaml
     #  should be obtainable with "ps aux | grep faucet.faucet | head -n1 awk '{print $2}' > /var/run/faucet.pid"
-=======
-    #  should be obtainable with "ps aux | grep faucet.faucet | head -n1 awk '{print $2}' > /etc/faucet/contr_pid"
->>>>>>> master:performance-tests/etc/faucet/gasket/auth.yaml
     controller_pid: /var/run/faucet.pid
     faucet_config: /etc/faucet/faucet.yaml
     acl_config: /etc/faucet/faucet-acls.yaml
@@ -31,10 +24,7 @@ files:
 # rules to be applied for a user once authenticated.
 auth-rules:
     file: /etc/faucet/gasket/rules.yaml
-<<<<<<< HEAD:performance-tests/etc/faucet/gasket/auth.yaml
 
-=======
->>>>>>> master:performance-tests/etc/faucet/gasket/auth.yaml
 dps:
     faucet-1:
         # datapath id.
@@ -65,23 +55,13 @@ hostapds:
         # bind_address & bind port must be used if udp port forwarding is used.
         # Recommended (but optional) for unsolicited socket if running behind a firewall.
         unsolicited_bind_address: 0.0.0.0
-<<<<<<< HEAD:performance-tests/etc/faucet/gasket/auth.yaml
         unsolicited_bind_port: 8891
-#        request_bind_address: 0.0.0.0
-#        request_bind_port: 8891
+        # request_bind_address: 0.0.0.0
+        # request_bind_port: 8891
 
         # Name of the hostapd interface (NIC) this hostapd config will receive events for.
         # Defaults to the default given by hostapd.
-#        ifname: wlan0
+        # ifname: wlan0
         # Log level used for this connection. (Optional)
         # See top level 'logger_level' for acceptable options
         logger_level: DEBUG
-=======
-        unsolicited_bind_port: 8892
-        #request_bind_address: 0.0.0.0
-        #request_bind_port: 8891
-
-        # Name of the hostapd interface (NIC) this hostapd config will receive events for.
-        # Defaults to the default given by hostapd.
-        #ifname: wlan0
->>>>>>> master:performance-tests/etc/faucet/gasket/auth.yaml

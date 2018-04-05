@@ -30,16 +30,13 @@ class AuthConfig(object):
 
         self.container_name = data['faucet'].get('container_name', '')
 
-<<<<<<< HEAD
         rabbitmq = data.get('rabbitmq', {})
 
         self.rabbit_host = rabbitmq.get('host', '')
         self.rabbit_port = rabbitmq.get('port', 5672)
 
 
-=======
         # TODO move these files to new 'faucet' config class
->>>>>>> master
         self.contr_pid_file = data["files"]["controller_pid"]
         self.faucet_config_file = data["files"]["faucet_config"]
         self.acl_config_file = data['files']['acl_config']
