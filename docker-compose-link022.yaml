@@ -6,8 +6,8 @@ services:
         image: 'faucet/faucet-pi'
 
         volumes:
-            - '/var/log/ryu/faucet:/var/log/ryu/faucet'
-            - '/etc/ryu/faucet:/etc/ryu/faucet'
+            - '/var/log/faucet:/var/log/faucet'
+            - '/etc/faucet:/etc/faucet'
 
         ports:
             - '6653:6653'
@@ -24,8 +24,8 @@ services:
             context: '.'
             dockerfile: './Dockerfile.pi'
         volumes:
-            - '/var/log/ryu/faucet:/var/log/ryu/faucet'
-            - '/etc/ryu/faucet:/etc/ryu/faucet'
+            - '/var/log/faucet:/var/log/faucet'
+            - '/etc/faucet:/etc/faucet'
             - '/var/run/:/var/run/'
         networks:
             default:
@@ -33,6 +33,7 @@ services:
                 ipv4_address: 172.222.0.100
         ports:
             - 8890:8890/udp
+            - 8891:8891/udp
 
     rabbitmq_adapter:
         restart: always
