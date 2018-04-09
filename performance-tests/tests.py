@@ -137,6 +137,7 @@ def setup(hostapd_port_no):
         host_ports_conf = '''%s
             %d:
                 auth_mode: access
+                hostapds: [hostapd-1]
 ''' % (host_ports_conf, i)
 
     with open('etc-test/faucet/gasket/auth.yaml', 'w') as gasket_auth:
