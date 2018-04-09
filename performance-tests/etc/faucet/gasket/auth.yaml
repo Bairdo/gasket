@@ -25,10 +25,14 @@ files:
 auth-rules:
     file: /etc/faucet/gasket/rules.yaml
 
+rabbitmq:
+    host: 172.122.0.104
+    port:  5672
+
 dps:
     faucet-1:
         # datapath id.
-        id: 0x1
+        dp_id: 0x1
         interfaces:
             # all interfaces on the switch must be specified.
             # Even if not being managed by Gasket.
