@@ -10,6 +10,11 @@ import time
 # pytype: disable=pyi-error
 import yaml
 
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
+
 import requests
 
 from gasket.rule_generator import RuleGenerator
@@ -144,7 +149,8 @@ class RuleManager(object):
 
     def read_base(self, filename):
         with open(filename) as f:
-            self.base = yaml.load(f, Loader=yaml.CLoader)
+            self.logger.warn('Loader is %s', Loader)
+            self.base = yaml.load(f, Loader=Loader)
 
 
     def write_base(self, filename):

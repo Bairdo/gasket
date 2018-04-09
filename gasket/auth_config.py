@@ -2,6 +2,12 @@
 # pytype: disable=pyi-error
 import yaml
 
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
+
+
 from gasket import gasket_conf_utils
 
 
@@ -10,7 +16,7 @@ class AuthConfig(object):
     """
 
     def __init__(self, filename):
-        data = yaml.load(open(filename, 'r'), Loader=yaml.CLoader)
+        data = yaml.load(open(filename, 'r'), Loader=Loader)
 
         self.version = data['version']
         self.logger_location = data['logger_location']
