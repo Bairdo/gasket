@@ -31,7 +31,7 @@ auth-rules:
 dps:
     faucet-1:
         # datapath id.
-        id: 0x1
+        dp_id: 0x1
         interfaces:
             # all interfaces on the switch must be specified.
             # Even if not being managed by Gasket.
