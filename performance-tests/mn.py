@@ -153,5 +153,5 @@ def shut_down(hosts, log_location):
         log.write(HOSTAPD.stdout.read())
     with open('%s/faucet-perftests.log' % log_location, 'w+') as log:
         log.write(FAUCET.stdout.read())
-    with open('%s/faucet-perftests.log' % log_location, 'w+') as log:
-        log.write(FAUCET.stdout.read())
+    with open('%s/gasket.log' % log_location, 'w+') as log:
+        log.write(GASKET.stdout.read())
