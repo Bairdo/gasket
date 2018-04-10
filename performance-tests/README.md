@@ -37,3 +37,11 @@ export FAUCET_EVENT_SOCK=/var/run/faucet/faucet.sock
 export FA_RABBIT_HOST=172.122.0.104
 python2 tests.py -p pcaps 50 --num-hosts 1 2 3 4 5
 ```
+
+## Notes:
+
+The following command might be helpful to cleanup interfaces that get left over if things go south.
+Replace the egrep string with the interface wildcard 'br-\*' to remove all bridges.
+```bash
+ip -br link show | awk 'split($1,a,"@"){print a[1]}' | egrep "*_c" | xargs -L 1 ip link delete
+```
