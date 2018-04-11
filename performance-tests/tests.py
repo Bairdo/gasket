@@ -69,7 +69,7 @@ def dir_setup(pcap_dir_base, test_name, no_runs):
         delete_and_make_dir(path)
 
 
-def setup(hostapd_port_no):
+def setup(hostapd_port_no, max_no_users):
     """cleans the environment.
     """
     if os.path.isdir('etc-test'):
@@ -143,11 +143,15 @@ def setup(hostapd_port_no):
     with open('etc-test/faucet/gasket/auth.yaml', 'w') as gasket_auth:
         gasket_auth.write(txt % {'host_ports' : host_ports_conf, 'hostapd_port' : hostapd_port_no})
 
-
     if os.path.isdir('docker-compose-test'):
         shutil.rmtree('docker-compose-test')
     shutil.copytree('docker-compose', 'docker-compose-test')
 
+    with open('docker-compose-test/freeradius/raddb/users', 'w') as users:
+        for i in range(max_no_users):
+            username_and_acl = '''host{0}user   Cleartext-Password := "host{0}pass"
+            Faucet-ACL-ID := "student"\n'''
+            users.write(username_and_acl.format(i))
 
     os.system('ovs-vsctl del-br s1')
     os.system(('docker stop {0}_gasket_1 {0}_hostapd_1 ' +
@@ -228,7 +232,7 @@ def test_many_hosts(no_runs, pcap_dir_base, no_hosts):
 
         start_time = datetime.now()
         pcap_dir = '%s/%s/%d'  % (pcap_dir_base, test_name, run_no)
-        setup(no_hosts + 2)
+        setup(no_hosts + 2, no_hosts)
         hosts = start(pcap_dir, test_name, run_no, no_hosts)
         i0 = mn.NET.get('i0')
         # do the stuff here.
