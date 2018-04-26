@@ -55,7 +55,10 @@ class HostapdSocketThread(threading.Thread):
                 try:
                     data = str(self.unsolicited_sock.receive())
                 except socket.timeout:
-                    self.request_sock.ping()
+                    if self.request_sock.ping():
+                        # reconnect unsolicited.
+                        # should we ping or just go straight for reconnect?
+                        self.unsolicited_sock.ping()
                     continue
                 self.logger.info('received message: %s', data)
                 if 'CTRL-EVENT-EAP-SUCCESS' in data:

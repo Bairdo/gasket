@@ -135,6 +135,8 @@ class HostapdCtrl(object):
 
     def ping(self):
         """Attempts to send a ping, if fails attempts to reconnect until successful.
+        Returns:
+            True if reconnect was successful, otherwise False.
         """
         while True:
             if self.soc:
@@ -142,11 +144,11 @@ class HostapdCtrl(object):
                     self.logger.info('Connection to hostapd lost. Retrying to connect')
                     self.close()
                 else:
-                    return
+                    return False
 
             if not self.soc and self.reconnect(self.ifname):
                 self.logger.info('Connection to hostapd re-established.')
-                break
+                return True
             time.sleep(2)
 
     def get_status(self):
