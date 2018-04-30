@@ -107,9 +107,6 @@ RUN \
   ./setupproxy.sh && \
   $AG update && \
   $AG purge pylint && \
-  $PIP3 'pip<10.0' && \
-  easy_install -q -U pip && \
-  $PIP pip && \
   $PIP multiprocessing scapy==2.3.2 $PIPDEPS && \
   $PIP3 $PIPDEPS
 
