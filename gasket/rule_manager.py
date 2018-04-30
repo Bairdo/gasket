@@ -138,6 +138,7 @@ class RuleManager(object):
 
     logger = None
     base = None
+    has_changed_since_last_read = False
 
     def __init__(self, config, logger):
         self.config = config
@@ -151,6 +152,7 @@ class RuleManager(object):
         with open(filename) as f:
             self.logger.warn('Loader is %s', Loader)
             self.base = yaml.load(f, Loader=Loader)
+        self.has_changed_since_last_read = False
 
 
     def write_base(self, filename):
@@ -190,7 +192,7 @@ class RuleManager(object):
             # insert rules above the authed-rules 'flag'. Add 1 for below it.
             # this may not be included as the reference. but instead inserting each.
             base_acl[i:i] = [{aclname + user + mac: acllist}]
-
+            self.has_changed_since_last_read = True
 
 
     def authenticate(self, username, mac, switch, port, acl_list):
@@ -220,23 +222,24 @@ class RuleManager(object):
     def translate_to_faucet(self):
         # update faucet
         final = create_faucet_acls(self.base, self.logger)
-        write_yaml(final, self.faucet_acl_filename + '.tmp', True)
-        self.backup_file(self.faucet_acl_filename)
-        self.swap_temp_file(self.faucet_acl_filename)
-        # sighup.
-        start_count = self.get_faucet_reload_count()
-        self.send_signal(signal.SIGHUP)
+        if self.has_changed_since_last_read:
+            write_yaml(final, self.faucet_acl_filename + '.tmp', True)
+            self.backup_file(self.faucet_acl_filename)
+            self.swap_temp_file(self.faucet_acl_filename)
+            # sighup.
+            start_count = self.get_faucet_reload_count()
+            self.send_signal(signal.SIGHUP)
 
-        self.logger.info('auth signal sent.')
-        for i in range(400):
-            end_count = self.get_faucet_reload_count()
-            if end_count > start_count:
-                self.logger.info('auth - faucet has reloaded.')
-                return True
-            time.sleep(0.05)
-            self.logger.info('auth - waiting for faucet to process sighup config reload. %d', i)
-        self.logger.error('auth - faucet did not process sighup within 20 seconds. 0.05 * 400')
-        return False
+            self.logger.info('auth signal sent.')
+            for i in range(400):
+                end_count = self.get_faucet_reload_count()
+                if end_count > start_count:
+                    self.logger.info('auth - faucet has reloaded.')
+                    return True
+                time.sleep(0.05)
+                self.logger.info('auth - waiting for faucet to process sighup config reload. %d', i)
+            self.logger.error('auth - faucet did not process sighup within 20 seconds. 0.05 * 400')
+            return False
 
     def get_faucet_reload_count(self):
         """Queries faucet prometheus and finds the number of time faucet has been reloaded.
@@ -309,6 +312,7 @@ class RuleManager(object):
                             try:
                                 self.base['acls'][port_acl_name].remove(item)
                                 removed = True
+                                self.has_changed_since_last_read = True
                             except Exception as e:
                                 self.logger.exception(e)
 
