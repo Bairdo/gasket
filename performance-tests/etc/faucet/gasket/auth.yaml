@@ -2,14 +2,20 @@
 version: 0
 
 logger_location: /var/log/faucet/gasket/auth_app.log
+# These are the same as the standard python levels.
+# CRITICAL, ERROR, WARNING, INFO, DEBUG. 
+logger_level: DEBUG
 
 faucet:
     prometheus_port: 9302
-    ip: 127.0.0.1
+    ip: 172.122.0.103
+    # Name of the faucet docker container. Either controller_pid or container name must be used.
+    # Container must be reachable via the hosts docker unix socket (/var/run/docker.sock)
+    container_name: performancetests_faucet_1
 
 files:
     # the location of files. pid should contain the process id (pid) of the main faucet-process (ryu-manager)
-    #  should be obtainable with "ps aux | grep faucet.faucet | head -n1 awk '{print $2}' > /etc/faucet/contr_pid"
+    #  should be obtainable with "ps aux | grep faucet.faucet | head -n1 awk '{print $2}' > /var/run/faucet.pid"
     controller_pid: /var/run/faucet.pid
     faucet_config: /etc/faucet/faucet.yaml
     acl_config: /etc/faucet/faucet-acls.yaml
@@ -18,19 +24,22 @@ files:
 # rules to be applied for a user once authenticated.
 auth-rules:
     file: /etc/faucet/gasket/rules.yaml
+
+rabbitmq:
+    host: 172.122.0.104
+    port:  5672
+
 dps:
     faucet-1:
+        # datapath id.
+        dp_id: 0x1
         interfaces:
-            2:
-                auth_mode: access
-                #this port is managed by these hostapds.
-                hostapds: [hostapd-1]
-
-            3:
-                auth_mode: access
-            4:
-                auth_mode: link022
-                hostapds: [hostapd-2]
+            # all interfaces on the switch must be specified.
+            # Even if not being managed by Gasket.
+            # Port 1 is not managed.
+            1:
+%(host_ports)s
+            %(hostapd_port)d:
 
 # top level hostapds contains the config info for connecting to the (many) hostapd interfaces.
 hostapds:
@@ -38,7 +47,7 @@ hostapds:
         # either remote_host & remote_port must be used OR socket_path.
         # address & port of hostapd instance for this config.
         # in hostapd.conf: use 'ctl_interface:udp:8888' to setup the control socket interface.
-        remote_host: 172.220.0.101
+        remote_host: 172.120.0.101
         remote_port: 8888
 
         # may also be used instead of host & port, when using the unix socket interface.
@@ -50,10 +59,13 @@ hostapds:
         # bind_address & bind port must be used if udp port forwarding is used.
         # Recommended (but optional) for unsolicited socket if running behind a firewall.
         unsolicited_bind_address: 0.0.0.0
-        unsolicited_bind_port: 8892
-        #request_bind_address: 0.0.0.0
-        #request_bind_port: 8891
+        unsolicited_bind_port: 8891
+        # request_bind_address: 0.0.0.0
+        # request_bind_port: 8891
 
         # Name of the hostapd interface (NIC) this hostapd config will receive events for.
         # Defaults to the default given by hostapd.
-        #ifname: wlan0
+        # ifname: wlan0
+        # Log level used for this connection. (Optional)
+        # See top level 'logger_level' for acceptable options
+        logger_level: DEBUG

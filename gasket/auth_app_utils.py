@@ -125,3 +125,15 @@ def signal_docker_container(container_name, signal=None):
     """
     client = docker.from_env()
     client.containers.get(container_name).kill(signal)
+
+def time_difference(start_time, end_time):
+    """Calculates the difference between two times.
+    Args:
+        start_time (datetime):
+        end_time (datetime):
+    Returns:
+        Number of milliseconds difference between end_time and start_time.
+    """
+    elapsed_time = end_time - start_time
+    return (elapsed_time.days * 24 * 60 * 60 + elapsed_time.seconds) \
+            * 1000 + elapsed_time.microseconds / 1000.0

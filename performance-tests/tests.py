@@ -1,127 +1,314 @@
-import mn
-from readpcap import *
+
+import argparse
+from datetime import datetime
+import errno
+import glob
+import os
 import time
 import shutil
 
+import mn
 
-def avg(L):
-    return sum(L) / float(len(L))
-
-
-def test1(n):
-    print('Test 1')
-    times = []
-    for i in range(1, n + 1):
-        print('trial', i)
-
-        pcap_file = 'pcaps/test1_%s.pcap' % i
-
-        mn.start()
-        mn.start_tcpdump(pcap_file)
-        mn.set_up()
-        mn.authenticate()
-        print(mn.h0.cmd('ping 10.0.0.40 -c1'))
-        mn.shut_down()
-
-        times.append(auth_time(pcap_file))
-        save_CSV(1, times)
-
-        time.sleep(10)
-
-    print('Avg auth time: %ss' % avg(times))
+import readpcap
 
 
-def test2(n):
-    print('Test 2')
-
-    auth_times = []
-    ping_reply_times = []
-
-    for i in range(1, n + 1):
-        print('trial', i)
-
-        pcap_file = 'pcaps/test2_%s.pcap' % i
-
-        mn.start()
-        mn.start_tcpdump(pcap_file)
-        mn.set_up()
-        pid = mn.h0.cmd('ping 10.0.0.40 -i0.1 &')
-        mn.authenticate()
-        time.sleep(1)
-        mn.h0.cmd('kill %s' % pid)
-        mn.shut_down()
-
-        auth_times.append(auth_time(pcap_file))
-        ping_reply_times.append(ping_reply_time(pcap_file))
-        save_CSV(2, auth_times, ping_reply_times)
-
-        time.sleep(10)
-
-    print('Avg auth time: %ss' % avg(auth_times))
-    print('Avg ping reply time: %ss' % avg(ping_reply_times))
+PCAP_FORMAT_STRING = '%s/%s_%d_%s.pcap'
 
 
-def test3(n):
-    print('Test 3')
+def avg(list_):
+    """Mean average
+    Args:
+        list_   (list<floats>): numbers to take mean of.
+    """
+    print(list_)
+    s = 0
+    for f in list_:
+        if not f == 'N/A':
+            s += f
 
-    auth_times = []
-    ping_reply_times = []
-    logoff_times = []
-    reauth_times = []
-    reauth_ping_reply_times = []
+    c = float(len(list_) - list_.count('N/A'))
+    if c == 0:
+        return -1
+    return s / c
 
-    shutil.rmtree('etc_backups/3', ignore_errors=True)
+def get_stats(list_):
+    """
+    Args:
+        list_ (list<floats>): numbers to get statistics for
+    Returns:
+        list of mean, max, count of 'N/A'
+    """
+    mean = avg(list_)
+    max_ = max(list_)
+    na_count = list_.count('N/A')
+    return [mean, max_, na_count]
 
-    for i in range(1, n + 1):
-        print('trial', i)
 
-        pcap_file = 'pcaps/test3_%s.pcap' % i
+def dir_setup(pcap_dir_base, test_name, no_runs):
+    """Creates needed directories if dont exist.
+    """
 
-        mn.start()
-        mn.start_tcpdump(pcap_file)
-        mn.set_up()
+    def delete_and_make_dir(path):
+        try:
+            os.makedirs(path)
+        except OSError as ex:
+            if ex.errno == errno.EEXIST and os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+                os.makedirs(path)
+            else:
+                raise
 
-        pid = mn.h0.cmd('ping 10.0.0.40 -i0.1 &')
-        mn.authenticate()
-        time.sleep(1)
-        mn.h0.cmd('wpa_cli -i %s logoff' % 'h0-eth0')
+    if not os.path.isdir('results'):
+        os.mkdir('results')
+    if not os.path.isdir('test-backups'):
+        os.mkdir('test-backups')
 
-        mn.wait_until_logoff()
 
-        time.sleep(1)
+    for i in range(no_runs):
+        path = '%s/%s/%d' % (pcap_dir_base, test_name, i)
+        delete_and_make_dir(path)
 
-        mn.h0.cmd('kill %s' % pid)
 
-        time.sleep(5.1)
+def setup(hostapd_port_no, max_no_users):
+    """cleans the environment.
+    """
+    if os.path.isdir('etc-test'):
+        shutil.rmtree('etc-test')
+    shutil.copytree('etc', 'etc-test')
 
-        mn.h0.cmd('wpa_cli -i %s logon' % 'h0-eth0')
 
-        mn.wait_until_authenticate()
+    with open('etc-test/faucet/faucet.yaml', 'r') as faucet:
+        txt = faucet.read()
 
-        time.sleep(1)
+    host_ports_conf = ''
+    for i in range(2, hostapd_port_no):
+        host_ports_conf = r'''%s
+            %d:
+                native_vlan: 100
+                acl_in: port_faucet-1_%d
+''' % (host_ports_conf, i, i)
 
-        mn.shut_down()
+    with open('etc-test/faucet/faucet.yaml', 'w') as faucet:
+        faucet.write(txt % {'host_ports' : host_ports_conf, 'hostapd_port': hostapd_port_no})
 
-        auth_times.append(auth_time(pcap_file))
-        ping_reply_times.append(ping_reply_time(pcap_file))
-        logoff_times.append(logoff_time(pcap_file))
-        reauth_times.append(reauth_time(pcap_file))
-        reauth_ping_reply_times.append(reauth_ping_reply_time(pcap_file))
-        save_CSV(3, auth_times, ping_reply_times,
-                 logoff_times, reauth_times, reauth_ping_reply_times)
 
-        # uncomment to create backups of etc file
-        # shutil.move('../etc', 'etc_backups/3/etc_%s'%i)
-        # shutil.copytree('etc', '../etc')
+    with open('etc-test/faucet/faucet-acls.yaml', 'a') as faucet_acls:
+        for i in range(2, hostapd_port_no):
+            acl = '''  port_faucet-1_%d:
+  - rule:
+      actions:
+        allow: 1
+        output:
+          dl_dst: '44:44:44:44:44:44'
+      dl_type: 34958
+  - rule:
+      actions:
+        allow: 1
+        output:
+          dl_dst: '44:44:44:44:44:44'
+''' % i
+            faucet_acls.write(acl)
 
-        time.sleep(10)
 
-    print(n, 'trials')
-    print('Avg auth time: %ss' % avg(auth_times))
-    print('Avg ping reply time: %ss' % avg(ping_reply_times))
-    print('Avg logoff time: %ss' % avg(logoff_times))
-    print('Avg reauth time: %ss' % avg(reauth_times))
-    print('Avg reauth ping reply time: %ss' % avg(reauth_ping_reply_times))
+    with open('etc-test/faucet/gasket/base-no-authed-acls.yaml', 'a') as gasket_acls:
+        for i in range(2, hostapd_port_no):
+            acl = '''    port_faucet-1_%d:
+    - rule:
+        actions:
+            allow: 1
+            output:
+                dl_dst: '44:44:44:44:44:44'
+        dl_type: 34958
+    - authed-rules
+    - rule:
+        actions:
+            allow: 1
+            output:
+                dl_dst: '44:44:44:44:44:44'
+''' % i
+            gasket_acls.write(acl)
+
+
+    with open('etc-test/faucet/gasket/auth.yaml', 'r') as gasket_auth:
+        txt = gasket_auth.read()
+
+    host_ports_conf = ''
+    for i in range(2, hostapd_port_no):
+        host_ports_conf = '''%s
+            %d:
+                auth_mode: access
+                hostapds: [hostapd-1]
+''' % (host_ports_conf, i)
+
+    with open('etc-test/faucet/gasket/auth.yaml', 'w') as gasket_auth:
+        gasket_auth.write(txt % {'host_ports' : host_ports_conf, 'hostapd_port' : hostapd_port_no})
+
+    if os.path.isdir('docker-compose-test'):
+        shutil.rmtree('docker-compose-test')
+    shutil.copytree('docker-compose', 'docker-compose-test')
+
+    with open('docker-compose-test/freeradius/raddb/users', 'w') as users:
+        for i in range(max_no_users):
+            username_and_acl = '''host{0}user   Cleartext-Password := "host{0}pass"
+            Faucet-ACL-ID := "student"\n'''
+            users.write(username_and_acl.format(i))
+
+    os.system('ovs-vsctl del-br s1')
+    os.system(('docker stop {0}_gasket_1 {0}_hostapd_1 ' +
+               '{0}_freeradius_1 {0}_rabbitmq_server_1 ' +
+               '{0}_rabbitmq_adapter_1 {0}_faucet_1').format('performancetests'))
+
+
+def start(pcap_dir, test_name, run_no, no_hosts):
+    """starts mininet and tcpdumps, and docker containers.
+    Args:
+        pcap_dir    (str): directory to save pcap files in.
+        test_name   (str):
+        test_no     (int): run number.
+    """
+    hosts = mn.start(no_hosts)
+    print('mn started')
+    for host in hosts:
+        mn.start_tcpdump(host, PCAP_FORMAT_STRING % (pcap_dir, test_name, run_no, host.name))
+
+    i0 = mn.NET.get('i0')
+    mn.start_tcpdump(i0, PCAP_FORMAT_STRING % (pcap_dir, test_name, run_no, i0.name))
+    print('tcpdumps started')
+    mn.set_up(pcap_dir)
+    print('setup completed')
+    return hosts
+
+
+def clean_up(test_name, test_no):
+    """backsup the files used for the test.
+    Args:
+        test_name   (str):
+        test_no     (int): run number.
+    """
+    shutil.move('etc-test/', 'test-backups/%s/%d/etc-test/' % (test_name, test_no))
+    shutil.move('docker-compose-test/', 'test-backups/%s/%d/docker-compose/' % (test_name, test_no))
+    for f1 in glob.glob('/tmp/wpa_ctrl*'):
+        os.remove(f1)
+
+
+def createCSV(filename, headers):
+    """Create the CSV header.
+    Args:
+        filename    (str):
+        headers     (list): header names.
+    """
+    with open(filename, 'w+') as file:
+        file.write(', '.join([str(h) for h in headers]))
+
+
+def authenticate(host):
+    host.cmd('wpa_supplicant -f etc-test/{0}/wpa.log -Dwired -i{0}-eth0 -cetc-test/{0}/host-wpa.conf -B -W'.format(host.name))
+
+    host.cmd('wpa_cli -a etc-test/{0}/host-action.sh > /tmp/qwerty.uio 2>&1 &'.format(host.name))
+
+
+
+def test_many_hosts(no_runs, pcap_dir_base, no_hosts):
+    """n hosts all logon, logoff, logon again.
+    """
+    test_name = '%s_%d' % (test_many_hosts.__name__, no_hosts)
+    auth_matrix = [[0 for x in range(no_hosts)] for y in range(no_runs)]
+    prt_matrix = [[0 for x in range(no_hosts)] for y in range(no_runs)]
+    logoff_times_matrix = [[0 for x in range(no_hosts)] for y in range(no_runs)]
+    reauth_times_matrix = [[0 for x in range(no_hosts)] for y in range(no_runs)]
+    reauth_ping_matrix = [[0 for x in range(no_hosts)] for y in range(no_runs)]
+
+    dir_setup(pcap_dir_base, test_name, no_runs)
+
+    headers = ['test_duration']
+    for header in ['auth', 'ping_reply', 'logoff', 'reauth_time', 'reauth_ping_reply']:
+        for i in range(no_hosts):
+            headers.append('h%d-%s' % (i, header))
+        for stat in ['avg', 'max', 'N/A count']:
+            headers.append('%s-%s' % (header, stat))
+    createCSV('results/%s.csv' % test_name, headers)
+
+    for run_no in range(no_runs):
+
+        start_time = datetime.now()
+        pcap_dir = '%s/%s/%d'  % (pcap_dir_base, test_name, run_no)
+        setup(no_hosts + 2, no_hosts)
+        hosts = start(pcap_dir, test_name, run_no, no_hosts)
+        i0 = mn.NET.get('i0')
+        # do the stuff here.
+        # ...
+        i = -1
+        for host in hosts:
+            i += 1
+            os.mkdir('etc-test/%s' % host.name)
+            shutil.copy('host-action.sh', 'etc-test/%s/host-action.sh' % host.name)
+            shutil.copy('host-wpa.conf', 'etc-test/%s/host-wpa.conf' % host.name)
+            with open('etc-test/%s/host-wpa.conf' % host.name, 'r') as wpa_file:
+                wpa_conf = wpa_file.read()
+
+            with open('etc-test/%s/host-wpa.conf' % host.name, 'w') as wpa_file:
+                wpa_file.write(wpa_conf % {'IDENTITY' : 'host%duser' % i,
+                                           'PASSWORD' : 'host%dpass' % i})
+            host.cmd('ping %s -i0.1 &' % i0.IP())
+
+        for host in hosts:
+            authenticate(host)
+        # TODO replace this sleep with a wait. and maybe also a timeout (so if test takes longer than X stop.).
+        time.sleep(60)
+
+#        for host in hosts:
+#            for _ in range(24):
+#                if os.path.getsize('etc-test/%s-eth0.log' % host.name) < 5:
+#                    time.sleep(5)
+#                else:
+#                    break
+
+
+        log_location = './docker-compose-test/'
+        mn.shut_down(hosts, log_location)
+
+        host_no = -1
+        for host in hosts:
+            host_no += 1
+            pcap_file = PCAP_FORMAT_STRING % (pcap_dir, test_name, run_no, host.name)
+
+            auth_matrix[run_no][host_no] = readpcap.auth_time(pcap_file)
+
+            prt_matrix[run_no][host_no] = readpcap.ping_reply_time(pcap_file, host.IP(), i0.IP())
+
+            logoff_times_matrix[run_no][host_no] = readpcap.logoff_time(pcap_file,
+                                                                        host.IP(),
+                                                                        i0.IP())
+
+            reauth_times_matrix[run_no][host_no] = readpcap.reauth_time(pcap_file)
+
+            reauth_ping_matrix[run_no][host_no] = readpcap.reauth_ping_reply_time(pcap_file,
+                                                                                  host.IP(),
+                                                                                  i0.IP())
+
+
+        time_taken = datetime.now() - start_time
+        readpcap.save_CSV(test_name, [[time_taken],
+                                      auth_matrix[run_no], get_stats(auth_matrix[run_no]),
+                                      prt_matrix[run_no], get_stats(prt_matrix[run_no]),
+                                      logoff_times_matrix[run_no], get_stats(logoff_times_matrix[run_no]),
+                                      reauth_times_matrix[run_no], get_stats(reauth_times_matrix[run_no]),
+                                      reauth_ping_matrix[run_no], get_stats(reauth_ping_matrix[run_no])])
+
+        # cleanup
+        clean_up(test_name, run_no)
+        print('trial completed')
+
 
 if __name__ == '__main__':
-    test3(1)
+
+    PARSER = argparse.ArgumentParser()
+    PARSER.add_argument('num_runs', help='Number of runs of each test', type=int)
+    PARSER.add_argument('-p', '--pcap_dir', help='path to directory for pcaps', type=str)
+    PARSER.add_argument('--num-hosts', nargs='+', type=int)
+    ARGS = PARSER.parse_args()
+
+    print(ARGS)
+
+    for HOST_NO in ARGS.num_hosts:
+        test_many_hosts(ARGS.num_runs, ARGS.pcap_dir, HOST_NO)

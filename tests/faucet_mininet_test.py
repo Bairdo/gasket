@@ -52,7 +52,7 @@ SUPPORTS_METERS = (
 
 EXTERNAL_DEPENDENCIES = (
     ('pip', ['show', 'faucet'], 'faucet',
-     r'Version:\s+(\d+\.\d+\.\d+)', "1.6.11"),
+     r'Version:\s+(\d+\.\d+\.\d+)', "1.7.0"),
     ('ryu-manager', ['--version'],
      'ryu-manager', r'ryu-manager (\d+\.\d+)\n', "4.9"),
     ('ovs-vsctl', ['--version'], 'Open vSwitch',

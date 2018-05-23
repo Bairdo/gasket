@@ -8,6 +8,11 @@ TODO maybe make this an interface for yaml or db generator subclasses.
 # pytype: disable=pyi-error
 import yaml
 
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
+
 
 class RuleGenerator(object):
     """Object for gernerating rules from a yaml file.
@@ -93,5 +98,5 @@ class RuleGenerator(object):
             rule_file: path to file.
         """
         self.yaml_file = rule_file
-        self.conf = yaml.load(open(rule_file, "r"))
+        self.conf = yaml.load(open(rule_file, "r"), Loader=Loader)
 

@@ -1,9 +1,18 @@
 """Module for various types of work for the work_queue.
 TODO possibly should add a work method to WorkItem, instead of using isinstance?"""
 
+from datetime import datetime
+
+
 class WorkItem(object):
     """Base Work class
     """
+
+    creation_time = None
+
+    def __init__(self):
+        self.creation_time = datetime.now()
+
     def __str__(self):
         attrs = vars(self)
         return type(self) + ', '.join('%s: %s' % item for item in attrs.items())
@@ -16,6 +25,7 @@ class AuthenticationWorkItem(WorkItem):
     hostapd_name = None
 
     def __init__(self, mac, hostapd_name):
+        super().__init__()
         self.mac = mac
         self.hostapd_name = hostapd_name
 
@@ -45,6 +55,7 @@ class RabbitWorkItem(WorkItem):
     dp_id = None
 
     def __init__(self, dp_name, dp_id):
+        super().__init__()
         self.dp_name = dp_name
         self.dp_id = dp_id
 

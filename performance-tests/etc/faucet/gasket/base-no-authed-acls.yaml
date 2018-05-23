@@ -3,35 +3,4 @@ acls:
         - rule:
             actions:
                 allow: 1
-    port_faucet-1_4:
-        - authed-rules
-        - rule:
-            actions:
-                allow: 1
-    port_faucet-1_2:
-        - rule:
-            dl_type: 0x888e
-            actions:
-                allow: 1
-                output:
-                    dl_dst: '44:44:44:44:44:44'
-        - authed-rules
-        - rule:
-            actions:
-                allow: 1
-                output:
-                    dl_dst: '44:44:44:44:44:44'
-    port_faucet-1_3:
-        - rule:
-            dl_type: 0x888e
-            actions:
-                allow: 1
-                output:
-                    dl_dst: '44:44:44:44:44:44'
-        - authed-rules
-        - rule:
-            actions:
-                allow: 1
-                output:
-                    dl_dst: '44:44:44:44:44:44'
 

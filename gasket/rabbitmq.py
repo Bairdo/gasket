@@ -17,45 +17,50 @@ class RabbitMQ(threading.Thread):
     channel = None
     work_queue = None
     logger = None
+    server_host = None
+    server_port = None
 
-    def __init__(self, work_queue, logger_location):
+    def __init__(self, work_queue, logger_location, host, port):
         super().__init__()
         self.work_queue = work_queue
         self.logger = auth_app_utils.get_logger('rabbitmq',
                                                 logger_location,
                                                 logging.DEBUG,
                                                 1)
+        self.server_host = host
+        self.server_port = port
         self.logger.info('inited')
 
     def run(self):
         """Main run method. start_consuming() blocks 'forever'
         """
-        try:
-            self.logger.info("running")
-            while True:
-                try:
-                    connection = pika.BlockingConnection(pika.ConnectionParameters(
-                        host='172.222.0.104', port=5672))
-                    break
-                except Exception as e:
-                    self.logger.info('cannot connect to rabbitmq server')
-                    self.logger.exception(e)
-                    time.sleep(1)
-            self.channel = connection.channel()
-            self.logger.info("channeled")
-            self.channel.exchange_declare(exchange='topic_recs', exchange_type='topic')
-            result = self.channel.queue_declare(exclusive=True)
+        while True:
+            try:
+                self.logger.info("running")
+                while True:
+                    try:
+                        connection = pika.BlockingConnection(pika.ConnectionParameters(
+                            host=self.server_host, port=self.server_port))
+                        break
+                    except Exception as e:
+                        self.logger.info('cannot connect to rabbitmq server')
+                        self.logger.exception(e)
+                        time.sleep(1)
+                self.channel = connection.channel()
+                self.logger.info("channeled")
+                self.channel.exchange_declare(exchange='topic_recs', exchange_type='topic')
+                result = self.channel.queue_declare(exclusive=True)
 
-            self.logger.info("declared")
-            queue_name = result.method.queue
-            self.channel.queue_bind(exchange='topic_recs', queue=queue_name,
-                                    routing_key='FAUCET.Event')
+                self.logger.info("declared")
+                queue_name = result.method.queue
+                self.channel.queue_bind(exchange='topic_recs', queue=queue_name,
+                                        routing_key='FAUCET.Event')
 
-            self.channel.basic_consume(self.callback, queue=queue_name, no_ack=True)
-            self.logger.info('start consuming')
-            self.channel.start_consuming()
-        except Exception as e:
-            self.logger.exception(e)
+                self.channel.basic_consume(self.callback, queue=queue_name, no_ack=True)
+                self.logger.info('start consuming')
+                self.channel.start_consuming()
+            except Exception as e:
+                self.logger.exception(e)
 
     def callback(self, chan, method, properties, body):
         """Callback method used by channel.basic_consume.

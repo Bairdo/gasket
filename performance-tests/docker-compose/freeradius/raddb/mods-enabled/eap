@@ -1,0 +1,54 @@
+	eap {
+		default_eap_type = md5
+
+		timer_expire     = 60
+
+		ignore_unknown_eap_types = no
+
+		cisco_accounting_username_bug = no
+
+
+		md5 {
+		}
+
+		leap {
+		}
+
+		gtc {
+
+			auth_type = PAP
+		}
+
+		tls {
+			private_key_password = whatever
+			private_key_file = ${raddbdir}/certs/cert-srv.pem
+
+			certificate_file = ${raddbdir}/certs/cert-srv.pem
+
+			CA_file = ${raddbdir}/certs/demoCA/cacert.pem
+
+			dh_file = ${raddbdir}/certs/dh
+			random_file = ${raddbdir}/certs/random
+
+
+
+
+
+		}
+
+		ttls {
+			default_eap_type = md5
+
+			copy_request_to_tunnel = yes
+
+			use_tunneled_reply = yes
+		}
+
+
+
+
+
+		mschapv2 {
+		}
+	}
+

@@ -2,6 +2,12 @@
 # pytype: disable=pyi-error
 import yaml
 
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
+
+
 from gasket import gasket_conf_utils
 
 
@@ -10,7 +16,7 @@ class AuthConfig(object):
     """
 
     def __init__(self, filename):
-        data = yaml.load(open(filename, 'r'))
+        data = yaml.load(open(filename, 'r'), Loader=Loader)
 
         self.version = data['version']
         self.logger_location = data['logger_location']
@@ -26,7 +32,15 @@ class AuthConfig(object):
         gasket_conf_utils.validate_ip_address(self.faucet_ip)
         self.prom_url = 'http://{}:{}'.format(self.faucet_ip, self.prom_port)
 
+        self.prom_sleep = data['faucet'].get('prom_sleep', 5)
+
         self.container_name = data['faucet'].get('container_name', '')
+
+        rabbitmq = data.get('rabbitmq', {})
+
+        self.rabbit_host = rabbitmq.get('host', '')
+        self.rabbit_port = rabbitmq.get('port', 5672)
+
 
         # TODO move these files to new 'faucet' config class
         self.contr_pid_file = data["files"]["controller_pid"]

@@ -1,0 +1,205 @@
+
+server default {
+listen {
+	type = auth
+
+
+	ipaddr = *
+
+	port = 0
+
+
+
+	limit {
+	      max_connections = 16
+
+
+	      lifetime = 0
+
+	      idle_timeout = 30
+	}
+}
+
+listen {
+	ipaddr = *
+	port = 0
+	type = acct
+
+	limit {
+
+	}
+}
+
+listen {
+	type = auth
+	ipv6addr = ::	# any.  ::1 == localhost
+	port = 0
+	limit {
+	      max_connections = 16
+	      lifetime = 0
+	      idle_timeout = 30
+	}
+}
+
+listen {
+	ipv6addr = ::
+	port = 0
+	type = acct
+
+	limit {
+	}
+}
+
+authorize {
+	filter_username
+
+
+	preprocess
+
+
+
+
+	chap
+
+	mschap
+
+	digest
+
+
+
+	suffix
+
+	eap {
+		ok = return
+	}
+
+
+	files
+
+	-sql
+
+
+	-ldap
+
+
+	expiration
+	logintime
+
+	pap
+
+}
+
+
+
+authenticate {
+	Auth-Type PAP {
+		pap
+	}
+
+	Auth-Type CHAP {
+		chap
+	}
+
+	Auth-Type MS-CHAP {
+		mschap
+	}
+
+	mschap
+
+	digest
+
+
+
+	eap
+
+}
+
+
+preacct {
+	preprocess
+
+
+
+
+
+	acct_unique
+
+	suffix
+
+	files
+}
+
+accounting {
+	detail
+
+	unix
+
+
+
+	-sql
+
+
+
+	exec
+
+	attr_filter.accounting_response
+
+}
+
+
+session {
+
+}
+
+
+post-auth {
+
+	update {
+		&reply: += &session-state:
+	}
+
+
+
+
+
+	-sql
+
+
+	exec
+
+
+
+
+
+
+	remove_reply_message_if_eap
+
+	Post-Auth-Type REJECT {
+		-sql
+		attr_filter.access_reject
+
+		eap
+
+		remove_reply_message_if_eap
+	}
+
+	Post-Auth-Type Challenge {
+	}
+
+}
+
+pre-proxy {
+
+
+
+
+}
+
+post-proxy {
+
+
+
+	eap
+
+}
+}

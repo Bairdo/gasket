@@ -21,6 +21,9 @@ files:
     acl_config: /etc/faucet/faucet-acls.yaml
     base_config: /etc/faucet/gasket/base-acls.yaml
 
+rabbitmq:
+    host: 172.222.0.104
+    port: 5672
 # rules to be applied for a user once authenticated.
 auth-rules:
     file: /etc/faucet/gasket/rules.yaml
@@ -28,7 +31,7 @@ auth-rules:
 dps:
     faucet-1:
         # datapath id.
-        id: 0x1
+        dp_id: 0x1
         interfaces:
             # all interfaces on the switch must be specified.
             # Even if not being managed by Gasket.
