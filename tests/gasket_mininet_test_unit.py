@@ -468,9 +468,12 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
         config_values['pid_file'] = self.net.controller.pid_file
         config_values['controller_ip'] = '127.0.0.1'
         config_values['dp_id'] = self.dpid
+        rules_yaml = 'rules.yaml'
+        config_values['rules'] = rules_yaml
 
         open('%s/auth.yaml' % self.tmpdir, 'w').write(httpconfig % config_values)
         open('%s/base-acls.yaml' % self.tmpdir, 'w').write(self.CONFIG_BASE_ACL) # need to get C_B_A
+        open('%s/%s' % (self.tmpdir, rules_yaml), 'w').write(self.CONFIG_RULES)
 
         faucet_acl = self.tmpdir + '/faucet-acl.yaml'
         base = self.tmpdir + '/base-acls.yaml'
@@ -492,6 +495,7 @@ class GasketSingleSwitchTest(GasketTest):
     CONFIG_GLOBAL = faucet_mininet_test_util.gen_config_global(max_hosts)
     CONFIG_BASE_ACL = faucet_mininet_test_util.gen_base_config(max_hosts)
     CONFIG = faucet_mininet_test_util.gen_config(max_hosts)
+    CONFIG_RULES = faucet_mininet_test_util.gen_rules_file()
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED + N_TAGGED)
 
     def setUp(self):
