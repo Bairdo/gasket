@@ -93,5 +93,4 @@ dps:
 
 # rules to be applied for a user once authenticated.
 auth-rules:
-    file: /gasket-src/tests/config/rules.yaml
-
+    file: %(tmpdir)s/%(rules)s

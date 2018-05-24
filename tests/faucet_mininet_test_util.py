@@ -278,3 +278,9 @@ def gen_port_map(num_ports):
         port_map['port_%d' % i] = i
     return port_map
 
+
+def gen_rules_file():
+    """Returns the gernerated rules.yaml file
+    """
+    # TODO have this create a dynamic rules.yaml file
+    return open('/gasket-src/tests/config/rules.yaml', 'r').read()
