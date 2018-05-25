@@ -8,6 +8,8 @@ import socket
 import subprocess
 import time
 
+import yaml
+
 # pylint: disable=import-error
 from mininet.log import error, output
 
@@ -279,8 +281,66 @@ def gen_port_map(num_ports):
     return port_map
 
 
-def gen_rules_file():
+def gen_rules_file(load=None):
     """Returns the gernerated rules.yaml file
     """
-    # TODO have this create a dynamic rules.yaml file
-    return open('/gasket-src/tests/config/rules.yaml', 'r').read()
+    if not load:
+        load = {'allowall': {
+            '_authport_' : ['allowall']
+            },
+                'block-tcp' : {
+                    '_authport_' : ['blocktcp']
+                    },
+                'block-udp' : {
+                    '_authport_' : ['blockudp']
+                    },
+                'student' : {
+                    '_authport_' : ['blocktcp', 'blockudp', 'allowall']
+                }
+               }
+
+    def get_rule(rule):
+        base_rule = '''
+rule:
+    _name_: _user-name_
+    _mac_: _user-mac_
+    dl_src: _user-mac_
+    %s
+    actions:
+        allow: %d
+        '''
+
+        if rule == 'allowall':
+            l = []
+            l.append(yaml.load(base_rule % ('dl_type: 0x800', 1)))
+            l.append(yaml.load(base_rule %('dl_type: 0x806', 1)))
+
+            return l
+
+        if rule == 'blocktcp':
+            other_matches = '''dl_type: 0x800
+    ip_proto: 6'''
+            allow = 0
+        if rule == 'blockudp':
+            other_matches = '''dl_type: 0x800
+    ip_proto: 17'''
+            allow = 0
+        if rule == 'blockicmp':
+            other_matches = '''dl_type: 0x800
+    ip_proto: 1'''
+            allow = 0
+
+        return yaml.load(base_rule % (other_matches, allow))
+
+    data = {}
+    for top_acl_name, acl in load.items():
+        data[top_acl_name] = {}
+        for port_name, rule_list in acl.items():
+            l = []
+            for rule_name in rule_list:
+                l.append(get_rule(rule_name))
+
+            data[top_acl_name][port_name] = l
+
+
+    return yaml.dump({'acls' :data})
