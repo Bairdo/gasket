@@ -945,7 +945,6 @@ class GasketSingleDupLogonTest(GasketSingleSwitchTest):
 class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
     def test_dp_link_down_up(self):
-
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
         # log host on
@@ -970,3 +969,23 @@ class GasketSingleLinkStateTest(GasketSingleSwitchTest):
 
         self.relogon_dot1x(h0)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+
+
+class GasketSingleNamedPortRulesTest(GasketSingleSwitchTest):
+
+    CONFIG_RULES = faucet_mininet_test_util.gen_rules_file(
+            {
+                'allowall': {
+                    'port_faucet-1_3' : ['allowall']
+                    },
+            }
+            )
+
+    def test_apply_named_port_acl(self):
+
+        h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.logoff_dot1x(h0)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
