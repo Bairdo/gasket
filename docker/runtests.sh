@@ -50,6 +50,7 @@ cd /gasket-src/tests
 
 echo "========== Running faucet system tests =========="
 python2 ./faucet_mininet_test.py -c
-http_proxy="" coverage run -a --source ../gasket ./faucet_mininet_test.py $FAUCET_TESTS || exit 1
-coverage report -m 
-codecov || true
+http_proxy="" python2 ./faucet_mininet_test.py $FAUCET_TESTS || exit 1
+COVERAGE_FILE="/gasket-src/.coverage" coverage report -m
+bash <(curl -s https://codecov.io/bash)
+
