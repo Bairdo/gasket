@@ -991,7 +991,8 @@ class GasketSingleNamedPortRulesTest(GasketSingleSwitchTest):
         self.logoff_dot1x(h0)
         self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
 
-class GasketSingleRuleReferencesTest(GasketSingleSwitchTest):
+
+class GasketSingleRuleReferenceTest(GasketSingleSwitchTest):
 
     CONFIG_RULES = """rules:
     allowall: &allowall
@@ -1015,6 +1016,44 @@ acls:
     allowall:
         _authport_:
             *allowall
+
+"""
+
+    def test_logon(self):
+        h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.logoff_dot1x(h0)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
+
+
+class GasketSingleRuleiListReferencesTest(GasketSingleSwitchTest):
+
+    CONFIG_RULES = """rules:
+    iprule: &allowip
+        - rule:
+            # Faucet Rule
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x0800
+            actions:
+                allow: 1
+    arprule: &allowarp
+        - rule:
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x0806
+            actions:
+                allow: 1
+
+acls:
+    allowall:
+        _authport_:
+            - *allowarp
+            - *allowip
 
 """
 
