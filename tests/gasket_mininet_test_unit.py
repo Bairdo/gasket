@@ -49,9 +49,9 @@ class GasketTest(faucet_mininet_test_base.FaucetTestBase):
         print(datetime.datetime.now())
         if self.net is not None:
             host = self.net.hosts[0]
-            print "about to kill everything"
+            print("about to kill everything")
             for name, pid in self.pids.iteritems():
-                host.cmd('kill -s sigkill' + str(pid))
+                host.cmd('kill -s sigint ' + str(pid))
 
             self.net.stop()
         super(GasketTest, self).tearDown()
@@ -320,7 +320,7 @@ radius_auth_access_accept_attr=26:12345:1:s"  > {1}/{0}-wired.conf'''.format(hos
         ctrl_iface_path = '%s/%s' % (ctrl_iface_dir, intf)
         self.assertLess(len( ctrl_iface_path), 108, 'hostapd ctrl socket cannot be larger than 108 bytes (including null terminator)\nWas: %d\n%s' % (len(ctrl_iface_path), ctrl_iface_path))
 
-        print 'Starting hostapd ....'
+        print('Starting hostapd ....')
         host.cmd('mkdir %s/hostapd' % self.tmpdir)
 
         # start hostapd
@@ -434,7 +434,7 @@ subnet 10.0.0.0 netmask 255.255.255.0 {
 
         self.gasket_setup()
 
-        host.cmd('COVERAGE_FILE="/gasket-src/.coverage" coverage run -a --source /usr/local/lib/python3.5/dist-packages/gasket/ -m gasket.auth_app {0}/auth.yaml > {0}/gasket.out &'.format(self.tmpdir))
+        host.cmd('COVERAGE_FILE="/gasket-src/.coverage" coverage run -p --source /usr/local/lib/python3.5/dist-packages/gasket/ -m gasket.auth_app {0}/auth.yaml > {0}/gasket.out  2> {0}/gasket.err &'.format(self.tmpdir))
         self.pids['gasket'] = host.lastPid
         print('Gasket started.')
 
@@ -984,6 +984,80 @@ class GasketSingleNamedPortRulesTest(GasketSingleSwitchTest):
 
     def test_apply_named_port_acl(self):
 
+        h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.logoff_dot1x(h0)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
+
+
+class GasketSingleRuleReferenceTest(GasketSingleSwitchTest):
+
+    CONFIG_RULES = """rules:
+    allowall: &allowall
+        - rule:
+            # Faucet Rule
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x0800
+            actions:
+                allow: 1
+        - rule:
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x0806
+            actions:
+                allow: 1
+
+acls:
+    allowall:
+        _authport_:
+            *allowall
+
+"""
+
+    def test_logon(self):
+        h0 = self.clients[0]
+        interweb = self.net.hosts[1]
+        self.logon_dot1x(h0)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.logoff_dot1x(h0)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
+
+
+class GasketSingleRuleiListReferencesTest(GasketSingleSwitchTest):
+
+    CONFIG_RULES = """rules:
+    iprule: &allowip
+        - rule:
+            # Faucet Rule
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x0800
+            actions:
+                allow: 1
+    arprule: &allowarp
+        - rule:
+            _name_: _user-name_
+            _mac_: _user-mac_
+            dl_src: _user-mac_
+            dl_type: 0x0806
+            actions:
+                allow: 1
+
+acls:
+    allowall:
+        _authport_:
+            - *allowarp
+            - *allowip
+
+"""
+
+    def test_logon(self):
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
         self.logon_dot1x(h0)
