@@ -21,6 +21,7 @@ class Prometheus(threading.Thread):
     If the events are different (different port), the order of learning may get wacky.
     """
 
+    stop = False
     work_queue = None
     logger = None
     server_url = None
@@ -42,7 +43,7 @@ class Prometheus(threading.Thread):
 
     def run(self):
         """Main run method."""
-        while True:
+        while not self.stop:
             self.get_prometheus_mac_learning()
             time.sleep(self.sleep_period)
 
@@ -70,3 +71,5 @@ class Prometheus(threading.Thread):
             dpid, dp_name, n, port, vlan = values.groups()
             self.work_queue.put(work_item.L2LearnWorkItem(dp_name, int(dpid, 16),
                                                           int(port), int(vlan), macstr, None))
+    def kill(self):
+        self.stop = True
