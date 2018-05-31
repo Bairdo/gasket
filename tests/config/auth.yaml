@@ -25,7 +25,7 @@ rabbitmq:
     port: 5672
 
 dps:
-    faucet-1:
+    %(faucet_name)s:
         dp_id: %(dp_id)s
         interfaces:
             1:

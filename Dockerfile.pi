@@ -2,7 +2,7 @@ FROM hypriot/rpi-alpine
 
 ENV APK="apk -q"
 ENV BUILDDEPS="gcc musl-dev python3-dev"
-ENV TESTDEPS="setuptools wheel virtualenv"
+ENV TESTDEPS="bitstring pytest setuptools wheel virtualenv"
 ENV PIP3="pip3 -q --no-cache-dir install --upgrade"
 
 RUN \

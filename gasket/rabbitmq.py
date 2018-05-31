@@ -71,22 +71,25 @@ class RabbitMQ(threading.Thread):
             d = json.loads(line.decode())
             dp_id = d['dp_id']
             dp_name = d['dp_name']
-            if 'PORT_CHANGE' in d:
-                pc = d['PORT_CHANGE']
-                port_no = pc['port_no']
-                reason = pc['reason']
-                status = pc['status']
-                self.work_queue.put(PortChangeWorkItem(dp_name, dp_id, port_no, reason, status))
+            # Only process events from faucets gasket is managing.
+            if dp_name in self.faucet_names:
+                if 'PORT_CHANGE' in d:
+                    pc = d['PORT_CHANGE']
+                    port_no = pc['port_no']
+                    reason = pc['reason']
+                    status = pc['status']
+                    self.work_queue.put(PortChangeWorkItem(dp_name, dp_id, port_no, reason, status))
 
-            elif 'L2_LEARN' in d:
-                l2l = d['L2_LEARN']
-                port_no = l2l['port_no']
-                vid = l2l['vid']
-                eth_src = l2l['eth_src']
-                l3_src_ip = l2l['l3_src_ip']
+                elif 'L2_LEARN' in d:
+                    l2l = d['L2_LEARN']
+                    port_no = l2l['port_no']
+                    vid = l2l['vid']
+                    eth_src = l2l['eth_src']
+                    l3_src_ip = l2l['l3_src_ip']
 
-                self.work_queue.put(L2LearnWorkItem(dp_name, dp_id,
-                                                    port_no, vid,
-                                                    eth_src, l3_src_ip))
+                    self.work_queue.put(L2LearnWorkItem(dp_name, dp_id,
+                                                        port_no, vid,
+                                                        eth_src, l3_src_ip))
+
     def kill(self):
         self.channel.close()

@@ -10,6 +10,7 @@ class Host(object):
     """
     mac = None
     ip = None
+    # TODO handle case where host can be on many ports.
     learn_ports = None
     ordered_learn_ports = None
     rule_man = None

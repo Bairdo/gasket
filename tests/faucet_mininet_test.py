@@ -390,7 +390,7 @@ def run_parallel_test_suites(root_tmpdir, resultclass, parallel_tests):
     results = []
     if parallel_tests.countTestCases():
         max_parallel_tests = min(
-            parallel_tests.countTestCases(), multiprocessing.cpu_count() * 3)
+            parallel_tests.countTestCases(), multiprocessing.cpu_count() * 2)
         print('running maximum of %u parallel tests' % max_parallel_tests)
         parallel_runner = test_runner(root_tmpdir, resultclass)
         parallel_suite = ConcurrentTestSuite(

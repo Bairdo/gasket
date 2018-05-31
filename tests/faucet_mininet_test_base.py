@@ -48,7 +48,7 @@ class FaucetTestBase(unittest.TestCase):
     LADVD = 'ladvd -e lo -f'
     ONEMBPS = (1024 * 1024)
     DB_TIMEOUT = 5
-    DP_NAME = 'faucet-1'
+    DP_NAME = None #'faucet-1'
 
     ACL_CONFIG = ''
     CONFIG = ''
@@ -96,6 +96,7 @@ class FaucetTestBase(unittest.TestCase):
     event_sock = None
 
     def __init__(self, name, config, root_tmpdir, ports_sock, max_test_load):
+        self.DP_NAME = 'faucet-%d' % os.getpid()
         super(FaucetTestBase, self).__init__(name)
         self.config = config
         self.root_tmpdir = root_tmpdir
@@ -105,7 +106,7 @@ class FaucetTestBase(unittest.TestCase):
     def rand_dpid(self):
         reserved_range = 100
         while True:
-            dpid = random.randint(1, (2**32 - reserved_range)) + reserved_range
+            dpid = random.randint(1, (2**32 - reserved_range)) + reserved_range + os.getpid()
             if dpid not in self.rand_dpids:
                 self.rand_dpids.add(dpid)
                 return str(dpid)
@@ -170,10 +171,11 @@ class FaucetTestBase(unittest.TestCase):
         self._set_prom_port()
 
     def _write_faucet_config(self):
+        self.port_map['dp_name'] = self.DP_NAME
         faucet_config = '\n'.join((
             self.get_config_header(
                 self.CONFIG_GLOBAL.format(tmpdir=self.tmpdir), self.debug_log_path, self.dpid, self.hardware),
-            self.CONFIG % self.port_map))
+            self.CONFIG % self.port_map)) % {'dp_name': self.DP_NAME}
         if self.config_ports:
             faucet_config = faucet_config % self.config_ports
 
@@ -554,13 +556,13 @@ class FaucetTestBase(unittest.TestCase):
     def get_config_header(self, config_global, debug_log, dpid, hardware):
         """Build v2 FAUCET config header."""
         return """
-%s
+{0}
 dps:
-    faucet-1:
-        ofchannel_log: %s
-        dp_id: 0x%x
-        hardware: "%s"
-""" % (config_global, debug_log, int(dpid), hardware)
+    %(dp_name)s:
+        ofchannel_log: {1}
+        dp_id: {2}
+        hardware: "{3}"
+""".format(config_global, debug_log, hex(int(dpid)), hardware)
 
 
     def get_gauge_watcher_config(self):
