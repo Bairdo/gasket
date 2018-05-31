@@ -105,7 +105,7 @@ class FaucetTestBase(unittest.TestCase):
     def rand_dpid(self):
         reserved_range = 100
         while True:
-            dpid = random.randint(1, (2**32 - reserved_range)) + reserved_range + os.getpid()
+            dpid = random.randint(1, (2**32 - reserved_range)) + reserved_range
             if dpid not in self.rand_dpids:
                 self.rand_dpids.add(dpid)
                 return str(dpid)
