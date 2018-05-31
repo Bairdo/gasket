@@ -48,7 +48,7 @@ class FaucetTestBase(unittest.TestCase):
     LADVD = 'ladvd -e lo -f'
     ONEMBPS = (1024 * 1024)
     DB_TIMEOUT = 5
-    DP_NAME = None #'faucet-1'
+    DP_NAME = 'faucet-1'
 
     ACL_CONFIG = ''
     CONFIG = ''
@@ -96,7 +96,6 @@ class FaucetTestBase(unittest.TestCase):
     event_sock = None
 
     def __init__(self, name, config, root_tmpdir, ports_sock, max_test_load):
-        self.DP_NAME = 'faucet-%d' % os.getpid()
         super(FaucetTestBase, self).__init__(name)
         self.config = config
         self.root_tmpdir = root_tmpdir
