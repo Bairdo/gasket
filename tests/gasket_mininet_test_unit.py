@@ -703,8 +703,8 @@ class GasketTenHostsTest(GasketMultiHostsBase):
     LOGOFF_RETRIES = 15
 
 
-@unittest.skip('flakey.')
-class GasketSingleTwentyHostsTest(GasketMultiHostsBase):
+#@unittest.skip('flakey.')
+class GasketTwentyHostsTest(GasketMultiHostsBase):
     N_UNTAGGED = 22
     max_hosts = N_UNTAGGED - 2
 
@@ -915,15 +915,17 @@ class GasketDupLogonTest(GasketOneSwitchTest):
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         h1.setMAC(h0.MAC())
+        h0.setMAC('00:00:00:00:00:01')
 
         h1.cmd('sed -i -e s/hostuser1/hostuser0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
-        self.logon_dot1x(h1, wait=False)
-        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
+        self.logon_dot1x(h1, wait=True)
         self.one_ipv4_ping(h1, interweb.IP(), retries=5)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
 
-        count = self.count_username_and_mac(h0.MAC(), 'hostuser0')
+
+        count = self.count_username_and_mac(h1.MAC(), 'hostuser0')
         self.assertGreaterEqual(count, 2)
 
     def test_same_user_diff_mac_port_logon_2(self):

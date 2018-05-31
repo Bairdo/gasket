@@ -79,6 +79,7 @@ class AuthApp(object):
         self.logger = logger
         self.rule_man = rule_manager.RuleManager(self.config, self.logger)
         self.work_queue = queue.Queue()
+        self.setup_datapath()
 
     def start(self):
         """Starts separate thread for each hostapd socket.
@@ -99,14 +100,15 @@ class AuthApp(object):
             self.threads.append(hst)
             self.logger.info('Thread running')
 
-        rt = rabbitmq.RabbitMQ(self.work_queue, self.config.logger_location, self.config.rabbit_host, self.config.rabbit_port)
+        dp_ids = []
+        for dp in self.dps.values():
+            dp_ids.append(dp.dp_id)
+        rt = rabbitmq.RabbitMQ(dp_ids, self.work_queue, self.config.logger_location, self.config.rabbit_host, self.config.rabbit_port)
         try:
             rt.start()
             self.threads.append(rt)
         except Exception as e:
             self.logger.exception(e)
-
-        self.setup_datapath()
 
         pt = prometheus_thread.Prometheus(self.work_queue, self.config.logger_location, self.config.prom_url, self.config.prom_port, self.config.prom_sleep)
         try:
@@ -205,12 +207,12 @@ class AuthApp(object):
             hostapd_name (str): name of the hostapd that did the auth.
         """
         auth_start_time = datetime.now()
-        self.logger.info("authenticating: %s %s", mac, user)
         if not mac in self.macs:
             self.macs[mac] = UnlearntUnauthenticatedHost(mac=mac, logger=self.logger,
                                                          rule_man=self.rule_man)
 
         host = self.macs[mac]
+        self.logger.info("authenticating: %s %s %s", type(host), mac, user)
         port = host.get_authing_learn_ports()
         hapd = self.hostapds[hostapd_name]
 

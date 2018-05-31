@@ -66,7 +66,7 @@ class Host(object):
             last learnt port that is mode 'access'.
             Otherwise None
         """
-        self.logger.debug('host is on ports %s', self.learn_ports)
+        self.logger.debug('host is on ports %s.\n%s', self.learn_ports, self.ordered_learn_ports)
         for port_no in reversed(self.ordered_learn_ports):
             port = self.learn_ports[port_no]
             if port.auth_mode == 'access':

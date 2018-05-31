@@ -17,11 +17,13 @@ class RabbitMQ(threading.Thread):
     channel = None
     work_queue = None
     logger = None
+    dp_ids = None
     server_host = None
     server_port = None
 
-    def __init__(self, work_queue, logger_location, host, port):
+    def __init__(self, dp_ids, work_queue, logger_location, host, port):
         super().__init__()
+        self.dp_ids = dp_ids
         self.work_queue = work_queue
         self.logger = auth_app_utils.get_logger('rabbitmq',
                                                 logger_location,
@@ -72,7 +74,7 @@ class RabbitMQ(threading.Thread):
             dp_id = d['dp_id']
             dp_name = d['dp_name']
             # Only process events from faucets gasket is managing.
-            if dp_name in self.faucet_names:
+            if dp_id in self.dp_ids:
                 if 'PORT_CHANGE' in d:
                     pc = d['PORT_CHANGE']
                     port_no = pc['port_no']
