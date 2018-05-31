@@ -17,7 +17,7 @@ docker run --network=$CONTROL_NETWORK --privileged -ti gasket/tests
 ## docker-compose.yaml
 
 This contains an example docker-compose file that can be used in conjunction with a mininet network, to demonstrate 802.1X functionality with Faucet.
-It contains 3 containers 'faucet', 'freeradius', 'gasket', 'hostapd', 'rabbitmq_adapter' & 'rabbitmq_server' .
+It contains 6 containers 'faucet', 'freeradius', 'gasket', 'hostapd', 'rabbitmq_adapter' & 'rabbitmq_server' .
 - faucet - is the OpenFlow controller.
 - freeradius - is a RADIUS server, see directory docker-compose/freeradius for configuration files.
 - gasket - is the authentication application.
@@ -33,10 +33,10 @@ Start the containers
 ```bash
 export FAUCET_EVENT_SOCK=1
 export FA_RABBIT_HOST=<rabbitmq_server IP>
-docker-compose up freeradius hostapd gasket rabbitmq_adapter rabbitmq_server
+docker-compose up freeradius hostapd gasket faucet rabbitmq_adapter rabbitmq_server
 ```
 
-To kill the gasket container, run the following to tidy up the hostapd control socket connections.
+To kill the gasket container, (Attempts to shutdown the threads nicely and tidy up the hostapd control socket connections).
 ```bash
 docker kill --signal 1 gasket_gasket_1
 ```
@@ -53,6 +53,43 @@ When the hostapd docker container dies, run the following command to remove the 
 ovs-docker del-port s1 eth3 <PROJECT_NAME>_hostapd_1
 ```
 
+If restarting the hostapd container the port it connects to on the OVS dp may increase.
+There are two options:
+1) Use the interface_ranges option on the faucet.yaml
+2) Change the ovs-docker script to use 'ofport_request' option when adding the port.
+The following diff patch of 'ovs-docker' will allow the --port-request=<port number> flag to be used.
+
+```diff
+--- ../ovs-docker-original      2018-06-01 11:36:43.460000000 +1200
++++ /usr/bin/ovs-docker 2018-05-23 16:27:19.616000000 +1200
+@@ -90,6 +90,10 @@
+                 MTU=`expr X"$1" : 'X[^=]*=\(.*\)'`
+                 shift
+                 ;;
++            --port-request=*)
++                PORT_REQUEST=`expr X"$1" : 'X[^=]*=\(.*\)'`
++                shift
++                ;;
+             *)
+                 echo >&2 "$UTIL add-port: unknown option \"$1\""
+                 exit 1
+@@ -124,8 +128,15 @@
+     PORTNAME="${ID:0:13}"
+     ip link add "${PORTNAME}_l" type veth peer name "${PORTNAME}_c"
+ 
++
++    OF_PORT_REQUEST=''
++    if [ -n "$PORT_REQUEST" ]; then
++        OF_PORT_REQUEST=" -- set interface ${PORTNAME}_l ofport_request=$PORT_REQUEST "
++    fi
++
+     # Add one end of veth to OVS bridge.
+     if ovs_vsctl --may-exist add-port "$BRIDGE" "${PORTNAME}_l" \
++       ${OF_PORT_REQUEST} \
+        -- set interface "${PORTNAME}_l" \
+        external_ids:container_id="$CONTAINER" \
+        external_ids:container_iface="$INTERFACE"; then :; else
+```
 
 Wait a few seconds for the hostapd container to send a ping (so faucet learns where hostapd is) and start hostapd.
 
@@ -92,13 +129,7 @@ Start mininet:
 mn --topo=single --custom=topo.py --controller=remote,ip=172.222.0.100,port=6653
 ```
 mininet will take several minutes to start as the controller is not running yet.
-Alternatively run docker-compose up faucet-auth first.
-
-Add another controller to the OVS Switch. 6653 is for Faucet, & 6663 is for Gasket.
-```bash
-ovs-vsctl set-controller s1 tcp:172.222.0.100:6653 \
-tcp:172.222.0.100:6663
-```
+Alternatively run docker-compose up faucet first.
 
 
 ## TODO
