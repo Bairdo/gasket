@@ -616,20 +616,20 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         interweb = self.net.hosts[1]
 
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         mac_intf = self.mac_interfaces['1']
         netns = mac_intf + 'ns'
         self.fail_ping_ipv4(h0, '10.0.0.2', intf=mac_intf)
 
         self.logon_dot1x(h0, intf=mac_intf)
-        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf)
+        self.one_ipv4_ping(h0, interweb.IP(), intf=mac_intf, retries=5)
 
         self.logoff_dot1x(h0)
         self.fail_ping_ipv4(h0, '10.0.0.2', retries=5)
 
         self.relogon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP())
+        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
 
         self.logoff_dot1x(h0)
         self.fail_ping_ipv4(h0, '10.0.0.2', retries=5)
@@ -699,7 +699,7 @@ class GasketTenHostsTest(GasketMultiHostsBase):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
-    LOGON_RETRIES = 10
+    LOGON_RETRIES = 20
     LOGOFF_RETRIES = 15
 
 
@@ -728,7 +728,7 @@ class Gasket14HostsTest(GasketMultiHostsBase):
 
     port_map = faucet_mininet_test_util.gen_port_map(N_UNTAGGED)
 
-    LOGON_RETRIES = 20
+    LOGON_RETRIES = 30
     LOGOFF_RETRIES = 60
 
 
@@ -771,8 +771,8 @@ class GasketTenHostsPerPortTest(GasketMultiHostPerPortTest):
 #        self.logon_dot1x(h2)
         self.logon_dot1x(h1)
         self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
-        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=10)
+        self.one_ipv4_ping(h1, interweb.IP(), retries=10)
         h1.intf().updateIP()
         self.one_ipv4_ping(h0, h1.IP(), retries=10)
         mac_intfs = { mac: mac + 'ns' for mac in self.mac_interfaces.values()}
@@ -911,8 +911,8 @@ class GasketDupLogonTest(GasketOneSwitchTest):
         h0, h1 = self.clients[0:2]
         interweb = self.net.hosts[1]
 
-        self.logon_dot1x(h0)
-        self.one_ipv4_ping(h0, interweb.IP(), retries=5)
+        self.logon_dot1x(h0, wait=True)
+        self.one_ipv4_ping(h0, interweb.IP(), retries=20)
 
         h1.setMAC(h0.MAC())
         h0.setMAC('00:00:00:00:00:01')
@@ -921,8 +921,8 @@ class GasketDupLogonTest(GasketOneSwitchTest):
         h1.cmd('sed -i -e s/hostpass1/hostpass0/g %s/%s.conf' % (self.tmpdir, h1.defaultIntf()))
 
         self.logon_dot1x(h1, wait=True)
-        self.one_ipv4_ping(h1, interweb.IP(), retries=5)
-        self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
+        self.one_ipv4_ping(h1, interweb.IP(), retries=20)
+        self.fail_ping_ipv4(h0, interweb.IP(), retries=20)
 
 
         count = self.count_username_and_mac(h1.MAC(), 'hostuser0')
