@@ -377,7 +377,7 @@ class RuleManager(object):
             with open(self.config.contr_pid_file, 'r') as pid_file:
                 contr_pid = int(pid_file.read())
                 os.kill(contr_pid, signal_type)
-                self.logger.info('Sent %s signal to docker container: %s', signal_type, contr_pid)
+                self.logger.info('Sent %s signal to pid: %s', signal_type, contr_pid)
 
 if __name__ == '__main__':
     main()
