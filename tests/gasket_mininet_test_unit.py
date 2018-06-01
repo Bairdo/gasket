@@ -507,7 +507,7 @@ class GasketOneSwitchTest(GasketTest):
        
         self.topo = self.topo_class(
             self.ports_sock, self._test_name(), dpids=[self.dpid], n_tagged=self.N_TAGGED, n_untagged=self.N_UNTAGGED)
-        print('pid: ',os.getpid()) 
+
         # do the base config thing here.
         self.port_map['dp_name'] = self.DP_NAME
         open(self.tmpdir + '/faucet-acl.yaml', 'w').write(faucet_mininet_test_util.gen_faucet_acl(self.max_hosts) % self.port_map)
@@ -632,7 +632,7 @@ class GasketTwoHostsPerPortTest(GasketMultiHostPerPortTest):
         self.one_ipv4_ping(h0, interweb.IP())
 
         self.logoff_dot1x(h0)
-        self.fail_ping_ipv4(h0, '10.0.0.2')
+        self.fail_ping_ipv4(h0, '10.0.0.2', retries=5)
 
 
 class GasketMultiHostsBase(GasketOneSwitchTest):
@@ -1066,7 +1066,7 @@ acls:
     def test_logon(self):
         h0 = self.clients[0]
         interweb = self.net.hosts[1]
-        self.logon_dot1x(h0)
+        self.logon_dot1x(h0, wait=True)
         self.one_ipv4_ping(h0, interweb.IP(), retries=5)
         self.logoff_dot1x(h0)
         self.fail_ping_ipv4(h0, interweb.IP(), retries=5)
